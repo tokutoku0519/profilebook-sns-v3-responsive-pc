@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npx tsc *)",
-      "Bash(awk 'NR>=2010 && NR<=2060' /Users/kokitokuyama/Desktop/profilebook-sns-v3-responsive-pc/src/app/page.tsx)"
-    ]
-  }
-}
