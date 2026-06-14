@@ -499,7 +499,7 @@ function DesktopNav({ active, go }: { active: TabKey; go: (s: Screen) => void })
   ];
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[260px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur lg:block">
-      <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card"><RetroMail /></div><div><p className="flex items-center gap-1.5 text-xl font-black">ぷろふ帳<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
+      <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card"><RetroMail /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
       <nav className="space-y-2">
         {items.map((item) => { const Icon = item.icon; const isActive = active === item.key; return (
           <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
@@ -584,7 +584,7 @@ function DesktopShell({ children, active, go, answers, avatarUrl }: { children: 
   );
 }
 
-function AppHeader({ title = 'ぷろふ帳', back = false, onBack, onBell }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void }) {
+function AppHeader({ title = 'Miri', back = false, onBack, onBell }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void }) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-base/90 px-4 pt-2 backdrop-blur">
       <button onClick={back ? onBack : undefined} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
@@ -2047,7 +2047,7 @@ function MyPageScreen({ go, answers, avatarUrl }: { go: (s: Screen, answerId?: s
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-black text-white/70">ぷろふ帳</p>
+              <p className="text-[11px] font-black text-white/70">Miri</p>
               <p className="text-xl font-black text-white">🛍 ショップ</p>
               <p className="mt-1 text-xs font-bold text-white/80">テーマ・シール・デコをゲットしよう</p>
             </div>
@@ -2803,10 +2803,10 @@ const SHOP_ITEMS: Record<ShopCategory, { id: string; name: string; preview: stri
     { id: 'art-frame', name: '🎨 アートフレーム', preview: '❋ ────── ❋', price: 200, owned: false },
   ],
   font: [
-    { id: 'tegaki', name: '📝 てがき体', preview: 'ぷろふ帳', price: 100, owned: false },
-    { id: 'pop', name: '💫 ポップ体', preview: 'ぷろふ帳', price: 100, owned: false },
-    { id: 'elegant', name: '✒ エレガント体', preview: 'ぷろふ帳', price: 120, owned: false },
-    { id: 'maru', name: '🌸 丸ゴシック', preview: 'ぷろふ帳', price: 100, owned: false },
+    { id: 'tegaki', name: '📝 てがき体', preview: "Miri", price: 100, owned: false },
+    { id: 'pop', name: '💫 ポップ体', preview: "Miri", price: 100, owned: false },
+    { id: 'elegant', name: '✒ エレガント体', preview: "Miri", price: 120, owned: false },
+    { id: 'maru', name: '🌸 丸ゴシック', preview: "Miri", price: 100, owned: false },
   ],
 };
 
@@ -2829,7 +2829,7 @@ function ShopScreen({ go }: { go: (s: Screen) => void }) {
       <div className="mx-4 mt-3 rounded-[28px] bg-gradient-to-r from-pink to-purple p-5 shadow-floating">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-black text-white/70">ぷろふ帳プレミアム</p>
+            <p className="text-[11px] font-black text-white/70">Miriプレミアム</p>
             <p className="mt-0.5 text-xl font-black text-white">全アイテムが使い放題</p>
             <p className="mt-1 text-xs font-bold text-white/80">テーマ・シール・デコ・フォントをすべて解放</p>
             <button className="mt-4 rounded-full bg-white px-5 py-2 text-sm font-black text-pinkStrong shadow-card active:scale-[0.98]">
