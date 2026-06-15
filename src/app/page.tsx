@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bell, Home, Plus, Search, Settings, ShoppingBag, UserRound } from 'lucide-react';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMail, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop';
@@ -499,7 +499,7 @@ function DesktopNav({ active, go }: { active: TabKey; go: (s: Screen) => void })
   ];
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[260px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur lg:block">
-      <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card"><RetroMail /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
+      <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card overflow-hidden"><img src="/icon.png" alt="Miri" className="h-full w-full object-cover" /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
       <nav className="space-y-2">
         {items.map((item) => { const Icon = item.icon; const isActive = active === item.key; return (
           <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
@@ -588,7 +588,7 @@ function AppHeader({ title = 'Miri', back = false, onBack, onBell }: { title?: s
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-base/90 px-4 pt-2 backdrop-blur">
       <button onClick={back ? onBack : undefined} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
-        {back ? <ArrowLeft size={20} /> : <RetroMail />}
+        {back ? <ArrowLeft size={20} /> : <img src="/icon.png" alt="Miri" className="h-8 w-8 rounded-xl object-cover" />}
       </button>
       <h1 className="text-lg font-black tracking-tight">{title}</h1>
       <button onClick={onBell} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card"><Bell size={19} /></button>
