@@ -108,7 +108,8 @@ const defaultProfileBookInfo = {
   personality: '好奇心旺盛でちょっと飽き性',
   catchphrase: '「それ、やってみよ」',
   message: 'このアプリを一緒に育ててくれると嬉しい♡',
-  attribute: 'student',
+  attribute: 'highschool',
+  activity: '',
 };
 
 const defaultBest3 = {
@@ -132,7 +133,7 @@ const defaultProfileQuestions = [
 ];
 
 type ProfileBook = {
-  info: Omit<typeof defaultProfileBookInfo, 'attribute'> & { attribute?: string };
+  info: Omit<typeof defaultProfileBookInfo, 'attribute' | 'activity'> & { attribute?: string; activity?: string };
   best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
   questions: Array<{ q: string; a: string }>;
   themeColor: 'pink' | 'purple' | 'blue' | 'green' | 'orange';
@@ -381,35 +382,43 @@ const MBTI_OPTIONS = ['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','I
 const SUBJECT_OPTIONS = ['国語','数学','英語','理科','社会','体育','音楽','美術','家庭科','技術','現代文','古文','漢文','化学','物理','生物','地理','歴史','倫理','情報'];
 const PERSONALITY_OPTIONS = ['おっとり系','元気・明るい','クール・落ち着き','ちょっと不思議','真面目','天然','ふわふわ','ツンデレ','好奇心旺盛','マイペース','リーダー気質','聞き上手'];
 
-type AttributeCustomFieldDef = {
+type ProfileFieldDef = {
   key: string;
   label: string;
   type: 'text' | 'select';
   options?: string[];
 };
 
-type AttributeDef = {
+// ── 立場（ライフステージ）: MECE、必ず1つに当てはまる ──────────────────
+type LifeStageDef = {
   id: string;
   emoji: string;
   label: string;
   sectionTitle: string;
   showSubjectFields: boolean;
-  fields: AttributeCustomFieldDef[];
+  fields: ProfileFieldDef[];
 };
 
-const ATTRIBUTE_DEFS: AttributeDef[] = [
+const LIFE_STAGE_DEFS: LifeStageDef[] = [
   {
-    id: 'student', emoji: '📚', label: '学生（小・中・高）', sectionTitle: '学校プロフ', showSubjectFields: true,
+    id: 'elementary', emoji: '🎒', label: '小・中学生', sectionTitle: '学校プロフ', showSubjectFields: true,
     fields: [
-      { key: 'grade', label: '学年', type: 'select', options: ['小1','小2','小3','小4','小5','小6','中1','中2','中3','高1','高2','高3'] },
+      { key: 'grade', label: '学年', type: 'select', options: ['小1','小2','小3','小4','小5','小6','中1','中2','中3'] },
       { key: 'club', label: '部活・習い事', type: 'text' },
     ],
   },
   {
-    id: 'college', emoji: '🎓', label: '大学生', sectionTitle: '大学生プロフ', showSubjectFields: true,
+    id: 'highschool', emoji: '📚', label: '高校生', sectionTitle: '高校プロフ', showSubjectFields: true,
     fields: [
-      { key: 'faculty', label: '学部・学科', type: 'text' },
-      { key: 'circle', label: 'サークル', type: 'text' },
+      { key: 'grade', label: '学年', type: 'select', options: ['高1','高2','高3'] },
+      { key: 'club', label: '部活・習い事', type: 'text' },
+    ],
+  },
+  {
+    id: 'college', emoji: '🎓', label: '大学生・専門学生', sectionTitle: '大学生プロフ', showSubjectFields: false,
+    fields: [
+      { key: 'faculty', label: '学部・専攻', type: 'text' },
+      { key: 'circle', label: 'サークル・部活', type: 'text' },
       { key: 'partTimeJob', label: 'バイト', type: 'text' },
     ],
   },
@@ -421,8 +430,20 @@ const ATTRIBUTE_DEFS: AttributeDef[] = [
       { key: 'yearsWorked', label: '社会人歴', type: 'text' },
     ],
   },
+];
+
+// ── 特技・活動: 任意で1つ選べる（ライフステージと直交） ──────────────────
+type ActivityDef = {
+  id: string;
+  emoji: string;
+  label: string;
+  sectionTitle: string;
+  fields: ProfileFieldDef[];
+};
+
+const ACTIVITY_DEFS: ActivityDef[] = [
   {
-    id: 'baseball', emoji: '⚾', label: '野球選手', sectionTitle: '野球プロフ', showSubjectFields: false,
+    id: 'baseball', emoji: '⚾', label: '野球', sectionTitle: '野球プロフ',
     fields: [
       { key: 'position', label: '守備位置', type: 'select', options: ['投手','捕手','一塁手','二塁手','三塁手','遊撃手','左翼手','中堅手','右翼手','DH'] },
       { key: 'batting', label: '投打', type: 'select', options: ['右投右打','右投左打','左投左打','両投両打'] },
@@ -431,16 +452,16 @@ const ATTRIBUTE_DEFS: AttributeDef[] = [
     ],
   },
   {
-    id: 'soccer', emoji: '⚽', label: 'サッカー選手', sectionTitle: 'サッカープロフ', showSubjectFields: false,
+    id: 'soccer', emoji: '⚽', label: 'サッカー', sectionTitle: 'サッカープロフ',
     fields: [
-      { key: 'position', label: 'ポジション', type: 'select', options: ['GK','DF','MF','FW'] },
+      { key: 'soccerPos', label: 'ポジション', type: 'select', options: ['GK','DF','MF','FW'] },
       { key: 'jerseyNumber', label: '背番号', type: 'text' },
       { key: 'team', label: 'チーム名', type: 'text' },
       { key: 'idolPlayer', label: '憧れの選手', type: 'text' },
     ],
   },
   {
-    id: 'musician', emoji: '🎸', label: 'ミュージシャン', sectionTitle: '音楽プロフ', showSubjectFields: false,
+    id: 'musician', emoji: '🎸', label: '音楽・バンド', sectionTitle: '音楽プロフ',
     fields: [
       { key: 'part', label: 'パート', type: 'select', options: ['ボーカル','ギター','ベース','ドラム','キーボード','その他'] },
       { key: 'bandName', label: 'バンド名・ユニット名', type: 'text' },
@@ -449,7 +470,7 @@ const ATTRIBUTE_DEFS: AttributeDef[] = [
     ],
   },
   {
-    id: 'gamer', emoji: '🎮', label: 'ゲーマー', sectionTitle: 'ゲーマープロフ', showSubjectFields: false,
+    id: 'gamer', emoji: '🎮', label: 'ゲーム', sectionTitle: 'ゲーマープロフ',
     fields: [
       { key: 'mainGame', label: 'メインゲーム', type: 'text' },
       { key: 'platform', label: 'プラットフォーム', type: 'select', options: ['Switch','PS5','Xbox','PC','スマホ','アーケード'] },
@@ -458,7 +479,7 @@ const ATTRIBUTE_DEFS: AttributeDef[] = [
     ],
   },
   {
-    id: 'creator', emoji: '🎨', label: 'クリエイター', sectionTitle: 'クリエイタープロフ', showSubjectFields: false,
+    id: 'creator', emoji: '🎨', label: 'アート・創作', sectionTitle: 'クリエイタープロフ',
     fields: [
       { key: 'creatorType', label: 'ジャンル', type: 'select', options: ['イラスト','デザイン','写真','映像','ハンドメイド','その他'] },
       { key: 'tools', label: '使用ツール・道具', type: 'text' },
@@ -1271,7 +1292,8 @@ function ProfileBookContent({
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
   const medals = ['🥇', '🥈', '🥉'];
-  const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === info.attribute);
+  const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
+  const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
 
   return (
     <div className="space-y-4 px-4 pt-3 pb-28">
@@ -1318,7 +1340,7 @@ function ProfileBookContent({
         <ProfileLine label="好きな食べ物" value={info.favoriteFood} />
         <ProfileLine label="きらいな食べ物" value={info.dislikeFood} />
         <ProfileLine label="好きな色" value={info.favoriteColor} />
-        {(attrDef?.showSubjectFields ?? true) && (
+        {(lifeStageDef?.showSubjectFields ?? true) && (
           <>
             <ProfileLine label="好きな教科" value={info.favoriteSubject} />
             <ProfileLine label="苦手な教科" value={info.dislikeSubject} />
@@ -1343,11 +1365,23 @@ function ProfileBookContent({
         <ProfileLine label="将来のゆめ" value={info.dream} />
       </section>
 
-      {/* ── 属性専用セクション ── */}
-      {attrDef && attrDef.fields.some((f) => customFields[f.key]) && (
+      {/* ── ライフステージ専用セクション ── */}
+      {lifeStageDef && lifeStageDef.fields.some((f) => customFields[f.key]) && (
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <ProfSectionHeader icon={attrDef.emoji} title={attrDef.sectionTitle} theme={themeColor} />
-          {attrDef.fields.map((f) =>
+          <ProfSectionHeader icon={lifeStageDef.emoji} title={lifeStageDef.sectionTitle} theme={themeColor} />
+          {lifeStageDef.fields.map((f) =>
+            customFields[f.key] ? (
+              <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
+            ) : null
+          )}
+        </section>
+      )}
+
+      {/* ── 特技・活動セクション ── */}
+      {activityDef && activityDef.fields.some((f) => customFields[f.key]) && (
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <ProfSectionHeader icon={activityDef.emoji} title={activityDef.sectionTitle} theme={themeColor} />
+          {activityDef.fields.map((f) =>
             customFields[f.key] ? (
               <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
             ) : null
@@ -1449,7 +1483,8 @@ function OtherProfileScreen({
       message: profile.bio,
       catchphrase: `「${profile.common}」`,
     }),
-    attribute: book?.info?.attribute ?? 'student',
+    attribute: book?.info?.attribute ?? 'highschool',
+    activity: book?.info?.activity ?? '',
   };
   const best3 = book?.best3 ?? { tv: [], food: [], places: [], music: [] };
   const questions = book?.questions ?? [];
@@ -1710,41 +1745,91 @@ function ProfileEditScreen({
           )}
         </section>
 
-        {/* ===== 属性セレクター ===== */}
+        {/* ===== ステップ1: 立場（ライフステージ）===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-base font-black text-ink">🏷️ あなたの属性</p>
-          <p className="mb-4 text-xs font-bold text-muted">選ぶとプロフィール項目が切り替わります</p>
+          <p className="mb-1 text-base font-black text-ink">① 立場を選んでね</p>
+          <p className="mb-4 text-xs font-bold text-muted">どれかひとつ（選ぶと表示項目が変わります）</p>
           <div className="grid grid-cols-2 gap-2">
-            {ATTRIBUTE_DEFS.map((attr) => (
+            {LIFE_STAGE_DEFS.map((ls) => (
               <button
-                key={attr.id}
+                key={ls.id}
                 type="button"
                 onClick={() => {
-                  update('attribute', attr.id);
-                  setLocalCustomFields({});
+                  update('attribute', ls.id);
+                  setLocalCustomFields((prev) => {
+                    const next: Record<string, string> = {};
+                    ACTIVITY_DEFS.find((a) => a.id === form.activity)?.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    return next;
+                  });
                 }}
                 className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  form.attribute === attr.id
+                  form.attribute === ls.id
                     ? 'bg-pink text-white shadow-card'
                     : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
                 }`}
               >
-                <span>{attr.emoji}</span>
-                <span className="text-left leading-tight">{attr.label}</span>
+                <span>{ls.emoji}</span>
+                <span className="text-left leading-tight">{ls.label}</span>
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* ===== ステップ2: 特技・活動（任意）===== */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">② 特技・活動（あれば）</p>
+          <p className="mb-4 text-xs font-bold text-muted">ライフステージに関係なく選べます</p>
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => { update('attribute', ''); setLocalCustomFields({}); }}
+              onClick={() => {
+                update('activity', '');
+                setLocalCustomFields((prev) => {
+                  const next: Record<string, string> = {};
+                  LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
+                    if (prev[f.key]) next[f.key] = prev[f.key];
+                  });
+                  return next;
+                });
+              }}
               className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                !form.attribute
-                  ? 'bg-pink text-white shadow-card'
-                  : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
+                !form.activity
+                  ? 'bg-purple text-white shadow-card'
+                  : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
               }`}
             >
-              <span>👤</span>
-              <span>未設定</span>
+              <span>✗</span>
+              <span>なし</span>
             </button>
+            {ACTIVITY_DEFS.map((act) => (
+              <button
+                key={act.id}
+                type="button"
+                onClick={() => {
+                  update('activity', act.id);
+                  setLocalCustomFields((prev) => {
+                    const next: Record<string, string> = {};
+                    LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    act.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    return next;
+                  });
+                }}
+                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  form.activity === act.id
+                    ? 'bg-purple text-white shadow-card'
+                    : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
+                }`}
+              >
+                <span>{act.emoji}</span>
+                <span className="text-left leading-tight">{act.label}</span>
+              </button>
+            ))}
           </div>
         </section>
 
@@ -1765,10 +1850,7 @@ function ProfileEditScreen({
           <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
           <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} />
           <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} />
-          {(() => {
-            const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === form.attribute);
-            return attrDef?.showSubjectFields ?? true;
-          })() && (
+          {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
             <>
               <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
               <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
@@ -1789,30 +1871,36 @@ function ProfileEditScreen({
           <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
         </section>
 
-        {/* ===== 属性専用フィールド ===== */}
+        {/* ===== ライフステージ専用フィールド ===== */}
         {(() => {
-          const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === form.attribute);
-          if (!attrDef) return null;
+          const lsDef = LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute);
+          if (!lsDef || lsDef.fields.length === 0) return null;
           return (
             <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-              <p className="text-base font-black text-ink">{attrDef.emoji} {attrDef.sectionTitle}</p>
-              {attrDef.fields.map((f) =>
+              <p className="text-base font-black text-ink">{lsDef.emoji} {lsDef.sectionTitle}</p>
+              {lsDef.fields.map((f) =>
                 f.type === 'select' && f.options ? (
-                  <SelectField
-                    key={f.key}
-                    label={f.label}
-                    value={localCustomFields[f.key] ?? ''}
-                    onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))}
-                    options={f.options}
-                    columns={f.options.length <= 4 ? f.options.length : 3}
-                  />
+                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
                 ) : (
-                  <EditField
-                    key={f.key}
-                    label={f.label}
-                    value={localCustomFields[f.key] ?? ''}
-                    onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))}
-                  />
+                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
+                )
+              )}
+            </section>
+          );
+        })()}
+
+        {/* ===== 特技・活動専用フィールド ===== */}
+        {(() => {
+          const actDef = ACTIVITY_DEFS.find((a) => a.id === form.activity);
+          if (!actDef) return null;
+          return (
+            <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
+              <p className="text-base font-black text-ink">{actDef.emoji} {actDef.sectionTitle}</p>
+              {actDef.fields.map((f) =>
+                f.type === 'select' && f.options ? (
+                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
+                ) : (
+                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
                 )
               )}
             </section>
