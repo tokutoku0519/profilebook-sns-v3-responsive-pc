@@ -232,7 +232,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
         { q: 'ひとりの時間に何してる？', a: 'レコードかけながら古いカメラを磨いてる。無音じゃなくて、音のある静けさが好き。' },
         { q: '今いちばん会いたい人は？', a: '祖母。もう会えないけど、ファインダー越しに世界を見るたびに隣にいる気がする。' },
       ],
-      note: '購読してくれてありがとう。ここには書き物と写真と、ふと思ったことを残してる。',
+      note: '購入してくれてありがとう。ここには書き物と写真と、ふと思ったことを残してる。',
     },
   },
   '@nana_7': {
@@ -1586,12 +1586,12 @@ function OtherProfileScreen({
                 <span className="text-xl">✨</span>
                 <p className="font-black text-white">プレミアムコンテンツ</p>
                 {isSubscribed && (
-                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-black text-white">購読中</span>
+                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-black text-white">購入済み</span>
                 )}
               </div>
               <p className="text-xs font-bold text-white/80">{premium.description}</p>
               {!isSubscribed && (
-                <p className="mt-1 text-[10px] font-bold text-white/60">月額¥{premium.price.toLocaleString()} · いつでも解約できます</p>
+                <p className="mt-1 text-[10px] font-bold text-white/60">¥{premium.price.toLocaleString()} 買い切り · 一度購入すればずっと読めます</p>
               )}
             </div>
 
@@ -1611,13 +1611,13 @@ function OtherProfileScreen({
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[3px]">
                   <span className="mb-2 text-4xl">🔒</span>
-                  <p className="mb-1 text-base font-black text-ink">月額¥{premium.price.toLocaleString()}で解除</p>
-                  <p className="mb-5 text-xs font-bold text-muted">いつでも解約できます</p>
+                  <p className="mb-1 text-base font-black text-ink">¥{premium.price.toLocaleString()} で解除</p>
+                  <p className="mb-5 text-xs font-bold text-muted">買い切り · 一度購入すればずっと読めます</p>
                   <button
                     onClick={() => onToggleSubscription(profile.id)}
                     className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-8 py-3 text-sm font-black text-white shadow-floating active:scale-[0.98] transition"
                   >
-                    購読して続きを読む
+                    購入して続きを読む
                   </button>
                 </div>
               </div>
@@ -1640,7 +1640,7 @@ function OtherProfileScreen({
                   onClick={() => onToggleSubscription(profile.id)}
                   className="text-xs font-bold text-muted underline"
                 >
-                  購読を解約する
+                  購入を取り消す
                 </button>
               </div>
             )}
@@ -2152,15 +2152,15 @@ function ProfileEditScreen({
           <section className="space-y-4 rounded-[32px] border-2 border-amber-100 bg-white p-5 shadow-card">
             <div>
               <p className="text-base font-black text-ink">✨ プレミアム設定</p>
-              <p className="mt-1 text-xs font-bold text-muted">購読者だけが見られる特別コンテンツを設定できます</p>
+              <p className="mt-1 text-xs font-bold text-muted">購入者だけが見られる特別コンテンツを設定できます（買い切り）</p>
             </div>
             <EditField
-              label="紹介文（購読ページに表示）"
+              label="紹介文（購入ページに表示）"
               value={premiumForm.description}
               onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))}
             />
             <div className="flex items-center gap-3">
-              <label className="shrink-0 text-xs font-bold text-muted">月額料金（円）</label>
+              <label className="shrink-0 text-xs font-bold text-muted">販売価格（円）</label>
               <input
                 type="number"
                 min={0}
@@ -2211,14 +2211,14 @@ function ProfileEditScreen({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-bold text-muted">購読者へのメッセージ</label>
+              <label className="mb-1 block text-xs font-bold text-muted">購入者へのメッセージ</label>
               <textarea
                 value={premiumForm.note}
                 onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))}
                 rows={3}
                 maxLength={300}
                 className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
-                placeholder="購読してくれた人へひとこと..."
+                placeholder="購入してくれた人へひとこと..."
               />
             </div>
           </section>
@@ -3776,7 +3776,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     setSubscribedOfficials((prev) => {
       const next = prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId];
       localStorage.setItem('miri_subscribed_officials', JSON.stringify(next));
-      showToast(prev.includes(userId) ? '購読を解約しました' : '✨ 購読しました！プレミアムコンテンツが解放されました');
+      showToast(prev.includes(userId) ? '購入を取り消しました' : '✨ 購入しました！プレミアムコンテンツが解放されました');
       return next;
     });
   }
