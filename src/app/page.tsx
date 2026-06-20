@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Home, Plus, Search, Settings, ShoppingBag, UserRound } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Bell, Bookmark, Home, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
+import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -107,6 +108,7 @@ const defaultProfileBookInfo = {
   personality: '好奇心旺盛でちょっと飽き性',
   catchphrase: '「それ、やってみよ」',
   message: 'このアプリを一緒に育ててくれると嬉しい♡',
+  attribute: 'student',
 };
 
 const defaultBest3 = {
@@ -130,7 +132,7 @@ const defaultProfileQuestions = [
 ];
 
 type ProfileBook = {
-  info: typeof defaultProfileBookInfo;
+  info: Omit<typeof defaultProfileBookInfo, 'attribute'> & { attribute?: string };
   best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
   questions: Array<{ q: string; a: string }>;
   themeColor: 'pink' | 'purple' | 'blue' | 'green' | 'orange';
@@ -333,7 +335,6 @@ const mockProfileBooks: Record<string, ProfileBook> = {
 
 // 荒らし・イタズラ対策: NGワードフィルター
 const NG_WORDS = ['死ね', 'ころす', '殺す', 'うざい', 'きもい', 'クズ', 'ゴミ', 'バカ', 'アホ', 'ブス', 'デブ'];
-const POST_COOLDOWN_MS = 60_000; // 連続投稿を60秒ブロック
 
 const DIARY_FONTS = [
   { label: 'ふつう',    value: 'inherit' },
@@ -379,6 +380,92 @@ const BLOOD_TYPE_OPTIONS = ['A型', 'B型', 'O型', 'AB型'];
 const MBTI_OPTIONS = ['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'];
 const SUBJECT_OPTIONS = ['国語','数学','英語','理科','社会','体育','音楽','美術','家庭科','技術','現代文','古文','漢文','化学','物理','生物','地理','歴史','倫理','情報'];
 const PERSONALITY_OPTIONS = ['おっとり系','元気・明るい','クール・落ち着き','ちょっと不思議','真面目','天然','ふわふわ','ツンデレ','好奇心旺盛','マイペース','リーダー気質','聞き上手'];
+
+type AttributeCustomFieldDef = {
+  key: string;
+  label: string;
+  type: 'text' | 'select';
+  options?: string[];
+};
+
+type AttributeDef = {
+  id: string;
+  emoji: string;
+  label: string;
+  sectionTitle: string;
+  showSubjectFields: boolean;
+  fields: AttributeCustomFieldDef[];
+};
+
+const ATTRIBUTE_DEFS: AttributeDef[] = [
+  {
+    id: 'student', emoji: '📚', label: '学生（小・中・高）', sectionTitle: '学校プロフ', showSubjectFields: true,
+    fields: [
+      { key: 'grade', label: '学年', type: 'select', options: ['小1','小2','小3','小4','小5','小6','中1','中2','中3','高1','高2','高3'] },
+      { key: 'club', label: '部活・習い事', type: 'text' },
+    ],
+  },
+  {
+    id: 'college', emoji: '🎓', label: '大学生', sectionTitle: '大学生プロフ', showSubjectFields: true,
+    fields: [
+      { key: 'faculty', label: '学部・学科', type: 'text' },
+      { key: 'circle', label: 'サークル', type: 'text' },
+      { key: 'partTimeJob', label: 'バイト', type: 'text' },
+    ],
+  },
+  {
+    id: 'worker', emoji: '💼', label: '社会人', sectionTitle: 'しごとプロフ', showSubjectFields: false,
+    fields: [
+      { key: 'jobType', label: '職種', type: 'text' },
+      { key: 'industry', label: '業界', type: 'text' },
+      { key: 'yearsWorked', label: '社会人歴', type: 'text' },
+    ],
+  },
+  {
+    id: 'baseball', emoji: '⚾', label: '野球選手', sectionTitle: '野球プロフ', showSubjectFields: false,
+    fields: [
+      { key: 'position', label: '守備位置', type: 'select', options: ['投手','捕手','一塁手','二塁手','三塁手','遊撃手','左翼手','中堅手','右翼手','DH'] },
+      { key: 'batting', label: '投打', type: 'select', options: ['右投右打','右投左打','左投左打','両投両打'] },
+      { key: 'team', label: 'チーム名', type: 'text' },
+      { key: 'idolPlayer', label: '憧れの選手', type: 'text' },
+    ],
+  },
+  {
+    id: 'soccer', emoji: '⚽', label: 'サッカー選手', sectionTitle: 'サッカープロフ', showSubjectFields: false,
+    fields: [
+      { key: 'position', label: 'ポジション', type: 'select', options: ['GK','DF','MF','FW'] },
+      { key: 'jerseyNumber', label: '背番号', type: 'text' },
+      { key: 'team', label: 'チーム名', type: 'text' },
+      { key: 'idolPlayer', label: '憧れの選手', type: 'text' },
+    ],
+  },
+  {
+    id: 'musician', emoji: '🎸', label: 'ミュージシャン', sectionTitle: '音楽プロフ', showSubjectFields: false,
+    fields: [
+      { key: 'part', label: 'パート', type: 'select', options: ['ボーカル','ギター','ベース','ドラム','キーボード','その他'] },
+      { key: 'bandName', label: 'バンド名・ユニット名', type: 'text' },
+      { key: 'experience', label: '音楽歴', type: 'text' },
+      { key: 'idol', label: '憧れのアーティスト', type: 'text' },
+    ],
+  },
+  {
+    id: 'gamer', emoji: '🎮', label: 'ゲーマー', sectionTitle: 'ゲーマープロフ', showSubjectFields: false,
+    fields: [
+      { key: 'mainGame', label: 'メインゲーム', type: 'text' },
+      { key: 'platform', label: 'プラットフォーム', type: 'select', options: ['Switch','PS5','Xbox','PC','スマホ','アーケード'] },
+      { key: 'playStyle', label: 'プレイスタイル', type: 'select', options: ['ガチ勢','エンジョイ勢','実況・配信','収集・やりこみ'] },
+      { key: 'gamerId', label: 'ゲーマーID・配信名', type: 'text' },
+    ],
+  },
+  {
+    id: 'creator', emoji: '🎨', label: 'クリエイター', sectionTitle: 'クリエイタープロフ', showSubjectFields: false,
+    fields: [
+      { key: 'creatorType', label: 'ジャンル', type: 'select', options: ['イラスト','デザイン','写真','映像','ハンドメイド','その他'] },
+      { key: 'tools', label: '使用ツール・道具', type: 'text' },
+      { key: 'sns', label: '活動SNS・URL', type: 'text' },
+    ],
+  },
+];
 
 // プロフィールの共通点フィールド定義（マッチングに使用）
 const MATCH_FIELDS: { key: keyof typeof defaultProfileBookInfo; label: string }[] = [
@@ -1165,6 +1252,7 @@ function ProfileBookContent({
   userId,
   themeColor = 'pink',
   favoritePhotos,
+  customFields = {},
   onGoDetail,
 }: {
   info: typeof defaultProfileBookInfo;
@@ -1176,12 +1264,14 @@ function ProfileBookContent({
   userId: string;
   themeColor?: string;
   favoritePhotos?: string[];
+  customFields?: Record<string, string>;
   onGoDetail?: (id: string) => void;
 }) {
   const grad = THEME_GRADIENT[themeColor] ?? THEME_GRADIENT.pink;
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
   const medals = ['🥇', '🥈', '🥉'];
+  const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === info.attribute);
 
   return (
     <div className="space-y-4 px-4 pt-3 pb-28">
@@ -1228,8 +1318,12 @@ function ProfileBookContent({
         <ProfileLine label="好きな食べ物" value={info.favoriteFood} />
         <ProfileLine label="きらいな食べ物" value={info.dislikeFood} />
         <ProfileLine label="好きな色" value={info.favoriteColor} />
-        <ProfileLine label="好きな教科" value={info.favoriteSubject} />
-        <ProfileLine label="苦手な教科" value={info.dislikeSubject} />
+        {(attrDef?.showSubjectFields ?? true) && (
+          <>
+            <ProfileLine label="好きな教科" value={info.favoriteSubject} />
+            <ProfileLine label="苦手な教科" value={info.dislikeSubject} />
+          </>
+        )}
         <ProfileLine label="好きなキャラ" value={info.favoriteCharacter} />
         <ProfileLine label="好きな音楽" value={info.favoriteMusic} />
         <ProfileLine label="好きなテレビ" value={info.favoriteTv} />
@@ -1248,6 +1342,18 @@ function ProfileBookContent({
         <ProfileLine label="チャームポイント" value={info.charmPoint} />
         <ProfileLine label="将来のゆめ" value={info.dream} />
       </section>
+
+      {/* ── 属性専用セクション ── */}
+      {attrDef && attrDef.fields.some((f) => customFields[f.key]) && (
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <ProfSectionHeader icon={attrDef.emoji} title={attrDef.sectionTitle} theme={themeColor} />
+          {attrDef.fields.map((f) =>
+            customFields[f.key] ? (
+              <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
+            ) : null
+          )}
+        </section>
+      )}
 
       {/* ── BEST3 ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
@@ -1335,12 +1441,15 @@ function OtherProfileScreen({
 
   const book = mockProfileBooks[profile.id];
   const theirAnswers = answers.filter((a) => a.user.id === profile.id);
-  const info = book?.info ?? {
-    ...defaultProfileBookInfo,
-    name: profile.name,
-    nickname: profile.name,
-    message: profile.bio,
-    catchphrase: `「${profile.common}」`,
+  const info = {
+    ...(book?.info ?? {
+      ...defaultProfileBookInfo,
+      name: profile.name,
+      nickname: profile.name,
+      message: profile.bio,
+      catchphrase: `「${profile.common}」`,
+    }),
+    attribute: book?.info?.attribute ?? 'student',
   };
   const best3 = book?.best3 ?? { tv: [], food: [], places: [], music: [] };
   const questions = book?.questions ?? [];
@@ -1383,6 +1492,7 @@ function ProfileScreen({
   profileQuestions,
   avatarUrl,
   favoritePhotos,
+  customFields,
 }: {
   go: (s: Screen, answerId?: string) => void;
   answers: Answer[];
@@ -1391,6 +1501,7 @@ function ProfileScreen({
   profileQuestions: typeof defaultProfileQuestions;
   avatarUrl: string;
   favoritePhotos: string[];
+  customFields?: Record<string, string>;
 }) {
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
@@ -1422,6 +1533,7 @@ function ProfileScreen({
         userId="@koki"
         themeColor="pink"
         favoritePhotos={favoritePhotos}
+        customFields={customFields}
         onGoDetail={(id) => go('detail', id)}
       />
     </>
@@ -1442,6 +1554,8 @@ function ProfileEditScreen({
   onSaveFavoritePhotos,
   appTheme,
   onChangeTheme,
+  customFields,
+  onSaveCustomFields,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -1456,12 +1570,15 @@ function ProfileEditScreen({
   onSaveFavoritePhotos: (photos: string[]) => void;
   appTheme: AppThemeId;
   onChangeTheme: (id: AppThemeId) => void;
+  customFields: Record<string, string>;
+  onSaveCustomFields: (next: Record<string, string>) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
   const [questionsForm, setQuestionsForm] = useState(profileQuestions);
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
+  const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1593,6 +1710,44 @@ function ProfileEditScreen({
           )}
         </section>
 
+        {/* ===== 属性セレクター ===== */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">🏷️ あなたの属性</p>
+          <p className="mb-4 text-xs font-bold text-muted">選ぶとプロフィール項目が切り替わります</p>
+          <div className="grid grid-cols-2 gap-2">
+            {ATTRIBUTE_DEFS.map((attr) => (
+              <button
+                key={attr.id}
+                type="button"
+                onClick={() => {
+                  update('attribute', attr.id);
+                  setLocalCustomFields({});
+                }}
+                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  form.attribute === attr.id
+                    ? 'bg-pink text-white shadow-card'
+                    : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
+                }`}
+              >
+                <span>{attr.emoji}</span>
+                <span className="text-left leading-tight">{attr.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => { update('attribute', ''); setLocalCustomFields({}); }}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                !form.attribute
+                  ? 'bg-pink text-white shadow-card'
+                  : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
+              }`}
+            >
+              <span>👤</span>
+              <span>未設定</span>
+            </button>
+          </div>
+        </section>
+
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="text-xl font-black text-ink">基本プロフィールを編集</p>
           <p className="mt-1 text-xs font-bold text-muted">
@@ -1610,8 +1765,15 @@ function ProfileEditScreen({
           <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
           <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} />
           <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} />
-          <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
-          <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
+          {(() => {
+            const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === form.attribute);
+            return attrDef?.showSubjectFields ?? true;
+          })() && (
+            <>
+              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
+              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
+            </>
+          )}
           <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} />
           <EditField label="好きな音楽" value={form.favoriteMusic} onChange={(v) => update('favoriteMusic', v)} />
           <EditField label="好きなテレビ" value={form.favoriteTv} onChange={(v) => update('favoriteTv', v)} />
@@ -1626,6 +1788,36 @@ function ProfileEditScreen({
           <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} />
           <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
         </section>
+
+        {/* ===== 属性専用フィールド ===== */}
+        {(() => {
+          const attrDef = ATTRIBUTE_DEFS.find((a) => a.id === form.attribute);
+          if (!attrDef) return null;
+          return (
+            <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
+              <p className="text-base font-black text-ink">{attrDef.emoji} {attrDef.sectionTitle}</p>
+              {attrDef.fields.map((f) =>
+                f.type === 'select' && f.options ? (
+                  <SelectField
+                    key={f.key}
+                    label={f.label}
+                    value={localCustomFields[f.key] ?? ''}
+                    onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))}
+                    options={f.options}
+                    columns={f.options.length <= 4 ? f.options.length : 3}
+                  />
+                ) : (
+                  <EditField
+                    key={f.key}
+                    label={f.label}
+                    value={localCustomFields[f.key] ?? ''}
+                    onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))}
+                  />
+                )
+              )}
+            </section>
+          );
+        })()}
 <section className="space-y-5 rounded-[32px] bg-white p-5 shadow-card">
   <p className="text-xl font-black text-ink">すきなもの BEST3</p>
 
@@ -1737,6 +1929,7 @@ function ProfileEditScreen({
             onSaveQuestions(questionsForm);
             onSaveAvatar(localAvatarUrl);
             onSaveFavoritePhotos(localPhotos);
+            onSaveCustomFields(localCustomFields);
             go('profile');
           }}
           className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
@@ -1942,14 +2135,23 @@ function Best3EditBlock({
   );
 }
 
-function DetailScreen({ go, answer, onReact }: { go: (s: Screen) => void; answer: Answer; onReact: (answerId: string, type: keyof Answer['reactions'], prev: keyof Answer['reactions'] | null) => void }) {
+function DetailScreen({
+  go, answer, onReact, isBookmarked, onToggleBookmark, onShare,
+}: {
+  go: (s: Screen) => void;
+  answer: Answer;
+  onReact: (answerId: string, type: keyof Answer['reactions'], prev: keyof Answer['reactions'] | null) => void;
+  isBookmarked: boolean;
+  onToggleBookmark: (id: string) => void;
+  onShare: (text: string) => void;
+}) {
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState(['これ完全にわかる、揚げパンの日だけ給食楽しみだった。']);
   const [reacted, setReacted] = useState<keyof Answer['reactions'] | null>(null);
 
   function react(type: keyof Answer['reactions']) {
     const prev = reacted;
-    const next = prev === type ? null : type;  // 同じボタン = トグル解除
+    const next = prev === type ? null : type;
     setReacted(next);
     onReact(answer.id, type, prev);
   }
@@ -1965,14 +2167,45 @@ function DetailScreen({ go, answer, onReact }: { go: (s: Screen) => void; answer
       <AppHeader title="回答詳細" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
         <AnswerCard answer={answer} detail />
+
+        {/* リアクション */}
         <div className="grid grid-cols-4 gap-2">
-          {(['like','same','wakaru','natsukashii'] as const).map((type) => <button key={type} onClick={() => react(type)} className={`rounded-full py-3 text-xs font-black shadow-card ${reacted === type ? 'bg-pink text-white' : 'bg-white'}`}>{type === 'like' ? '♡ すき' : type === 'same' ? '同じ' : type === 'wakaru' ? 'わかる' : '懐かしい'}</button>)}
+          {(['like','same','wakaru','natsukashii'] as const).map((type) => (
+            <button key={type} onClick={() => react(type)}
+              className={`rounded-full py-3 text-xs font-black shadow-card transition ${reacted === type ? 'bg-pink text-white' : 'bg-white'}`}>
+              {type === 'like' ? '♡ すき' : type === 'same' ? '同じ' : type === 'wakaru' ? 'わかる' : '懐かしい'}
+            </button>
+          ))}
         </div>
+
+        {/* シェア・ブックマーク */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => onShare(`「${answer.question.title}」\n\n${answer.body}\n\n— ${answer.user.name} on Miri`)}
+            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-black text-muted shadow-card transition active:scale-[0.98]"
+          >
+            <Share2 size={16} />シェア
+          </button>
+          <button
+            onClick={() => onToggleBookmark(answer.id)}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3 text-sm font-black shadow-card transition active:scale-[0.98] ${isBookmarked ? 'bg-pink text-white' : 'bg-white text-muted'}`}
+          >
+            <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
+            {isBookmarked ? '保存済み' : 'ブックマーク'}
+          </button>
+        </div>
+
         <section className="rounded-[28px] bg-white p-4 shadow-card">
           <SectionHeader title="コメント" />
-          <div className="mb-3 flex gap-2"><input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="コメントする" className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" /><button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">送信</button></div>
+          <div className="mb-3 flex gap-2">
+            <input value={comment} onChange={(e) => setComment(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addComment()}
+              placeholder="コメントする" className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" />
+            <button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">送信</button>
+          </div>
           <div className="space-y-2">{comments.map((c, i) => <p key={i} className="rounded-2xl bg-pink-50 p-3 text-sm">{c}</p>)}</div>
         </section>
+
         <section>
           <SectionHeader title="同じ回答の人" action="もっと見る" />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">{profiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}</div>
@@ -1983,7 +2216,7 @@ function DetailScreen({ go, answer, onReact }: { go: (s: Screen) => void; answer
   );
 }
 
-function MyPageScreen({ go, answers, avatarUrl }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string }) {
+function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
@@ -2041,21 +2274,32 @@ function MyPageScreen({ go, answers, avatarUrl }: { go: (s: Screen, answerId?: s
   </div>
 </section>
 
-        <button
-          onClick={() => go('shop')}
-          className="w-full rounded-[28px] bg-gradient-to-r from-pink to-purple p-5 text-left shadow-floating transition active:scale-[0.99]"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-black text-white/70">Miri</p>
-              <p className="text-xl font-black text-white">🛍 ショップ</p>
-              <p className="mt-1 text-xs font-bold text-white/80">テーマ・シール・デコをゲットしよう</p>
-            </div>
-            <span className="grid h-12 w-12 place-items-center rounded-full bg-white/20 text-white">
-              <ShoppingBag size={22} />
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={onGoBookmarks}
+            className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card transition active:scale-[0.98]"
+          >
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-pink/15 text-pink">
+              <Bookmark size={18} />
             </span>
-          </div>
-        </button>
+            <div className="text-left">
+              <p className="text-sm font-black text-ink">ブックマーク</p>
+              <p className="text-xs font-bold text-muted">保存した回答</p>
+            </div>
+          </button>
+          <button
+            onClick={() => go('shop')}
+            className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card transition active:scale-[0.98]"
+          >
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-purple/15 text-purple">
+              <ShoppingBag size={18} />
+            </span>
+            <div className="text-left">
+              <p className="text-sm font-black text-ink">ショップ</p>
+              <p className="text-xs font-bold text-muted">テーマ・シール</p>
+            </div>
+          </button>
+        </div>
 
       </div>
     </>
@@ -2189,15 +2433,15 @@ function DiaryListScreen({
 function DiaryDetailScreen({
   go,
   page,
-  canPost,
   onAddEntry,
+  onEditEntry,
   onDeleteEntry,
   onReportEntry,
 }: {
   go: (s: Screen) => void;
   page: DiaryPage;
-  canPost: boolean;
   onAddEntry: (pageId: string, body: string, photoUrl?: string) => void;
+  onEditEntry: (pageId: string, entryId: string, body: string, photoUrl?: string) => void;
   onDeleteEntry: (pageId: string, entryId: string) => void;
   onReportEntry: (pageId: string, entryId: string) => void;
 }) {
@@ -2208,13 +2452,29 @@ function DiaryDetailScreen({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const diaryBodyRef = useRef<HTMLTextAreaElement>(null);
 
+  const today = new Date().toDateString();
+  const todaysMyEntry = page.entries.find(
+    (e) => e.authorId === me.id && new Date(e.postedAt).toDateString() === today
+  ) ?? null;
+
+  useEffect(() => {
+    if (todaysMyEntry) {
+      setBody(todaysMyEntry.body);
+      setPhotoUrl(todaysMyEntry.photoUrl ?? '');
+    } else {
+      setBody('');
+      setPhotoUrl('');
+    }
+    setNgError(false);
+  }, [page.id]);
+
   const canWrite =
     page.visibility === 'public' ||
     page.visibility === 'followers' ||
     page.createdBy === me.id ||
     page.mentionedUserIds.includes(me.id);
 
-  const canSubmit = canPost && canWrite && body.trim().length > 0 && !containsNgWord(body);
+  const canSubmit = canWrite && body.trim().length > 0 && !containsNgWord(body);
 
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2227,10 +2487,14 @@ function DiaryDetailScreen({
 
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
-    if (!canPost || !canWrite) return;
-    onAddEntry(page.id, body.trim(), photoUrl || undefined);
-    setBody('');
-    setPhotoUrl('');
+    if (!canWrite) return;
+    if (todaysMyEntry) {
+      onEditEntry(page.id, todaysMyEntry.id, body.trim(), photoUrl || undefined);
+    } else {
+      onAddEntry(page.id, body.trim(), photoUrl || undefined);
+      setBody('');
+      setPhotoUrl('');
+    }
     setNgError(false);
   }
 
@@ -2316,15 +2580,17 @@ function DiaryDetailScreen({
         {/* 書き込みフォーム or 権限なし表示 */}
         {canWrite ? (
           <section className="rounded-[32px] bg-white p-5 shadow-card">
-            <p className="mb-3 text-sm font-black text-ink">✍ 書き込む</p>
+            <p className="mb-3 text-sm font-black text-ink">
+              {todaysMyEntry ? '✏️ 今日の書き込みを修正する' : '✍ 書き込む'}
+            </p>
+            {todaysMyEntry && (
+              <p className="mb-2 rounded-2xl bg-purple/10 px-3 py-2 text-xs font-black text-purple">
+                今日はすでに書き込み済みです。内容を修正できます。
+              </p>
+            )}
             {ngError && (
               <p className="mb-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">
                 不適切な言葉が含まれています。書き直してね。
-              </p>
-            )}
-            {!canPost && (
-              <p className="mb-2 rounded-2xl bg-purple/10 px-3 py-2 text-xs font-black text-muted">
-                連続投稿を防ぐため、少し間をあけてから書き込んでね
               </p>
             )}
             {photoUrl && (
@@ -2368,7 +2634,7 @@ function DiaryDetailScreen({
                 disabled={!canSubmit}
                 className="rounded-full bg-pink px-6 py-2 text-sm font-black text-white shadow-card disabled:opacity-40 active:scale-[0.98]"
               >
-                書く
+                {todaysMyEntry ? '修正する' : '書く'}
               </button>
             </div>
           </section>
@@ -2908,10 +3174,91 @@ function EmptyState({ text }: { text: string }) {
   return <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">{text}</div>;
 }
 
+// ── オンボーディング画面 ────────────────────────────────────────
+function OnboardingScreen({ onDone }: { onDone: () => void }) {
+  const steps = [
+    { emoji: '📖', title: 'お題に答えよう', desc: '毎日届くお題に、プロフィール帳みたいに答えてね。' },
+    { emoji: '🎀', title: 'プロフ帳を作ろう', desc: '自分だけのプロフィール帳をデコって、個性を見せよう。' },
+    { emoji: '✨', title: 'つながろう', desc: '共通点のある人をみつけて、日記を一緒に書こう。' },
+  ];
+  const [step, setStep] = useState(0);
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="flex h-full flex-col items-center justify-between bg-base px-6 pb-12 pt-16">
+      <div className="flex flex-col items-center gap-6 text-center">
+        <img src="/icon.png" alt="Miri" className="h-24 w-24 rounded-[28px] shadow-card" />
+        <div>
+          <p className="text-2xl font-black text-ink">Miriへようこそ！</p>
+          <p className="mt-1 text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
+        </div>
+
+        <div className="mt-4 w-full rounded-[32px] bg-white p-8 shadow-card">
+          <p className="mb-3 text-4xl">{steps[step].emoji}</p>
+          <p className="text-lg font-black text-ink">{steps[step].title}</p>
+          <p className="mt-2 text-sm font-bold leading-6 text-muted">{steps[step].desc}</p>
+        </div>
+
+        <div className="flex gap-2">
+          {steps.map((_, i) => (
+            <span key={i} className={`h-2 rounded-full transition-all ${i === step ? 'w-6 bg-pink' : 'w-2 bg-purple/20'}`} />
+          ))}
+        </div>
+      </div>
+
+      <div className="w-full space-y-3">
+        <button
+          onClick={() => isLast ? onDone() : setStep(s => s + 1)}
+          className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating active:scale-[0.98] transition"
+        >
+          {isLast ? 'はじめる ✨' : 'つぎへ →'}
+        </button>
+        {!isLast && (
+          <button onClick={onDone} className="w-full py-2 text-sm font-black text-muted">
+            スキップ
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ブックマーク画面 ──────────────────────────────────────────────
+function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
+  go: (s: Screen, payload?: any) => void;
+  answers: Answer[];
+  bookmarks: string[];
+  onToggleBookmark: (id: string) => void;
+}) {
+  const saved = answers.filter(a => bookmarks.includes(a.id));
+  return (
+    <>
+      <AppHeader title="ブックマーク" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
+      <div className="space-y-3 px-4 pt-3 pb-28">
+        {saved.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center gap-4 text-center">
+            <span className="text-5xl">🔖</span>
+            <p className="font-black text-ink">保存した回答がここに表示されます</p>
+            <p className="text-sm font-bold text-muted">回答詳細のブックマークボタンで保存できます</p>
+          </div>
+        ) : saved.map(answer => (
+          <button key={answer.id} onClick={() => go('detail', answer.id)}
+            className="block w-full text-left">
+            <AnswerCard answer={answer} />
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function Page() {
 const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
-  const [screen, setScreen] = useState<Screen>('home');
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (typeof window === 'undefined') return 'home';
+    return localStorage.getItem('miri_onboarded') ? 'home' : 'onboarding';
+  });
   const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0].id);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
@@ -3024,6 +3371,17 @@ function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
 }
 
+const [profileCustomFields, setProfileCustomFields] = useState<Record<string, string>>(() => {
+  if (typeof window === 'undefined') return {};
+  const saved = localStorage.getItem('profileCustomFields');
+  return saved ? JSON.parse(saved) : {};
+});
+
+function updateProfileCustomFields(next: Record<string, string>) {
+  setProfileCustomFields(next);
+  localStorage.setItem('profileCustomFields', JSON.stringify(next));
+}
+
 const [best3, setBest3] = useState(() => {
   if (typeof window === 'undefined') return defaultBest3;
   const saved = localStorage.getItem('best3');
@@ -3054,6 +3412,46 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   useEffect(() => {
     window.localStorage.setItem('profilebook_answers_v2', JSON.stringify(answers));
   }, [answers]);
+
+  // ── トースト ──────────────────────────────────────────────────
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  function showToast(message: string, type: ToastItem['type'] = 'success') {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+  }
+  function removeToast(id: number) {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }
+
+  // ── ブックマーク ──────────────────────────────────────────────
+  const [bookmarks, setBookmarks] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const saved = localStorage.getItem('miri_bookmarks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  function toggleBookmark(id: string) {
+    setBookmarks(prev => {
+      const next = prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id];
+      localStorage.setItem('miri_bookmarks', JSON.stringify(next));
+      showToast(prev.includes(id) ? 'ブックマークを解除しました' : '💾 ブックマークに保存しました');
+      return next;
+    });
+  }
+
+  // ── シェア ────────────────────────────────────────────────────
+  function shareText(text: string) {
+    if (navigator.share) {
+      navigator.share({ text, url: window.location.href }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(text).then(() => showToast('📋 クリップボードにコピーしました'));
+    }
+  }
+
+  // ── オンボーディング完了 ──────────────────────────────────────
+  function completeOnboarding() {
+    localStorage.setItem('miri_onboarded', '1');
+    setScreen('home');
+  }
 
   function go(next: Screen, payload?: any) {
   setScreen(next);
@@ -3112,10 +3510,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   const [diaryPages, setDiaryPages] = useState<DiaryPage[]>(initialDiaryPages);
   const [selectedDiaryId, setSelectedDiaryId] = useState<string>(initialDiaryPages[0]?.id ?? '');
-  const [lastPostTimes, setLastPostTimes] = useState<Record<string, number>>({});
 
   const selectedDiary = diaryPages.find((p) => p.id === selectedDiaryId) ?? diaryPages[0];
-  const canPost = Date.now() - (lastPostTimes[selectedDiaryId] ?? 0) >= POST_COOLDOWN_MS;
 
   function createDiaryPage(
     theme: string,
@@ -3162,7 +3558,15 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setDiaryPages((prev) =>
       prev.map((p) => p.id === pageId ? { ...p, entries: [...p.entries, entry] } : p)
     );
-    setLastPostTimes((prev) => ({ ...prev, [pageId]: Date.now() }));
+  }
+
+  function editDiaryEntry(pageId: string, entryId: string, body: string, photoUrl?: string) {
+    setDiaryPages((prev) =>
+      prev.map((p) => p.id === pageId
+        ? { ...p, entries: p.entries.map((e) => e.id === entryId ? { ...e, body, photoUrl: photoUrl || undefined } : e) }
+        : p
+      )
+    );
   }
 
   function deleteDiaryEntry(pageId: string, entryId: string) {
@@ -3193,6 +3597,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onSaveFavoritePhotos={updateFavoritePhotos}
       appTheme={appTheme}
       onChangeTheme={changeTheme}
+      customFields={profileCustomFields}
+      onSaveCustomFields={updateProfileCustomFields}
     />
   );
 
@@ -3229,8 +3635,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         <DiaryDetailScreen
           go={go}
           page={selectedDiary}
-          canPost={canPost}
           onAddEntry={addDiaryEntry}
+          onEditEntry={editDiaryEntry}
           onDeleteEntry={deleteDiaryEntry}
           onReportEntry={reportDiaryEntry}
         />
@@ -3260,12 +3666,26 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         profileQuestions={profileQuestions}
         avatarUrl={avatarUrl}
         favoritePhotos={favoritePhotos}
+        customFields={profileCustomFields}
       />;
     }
-    if (screen === 'detail') return <DetailScreen go={go} answer={selectedAnswer} onReact={react} />;
+    if (screen === 'onboarding') return <OnboardingScreen onDone={completeOnboarding} />;
+    if (screen === 'detail') return (
+      <DetailScreen
+        go={go}
+        answer={selectedAnswer}
+        onReact={react}
+        isBookmarked={bookmarks.includes(selectedAnswer.id)}
+        onToggleBookmark={toggleBookmark}
+        onShare={shareText}
+      />
+    );
+    if (screen === 'bookmarks') return (
+      <BookmarksScreen go={go} answers={answers} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} />
+    );
     if (screen === 'notifications') return <NotificationsScreen go={go} />;
     if (screen === 'followers') return <FollowersScreen go={go} />;
-    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} />;
+    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} />;
     if (screen === 'shop') return <ShopScreen go={go} />;
 
 return <ProfileScreen
@@ -3290,15 +3710,20 @@ return <ProfileScreen
   favoritePhotos,
   diaryPages,
   selectedDiary,
-  canPost,
   selectedProfileId,
   appTheme,
   circles,
   circlePosts,
   selectedCircleId,
+  bookmarks,
 ]);
 
   const active = tabFromScreen(screen);
 
-  return <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl}>{current}</DesktopShell>;
+  return (
+    <>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl}>{current}</DesktopShell>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </>
+  );
 }
