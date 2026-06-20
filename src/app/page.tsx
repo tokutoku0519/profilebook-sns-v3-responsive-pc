@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bell, Bookmark, Home, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
-import { AnswerCard, ProfileCard, QuestionCard, SectionHeader } from '@/components/Cards';
+import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
+import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question';
 type Question = (typeof questions)[number];
@@ -1565,6 +1566,30 @@ function OtherProfileScreen({
           {isFollowing ? '✓ フォロー中' : 'フォローする ＋'}
         </button>
       </div>
+
+      {/* 称号バッジ */}
+      {(() => {
+        const titles = getUserTitles(profile.id);
+        if (titles.length === 0) return null;
+        const hasTester = titles.includes('tester');
+        return (
+          <div className="space-y-2 px-4 pt-3">
+            <div className="flex flex-wrap gap-2">
+              {titles.map((t) => <TitleBadge key={t} type={t} userId={profile.id} />)}
+            </div>
+            {hasTester && (
+              <div className="rounded-[20px] bg-zinc-900 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs font-black text-amber-400 tracking-widest">激レア</span>
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-black text-amber-400">ULTRA RARE</span>
+                </div>
+                <p className="text-xs font-bold leading-5 text-zinc-400">{TITLE_DEFS.tester.description}</p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <ProfileBookContent
         info={info}
         best3={best3}
@@ -1690,6 +1715,18 @@ function ProfileScreen({
           </button>
         )}
       </div>
+
+      {/* 自分の称号バッジ */}
+      {(() => {
+        const titles = getUserTitles(me.id);
+        if (titles.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-2 px-4 pt-3">
+            {titles.map((t) => <TitleBadge key={t} type={t} userId={me.id} />)}
+          </div>
+        );
+      })()}
+
       <ProfileBookContent
         info={profileBookInfo}
         best3={best3}
