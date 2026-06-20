@@ -8,7 +8,7 @@ import { AnswerCard, ProfileCard, QuestionCard, SectionHeader } from '@/componen
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -711,6 +711,8 @@ function HomeScreen({
   diaryPages,
   circles,
   circlePosts,
+  dailyQuestion,
+  hasAnsweredToday,
 }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
@@ -718,6 +720,8 @@ function HomeScreen({
   diaryPages: DiaryPage[];
   circles: Circle[];
   circlePosts: CirclePost[];
+  dailyQuestion: Question;
+  hasAnsweredToday: boolean;
 }) {
   return (
     <>
@@ -762,8 +766,27 @@ function HomeScreen({
 
         <section className="relative">
           <span className="pointer-events-none absolute -right-1 -top-3 z-10"><RetroStar /></span>
-          <SectionHeader title="今日のお題" action="答える" onAction={() => go('create')} />
-          <button onClick={() => go('create')} className="block w-full text-left"><QuestionCard question={questions[0]} hero /></button>
+          <SectionHeader
+            title="今日のお題"
+            action={hasAnsweredToday ? '回答済み ✅' : '答える'}
+            onAction={() => go('daily-question')}
+          />
+          <button onClick={() => go('daily-question')} className="block w-full text-left">
+            <div className="relative overflow-hidden rounded-[28px] bg-white p-4 shadow-card active:scale-[0.98] transition">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{dailyQuestion.category}</span>
+                <span className="rounded-full bg-base px-2 py-0.5 text-[10px] font-black text-muted">📅 毎日更新</span>
+              </div>
+              <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion.title}</p>
+              <div className="mt-3 flex items-center gap-2">
+                {hasAnsweredToday ? (
+                  <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">🔓 みんなの回答を見る</span>
+                ) : (
+                  <span className="rounded-full bg-purple/10 px-3 py-1 text-[10px] font-black text-purple">🔒 答えるとみんなの回答が見えます</span>
+                )}
+              </div>
+            </div>
+          </button>
         </section>
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
@@ -3311,6 +3334,130 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ── 今日のお題画面 ──────────────────────────────────────────────
+function DailyQuestionScreen({
+  go,
+  question,
+  dailyRecord,
+  onSubmit,
+  answers,
+}: {
+  go: (s: Screen, payload?: any) => void;
+  question: Question;
+  dailyRecord: { date: string; body: string } | null;
+  onSubmit: (body: string) => void;
+  answers: Answer[];
+}) {
+  const [body, setBody] = useState('');
+  const [ngError, setNgError] = useState(false);
+  const revealed = dailyRecord !== null;
+  const othersAnswers = answers.filter((a) => a.user.id !== me.id);
+
+  function submit() {
+    if (containsNgWord(body)) { setNgError(true); return; }
+    if (!body.trim()) return;
+    onSubmit(body.trim());
+    setBody('');
+    setNgError(false);
+  }
+
+  return (
+    <>
+      <AppHeader title="今日のお題" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <div className="space-y-4 px-4 pt-3 pb-28">
+
+        {/* 問題カード */}
+        <section className="overflow-hidden rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/15 via-white to-purple/15 p-5 shadow-card">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">📅 今日のお題</span>
+            <span className="rounded-full bg-base px-3 py-1 text-[10px] font-black text-muted">{question.category}</span>
+          </div>
+          <p className="text-lg font-black text-ink leading-relaxed">{question.title}</p>
+        </section>
+
+        {!revealed ? (
+          <>
+            <section className="rounded-[28px] bg-white p-5 shadow-card">
+              <p className="mb-3 text-sm font-black text-ink">✍️ あなたの回答</p>
+              <div className="mb-4 rounded-2xl bg-purple/5 px-4 py-3">
+                <p className="text-xs font-bold text-muted">🔒 回答するとみんなの答えが見えます</p>
+              </div>
+              <textarea
+                value={body}
+                onChange={(e) => { setBody(e.target.value); setNgError(false); }}
+                maxLength={200}
+                rows={4}
+                className="w-full resize-none rounded-3xl border border-pink/20 bg-pink-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
+                placeholder="ここに書いてね..."
+              />
+              <div className="mt-1 flex items-center justify-between">
+                <span className={`text-xs font-bold ${ngError ? 'text-red-500' : 'text-transparent'}`}>
+                  この内容は投稿できません
+                </span>
+                <span className="text-xs font-bold text-muted">{body.length}/200</span>
+              </div>
+            </section>
+            <button
+              onClick={submit}
+              disabled={!body.trim()}
+              className={`h-14 w-full rounded-full text-base font-black text-white shadow-floating transition ${body.trim() ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}
+            >
+              回答してみんなの答えを見る 🔓
+            </button>
+          </>
+        ) : (
+          <>
+            {/* 自分の回答 */}
+            <section className="rounded-[28px] border-2 border-pink/30 bg-white p-5 shadow-card">
+              <div className="mb-3">
+                <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">✅ あなたの回答</span>
+              </div>
+              <p className="text-sm font-bold text-ink leading-6">{dailyRecord.body}</p>
+            </section>
+
+            {/* みんなの回答 */}
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-black text-ink">みんなの回答</h2>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-muted shadow-card">{othersAnswers.length}件</span>
+            </div>
+            {othersAnswers.length === 0 ? (
+              <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
+                まだ誰も答えていないよ、一番乗り！
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {othersAnswers.map((answer) => (
+                  <button
+                    key={answer.id}
+                    onClick={() => go('detail', answer.id)}
+                    className="w-full rounded-[28px] bg-white p-4 text-left shadow-card transition active:scale-[0.98]"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink/10 text-lg">{answer.user.avatar}</span>
+                      <div>
+                        <p className="text-sm font-black text-ink">{answer.user.name}</p>
+                        <p className="text-[10px] font-bold text-muted">{answer.user.id}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-ink leading-6">{answer.body}</p>
+                    <div className="mt-3 flex gap-4">
+                      {(['like','same','wakaru','natsukashii'] as const).map((k) => (
+                        <span key={k} className="text-xs font-bold text-muted">
+                          {k === 'like' ? '💗' : k === 'same' ? '✋' : k === 'wakaru' ? '😭' : '🥹'} {answer.reactions[k]}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── ブックマーク画面 ──────────────────────────────────────────────
 function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
   go: (s: Screen, payload?: any) => void;
@@ -3351,7 +3498,30 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
-  
+
+  // ── 今日のお題 ────────────────────────────────────────────────
+  const dailyQuestion = useMemo(() => {
+    const today = new Date().toDateString();
+    let h = 0;
+    for (let i = 0; i < today.length; i++) h = Math.imul(31, h) + today.charCodeAt(i) | 0;
+    return questions[Math.abs(h) % questions.length];
+  }, []);
+
+  const [dailyRecord, setDailyRecord] = useState<{ date: string; body: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const s = localStorage.getItem('miri_daily_answer');
+    if (!s) return null;
+    const r = JSON.parse(s) as { date: string; body: string };
+    return r.date === new Date().toISOString().slice(0, 10) ? r : null;
+  });
+
+  function submitDailyAnswer(body: string) {
+    const record = { date: new Date().toISOString().slice(0, 10), body };
+    setDailyRecord(record);
+    localStorage.setItem('miri_daily_answer', JSON.stringify(record));
+    postAnswer({ questionId: dailyQuestion.id, body, sticker: '✍️', visibility: 'public' });
+  }
+
 
   const [profileBookInfo, setProfileBookInfo] = useState(() => {
   if (typeof window === 'undefined') return defaultProfileBookInfo;
@@ -3705,6 +3875,17 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} />;
     }
 
+   if (screen === 'daily-question')
+  return (
+    <DailyQuestionScreen
+      go={go}
+      question={dailyQuestion}
+      dailyRecord={dailyRecord}
+      onSubmit={submitDailyAnswer}
+      answers={answers}
+    />
+  );
+
    if (screen === 'home')
   return (
     <HomeScreen
@@ -3714,6 +3895,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       diaryPages={diaryPages}
       circles={circles}
       circlePosts={circlePosts}
+      dailyQuestion={dailyQuestion}
+      hasAnsweredToday={dailyRecord !== null}
     />
   );
     if (screen === 'diary-list') return <DiaryListScreen go={go} diaryPages={diaryPages} />;
