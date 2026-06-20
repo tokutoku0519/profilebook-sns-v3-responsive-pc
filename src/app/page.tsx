@@ -132,11 +132,20 @@ const defaultProfileQuestions = [
   { q: '好きな季節とその理由は？', a: '秋。空気がいちばん好きな匂いがする' },
 ];
 
+type PremiumSection = {
+  price: number;
+  description: string;
+  questions: Array<{ q: string; a: string }>;
+  note: string;
+};
+
 type ProfileBook = {
   info: Omit<typeof defaultProfileBookInfo, 'attribute' | 'activity'> & { attribute?: string; activity?: string };
   best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
   questions: Array<{ q: string; a: string }>;
   themeColor: 'pink' | 'purple' | 'blue' | 'green' | 'orange';
+  isOfficial?: boolean;
+  premium?: PremiumSection;
 };
 
 const mockProfileBooks: Record<string, ProfileBook> = {
@@ -171,6 +180,17 @@ const mockProfileBooks: Record<string, ProfileBook> = {
       { q: '休日の過ごし方は？', a: '雑貨屋さんめぐりしてカフェでお茶' },
       { q: 'もし1日だけ過去に戻れたら？', a: '中学のプリクラ撮り直したい笑' },
     ],
+    isOfficial: true,
+    premium: {
+      price: 480,
+      description: 'まゆの深掘りQ&Aとこっそりメモが読めます',
+      questions: [
+        { q: '本当は誰にも言えない好きなものは？', a: '深夜にひとりでコンビニ行くこと。静かな夜が一番自分らしい。' },
+        { q: '泣きたいとき何する？', a: 'お気に入りのプリクラ帳を見ながら昔話をする。昔の自分に励まされる気がする。' },
+        { q: '人生で後悔してることは？', a: '高校のとき言えなかった「ありがとう」。今でも時々思い出す。' },
+      ],
+      note: '読んでくれてありがとう。ここにだけ本音を書いてる。フォローしてくれてる人にだけ見せたくて作った場所です♡',
+    },
   },
   '@rin_puri': {
     themeColor: 'purple',
@@ -203,6 +223,17 @@ const mockProfileBooks: Record<string, ProfileBook> = {
       { q: '休日の過ごし方は？', a: '古道具屋をひとりでぶらぶら' },
       { q: 'もし1日だけ過去に戻れたら？', a: '平成の深夜番組を全部録画したい' },
     ],
+    isOfficial: true,
+    premium: {
+      price: 480,
+      description: 'りんの創作メモと非公開Q&Aが読めます',
+      questions: [
+        { q: '写真を撮るとき何を考えてる？', a: '「この光、二度と来ない」ってことだけ。シャッターを押す理由はいつもそれ。' },
+        { q: 'ひとりの時間に何してる？', a: 'レコードかけながら古いカメラを磨いてる。無音じゃなくて、音のある静けさが好き。' },
+        { q: '今いちばん会いたい人は？', a: '祖母。もう会えないけど、ファインダー越しに世界を見るたびに隣にいる気がする。' },
+      ],
+      note: '購読してくれてありがとう。ここには書き物と写真と、ふと思ったことを残してる。',
+    },
   },
   '@nana_7': {
     themeColor: 'blue',
@@ -1488,10 +1519,14 @@ function OtherProfileScreen({
   go,
   profile,
   answers,
+  subscribedOfficials,
+  onToggleSubscription,
 }: {
   go: (s: Screen, payload?: any) => void;
   profile: Profile;
   answers: Answer[];
+  subscribedOfficials: string[];
+  onToggleSubscription: (userId: string) => void;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
   const [isFollowing, setIsFollowing] = useState(alreadyFollowing);
@@ -1512,6 +1547,8 @@ function OtherProfileScreen({
   const best3 = book?.best3 ?? { tv: [], food: [], places: [], music: [] };
   const questions = book?.questions ?? [];
   const themeColor = book?.themeColor ?? 'pink';
+  const premium = book?.premium;
+  const isSubscribed = subscribedOfficials.includes(profile.id);
 
   return (
     <>
@@ -1538,6 +1575,78 @@ function OtherProfileScreen({
         themeColor={themeColor}
         onGoDetail={(id) => go('detail', id)}
       />
+
+      {/* ── プレミアムコンテンツ ── */}
+      {premium && (
+        <div className="px-4 pb-10">
+          <div className="overflow-hidden rounded-[32px] shadow-card">
+            {/* ヘッダー */}
+            <div className="bg-gradient-to-r from-amber-400 to-orange-400 p-5">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-xl">✨</span>
+                <p className="font-black text-white">プレミアムコンテンツ</p>
+                {isSubscribed && (
+                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-black text-white">購読中</span>
+                )}
+              </div>
+              <p className="text-xs font-bold text-white/80">{premium.description}</p>
+              {!isSubscribed && (
+                <p className="mt-1 text-[10px] font-bold text-white/60">月額¥{premium.price.toLocaleString()} · いつでも解約できます</p>
+              )}
+            </div>
+
+            {!isSubscribed ? (
+              /* ロック中：先頭Q&Aをぼかしてゲート表示 */
+              <div className="relative bg-white">
+                <div className="select-none px-5 py-6 blur-sm pointer-events-none">
+                  {premium.questions.slice(0, 1).map((item, i) => (
+                    <div key={i} className="mb-4">
+                      <p className="text-xs font-black text-amber-600 mb-1">Q. {item.q}</p>
+                      <p className="text-sm font-bold text-ink leading-6">{item.a}</p>
+                    </div>
+                  ))}
+                  {premium.note && (
+                    <p className="text-xs font-bold text-muted">{premium.note.slice(0, 40)}…</p>
+                  )}
+                </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[3px]">
+                  <span className="mb-2 text-4xl">🔒</span>
+                  <p className="mb-1 text-base font-black text-ink">月額¥{premium.price.toLocaleString()}で解除</p>
+                  <p className="mb-5 text-xs font-bold text-muted">いつでも解約できます</p>
+                  <button
+                    onClick={() => onToggleSubscription(profile.id)}
+                    className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-8 py-3 text-sm font-black text-white shadow-floating active:scale-[0.98] transition"
+                  >
+                    購読して続きを読む
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* 解除済み：全コンテンツ表示 */
+              <div className="space-y-4 bg-white p-5">
+                {premium.questions.map((item, i) => (
+                  <div key={i} className="rounded-2xl bg-amber-50 p-4">
+                    <p className="mb-2 text-xs font-black text-amber-600">Q. {item.q}</p>
+                    <p className="text-sm font-bold text-ink leading-6">{item.a}</p>
+                  </div>
+                ))}
+                {premium.note && (
+                  <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-4">
+                    <p className="mb-2 text-xs font-black text-amber-600">✉ {profile.name}からのメッセージ</p>
+                    <p className="text-sm font-bold text-ink leading-6">{premium.note}</p>
+                  </div>
+                )}
+                <button
+                  onClick={() => onToggleSubscription(profile.id)}
+                  className="text-xs font-bold text-muted underline"
+                >
+                  購読を解約する
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1614,6 +1723,8 @@ function ProfileEditScreen({
   onChangeTheme,
   customFields,
   onSaveCustomFields,
+  premiumContent,
+  onSavePremiumContent,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -1630,6 +1741,8 @@ function ProfileEditScreen({
   onChangeTheme: (id: AppThemeId) => void;
   customFields: Record<string, string>;
   onSaveCustomFields: (next: Record<string, string>) => void;
+  premiumContent: PremiumSection;
+  onSavePremiumContent: (next: PremiumSection) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
@@ -1637,6 +1750,7 @@ function ProfileEditScreen({
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
+  const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2033,6 +2147,83 @@ function ProfileEditScreen({
   ＋ 質問を追加する
 </button>
 </section>
+        {/* ===== プレミアム設定（公認ユーザーのみ） ===== */}
+        {me.isOfficial && (
+          <section className="space-y-4 rounded-[32px] border-2 border-amber-100 bg-white p-5 shadow-card">
+            <div>
+              <p className="text-base font-black text-ink">✨ プレミアム設定</p>
+              <p className="mt-1 text-xs font-bold text-muted">購読者だけが見られる特別コンテンツを設定できます</p>
+            </div>
+            <EditField
+              label="紹介文（購読ページに表示）"
+              value={premiumForm.description}
+              onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))}
+            />
+            <div className="flex items-center gap-3">
+              <label className="shrink-0 text-xs font-bold text-muted">月額料金（円）</label>
+              <input
+                type="number"
+                min={0}
+                value={premiumForm.price}
+                onChange={(e) => setPremiumForm((p) => ({ ...p, price: Number(e.target.value) || 480 }))}
+                className="w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-4 py-2 text-sm font-bold outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-black text-ink">プレミアムQ&A</p>
+              {premiumForm.questions.map((item, i) => (
+                <div key={i} className="mb-3 space-y-2 rounded-2xl bg-amber-50 p-4">
+                  <EditField
+                    label={`質問 ${i + 1}`}
+                    value={item.q}
+                    onChange={(v) => {
+                      const next = [...premiumForm.questions];
+                      next[i] = { ...next[i], q: v };
+                      setPremiumForm((p) => ({ ...p, questions: next }));
+                    }}
+                  />
+                  <EditField
+                    label="回答"
+                    value={item.a}
+                    onChange={(v) => {
+                      const next = [...premiumForm.questions];
+                      next[i] = { ...next[i], a: v };
+                      setPremiumForm((p) => ({ ...p, questions: next }));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPremiumForm((p) => ({ ...p, questions: p.questions.filter((_, j) => j !== i) }))}
+                    className="text-xs font-black text-pink"
+                  >
+                    削除
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPremiumForm((p) => ({ ...p, questions: [...p.questions, { q: '', a: '' }] }))}
+                className="w-full rounded-2xl border border-dashed border-amber-300 bg-amber-50 py-3 text-sm font-black text-amber-500 active:scale-[0.99]"
+              >
+                ＋ 質問を追加する
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold text-muted">購読者へのメッセージ</label>
+              <textarea
+                value={premiumForm.note}
+                onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))}
+                rows={3}
+                maxLength={300}
+                className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
+                placeholder="購読してくれた人へひとこと..."
+              />
+            </div>
+          </section>
+        )}
+
         <button
           onClick={() => {
             onSave(form);
@@ -2041,6 +2232,7 @@ function ProfileEditScreen({
             onSaveAvatar(localAvatarUrl);
             onSaveFavoritePhotos(localPhotos);
             onSaveCustomFields(localCustomFields);
+            if (me.isOfficial) onSavePremiumContent(premiumForm);
             go('profile');
           }}
           className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
@@ -3573,6 +3765,35 @@ const [circlePosts, setCirclePosts] = useState<CirclePost[]>(() => {
 });
 const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
+  // ── 公認ユーザー購読 ─────────────────────────────────────────
+  const [subscribedOfficials, setSubscribedOfficials] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const s = localStorage.getItem('miri_subscribed_officials');
+    return s ? JSON.parse(s) : [];
+  });
+
+  function toggleSubscription(userId: string) {
+    setSubscribedOfficials((prev) => {
+      const next = prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId];
+      localStorage.setItem('miri_subscribed_officials', JSON.stringify(next));
+      showToast(prev.includes(userId) ? '購読を解約しました' : '✨ 購読しました！プレミアムコンテンツが解放されました');
+      return next;
+    });
+  }
+
+  // ── 自分のプレミアムコンテンツ（公認ユーザー用） ─────────────
+  const defaultPremiumContent: PremiumSection = { price: 480, description: '', questions: [], note: '' };
+  const [premiumContent, setPremiumContent] = useState<PremiumSection>(() => {
+    if (typeof window === 'undefined') return defaultPremiumContent;
+    const s = localStorage.getItem('miri_premium_content');
+    return s ? JSON.parse(s) : defaultPremiumContent;
+  });
+
+  function updatePremiumContent(next: PremiumSection) {
+    setPremiumContent(next);
+    localStorage.setItem('miri_premium_content', JSON.stringify(next));
+  }
+
 function createCircle(name: string, emoji: string, memberIds: string[]): string {
   const id = `circle-${Date.now()}`;
   const newCircle: Circle = { id, name, emoji, memberIds: [me.id, ...memberIds], createdBy: me.id };
@@ -3857,6 +4078,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onChangeTheme={changeTheme}
       customFields={profileCustomFields}
       onSaveCustomFields={updateProfileCustomFields}
+      premiumContent={premiumContent}
+      onSavePremiumContent={updatePremiumContent}
     />
   );
 
@@ -3927,7 +4150,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'profile') {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} />;
       }
       return <ProfileScreen
         go={go}
