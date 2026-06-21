@@ -636,13 +636,13 @@ function Phone({ children, active, go, lang }: { children: React.ReactNode; acti
   );
 }
 
-function DesktopNav({ active, go }: { active: TabKey; go: (s: Screen) => void }) {
-  const items: { key: TabKey; label: string; icon: any; screen: Screen }[] = [
-    { key: 'home', label: 'ホーム', icon: Home, screen: 'home' },
-    { key: 'search', label: 'さがす', icon: Search, screen: 'search' },
-    { key: 'create', label: 'お題に答える', icon: Plus, screen: 'create' },
-    { key: 'notifications', label: '通知', icon: Bell, screen: 'notifications' },
-    { key: 'mypage', label: 'マイページ', icon: UserRound, screen: 'mypage' }
+function DesktopNav({ active, go, lang = 'ja' }: { active: TabKey; go: (s: Screen) => void; lang?: Lang }) {
+  const items: { key: TabKey; labelKey: string; icon: any; screen: Screen }[] = [
+    { key: 'home', labelKey: 'tab_home', icon: Home, screen: 'home' },
+    { key: 'search', labelKey: 'tab_search', icon: Search, screen: 'search' },
+    { key: 'create', labelKey: 'tab_create', icon: Plus, screen: 'create' },
+    { key: 'notifications', labelKey: 'tab_notifications', icon: Bell, screen: 'notifications' },
+    { key: 'mypage', labelKey: 'tab_mypage', icon: UserRound, screen: 'mypage' }
   ];
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[260px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur lg:block">
@@ -650,34 +650,22 @@ function DesktopNav({ active, go }: { active: TabKey; go: (s: Screen) => void })
       <nav className="space-y-2">
         {items.map((item) => { const Icon = item.icon; const isActive = active === item.key; return (
           <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-            <Icon size={20} />{item.label}
+            <Icon size={20} />{t(item.labelKey, lang)}
           </button>
         ); })}
       </nav>
       <div className="mt-4 space-y-2">
-        <button
-          onClick={() => go('shop')}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink"
-        >
-          <ShoppingBag size={20} />ショップ
+        <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+          <ShoppingBag size={20} />{t('nav_shop', lang)}
         </button>
-        <button
-          onClick={() => go('circles')}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink"
-        >
-          <span className="text-base">🔒</span>サークル
+        <button onClick={() => go('circles')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+          <span className="text-base">🔒</span>{t('nav_circles', lang)}
         </button>
-        <button
-          onClick={() => go('followers')}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink"
-        >
-          <UserRound size={20} />フォロー中
+        <button onClick={() => go('followers')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+          <UserRound size={20} />{t('nav_following', lang)}
         </button>
-        <button
-          onClick={() => go('settings')}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink"
-        >
-          <Settings size={20} />設定・プロフ編集
+        <button onClick={() => go('settings')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+          <Settings size={20} />{t('nav_settings', lang)}
         </button>
       </div>
       <div className="mt-6 rounded-[24px] bg-cream p-4 text-xs font-bold leading-6">
@@ -695,37 +683,37 @@ function OfficialBadge() {
   );
 }
 
-function RightRail({ answers, go, avatarUrl, ownedStickerCount }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number }) {
+function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', translatedAnswerBodies = {} }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number; lang?: Lang; translatedAnswerBodies?: Record<string, string> }) {
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[320px] shrink-0 overflow-y-auto rounded-[32px] border border-white/70 bg-white/70 p-5 shadow-card backdrop-blur xl:block">
       <section className="cursor-pointer rounded-[28px] bg-white p-4 shadow-card transition hover:bg-pink/5 active:scale-[0.99]" onClick={() => go('profile')}>
         <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">{avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : me.avatar}</div><div><p className="font-black">{me.name}</p><p className="text-xs font-bold text-muted">{me.id}</p></div></div>
         <div className="mt-4 grid grid-cols-3 rounded-3xl bg-base p-3 text-center text-xs font-bold">
-          <div><p className="text-lg text-ink">{myAnswers.length}</p>回答</div>
-          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">38</p>フォロワー</button>
-          <button onClick={(e) => { e.stopPropagation(); go('shop'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{ownedStickerCount}</p>スタンプ</button>
+          <div><p className="text-lg text-ink">{myAnswers.length}</p>{t('tab_create', lang)}</div>
+          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">38</p>{t('btn_following', lang)}</button>
+          <button onClick={(e) => { e.stopPropagation(); go('shop'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{ownedStickerCount}</p>{t('nav_shop', lang)}</button>
         </div>
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
-        <SectionHeader title="人気の回答" />
-        <div className="space-y-3">{answers.slice(0,3).map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left text-xs font-bold leading-5 hover:bg-pink/10"><span className="text-pinkStrong">{answer.question.category}</span><br />{answer.body.slice(0,42)}...</button>)}</div>
+        <SectionHeader title={t('feed_popular', lang)} />
+        <div className="space-y-3">{answers.slice(0,3).map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left text-xs font-bold leading-5 hover:bg-pink/10"><span className="text-pinkStrong">{answer.question.category}</span><br />{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,42)}...</button>)}</div>
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
-        <SectionHeader title="おすすめユーザー" />
+        <SectionHeader title={t('feed_suggested', lang)} />
         <div className="space-y-3">{profiles.slice(0,3).map((profile) => <button key={profile.id} onClick={() => go('profile', profile.id)} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left hover:bg-pink/10"><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-xl">{profile.avatar}</span><span><b className="text-sm">{profile.name}</b><br /><span className="text-xs text-muted">{profile.common}</span></span></button>)}</div>
       </section>
     </aside>
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang }) {
+function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; translatedAnswerBodies?: Record<string, string> }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
-        <DesktopNav active={active} go={go} />
+        <DesktopNav active={active} go={go} lang={lang} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang}>{children}</Phone></div>
-        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} />
+        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} />
       </div>
     </div>
   );
@@ -1490,6 +1478,23 @@ function ProfileBookContent({
   const grad = THEME_GRADIENT[themeColor] ?? THEME_GRADIENT.pink;
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
+
+  const [translatedQA, setTranslatedQA] = useState<Array<{q:string;a:string}> | null>(null);
+  useEffect(() => {
+    if (lang === 'ja') { setTranslatedQA(null); return; }
+    let cancelled = false;
+    (async () => {
+      const pairs: Array<{q:string;a:string}> = [];
+      for (const item of questions) {
+        if (cancelled) break;
+        const q = await translateText(item.q, lang);
+        const a = await translateText(item.a, lang);
+        pairs.push({ q, a });
+      }
+      if (!cancelled) setTranslatedQA(pairs);
+    })();
+    return () => { cancelled = true; };
+  }, [lang, questions]);
   const medals = ['🥇', '🥈', '🥉'];
   const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
@@ -1611,10 +1616,13 @@ function ProfileBookContent({
 
       {/* ── ひとことしつもん ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="💬" title="ひとことしつもん" theme={themeColor} />
+        <ProfSectionHeader icon="💬" title={t('sec_qa', lang)} theme={themeColor} />
+        {translatedQA === null && lang !== 'ja' && (
+          <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
+        )}
         <div className="space-y-0">
-          {questions.map((item, i) => (
-            <div key={item.q} className={`py-3 ${i < questions.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
+          {(translatedQA ?? questions).map((item, i) => (
+            <div key={i} className={`py-3 ${i < questions.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
               <p className={`text-[11px] font-black ${accent}`}>Q{i + 1}. {item.q}</p>
               <p className="mt-1 text-sm font-bold text-ink leading-relaxed">➜ {item.a}</p>
             </div>
@@ -5228,7 +5236,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang}>{current}</DesktopShell>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );
