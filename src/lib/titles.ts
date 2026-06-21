@@ -1,4 +1,4 @@
-export type TitleType = 'official' | 'tester';
+export type TitleType = 'official' | 'founder';
 
 export const TITLE_DEFS: Record<TitleType, {
   label: string;
@@ -12,25 +12,19 @@ export const TITLE_DEFS: Record<TitleType, {
     rare: false,
     description: 'Miriが認定した公認クリエイター',
   },
-  tester: {
-    label: 'テストプレイヤー',
-    emoji: '⚡',
+  founder: {
+    label: '創設メンバー',
+    emoji: '✦',
     rare: true,
-    description: '初期テストプレイを担った創設メンバー。データはサービス正式リリース後もそのまま引き継がれます。',
+    description: 'Miriの立ち上げを支えた創設メンバー。データはサービス正式リリース後もそのまま引き継がれます。',
   },
 };
 
 // 各ユーザーに付与する称号（ここを編集して称号を管理）
 export const USER_TITLES: Record<string, TitleType[]> = {
   '@koki':      ['official'],
-  '@mayu_note': ['tester', 'official'],
-  '@rin_puri':  ['tester'],
-};
-
-// テストプレイヤーのシリアルナンバー
-export const TESTER_SERIALS: Record<string, number> = {
-  '@mayu_note': 1,
-  '@rin_puri':  2,
+  '@mayu_note': ['founder', 'official'],
+  '@rin_puri':  ['founder'],
 };
 
 export function getUserTitles(userId: string): TitleType[] {

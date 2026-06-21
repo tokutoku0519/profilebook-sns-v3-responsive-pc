@@ -8,6 +8,7 @@ import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
+import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question';
 type Question = (typeof questions)[number];
@@ -688,7 +689,7 @@ function OfficialBadge() {
   );
 }
 
-function RightRail({ answers, go, avatarUrl }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string }) {
+function RightRail({ answers, go, avatarUrl, ownedStickerCount }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number }) {
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[320px] shrink-0 overflow-y-auto rounded-[32px] border border-white/70 bg-white/70 p-5 shadow-card backdrop-blur xl:block">
@@ -697,7 +698,7 @@ function RightRail({ answers, go, avatarUrl }: { answers: Answer[]; go: (s: Scre
         <div className="mt-4 grid grid-cols-3 rounded-3xl bg-base p-3 text-center text-xs font-bold">
           <div><p className="text-lg text-ink">{myAnswers.length}</p>回答</div>
           <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">38</p>フォロワー</button>
-          <div><p className="text-lg text-ink">8</p>シール</div>
+          <button onClick={(e) => { e.stopPropagation(); go('shop'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{ownedStickerCount}</p>スタンプ</button>
         </div>
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
@@ -712,13 +713,13 @@ function RightRail({ answers, go, avatarUrl }: { answers: Answer[]; go: (s: Scre
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string }) {
+function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go}>{children}</Phone></div>
-        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} />
+        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} />
       </div>
     </div>
   );
@@ -985,24 +986,107 @@ function SearchScreen({ go, answers, myProfile }: {
   );
 }
 
+// ── スタンプピッカーパネル ────────────────────────────────────
+function StickerPickerPanel({
+  ownedPackIds,
+  ownedGachaStickers,
+  onSelect,
+  onClose,
+}: {
+  ownedPackIds: string[];
+  ownedGachaStickers: string[];
+  onSelect: (sticker: StickerItem) => void;
+  onClose: () => void;
+}) {
+  const [activePack, setActivePack] = useState<string | null>(null);
+
+  const usablePacks = STICKER_PACKS.filter((p) =>
+    p.acquisition.type === 'free' || ownedPackIds.includes(p.id) ||
+    (p.acquisition.type === 'gacha' && p.stickers.some((s) => ownedGachaStickers.includes(s.id)))
+  );
+  const currentPack = usablePacks.find((p) => p.id === activePack) ?? usablePacks[0] ?? null;
+
+  const getStickers = (pack: StickerPack) =>
+    pack.acquisition.type === 'gacha'
+      ? pack.stickers.filter((s) => ownedGachaStickers.includes(s.id))
+      : pack.stickers;
+
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        className="absolute bottom-16 left-0 right-0 max-h-[55vh] overflow-hidden rounded-t-[28px] bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* パックタブ */}
+        <div className="flex gap-2 overflow-x-auto border-b border-pink/10 px-3 py-2">
+          {usablePacks.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setActivePack(p.id)}
+              className={`shrink-0 grid h-10 w-10 place-items-center rounded-xl text-xl transition ${
+                (currentPack?.id === p.id) ? 'bg-pink/15 ring-2 ring-pink' : 'bg-base'
+              }`}
+            >
+              {p.thumbnail}
+            </button>
+          ))}
+          <button
+            onClick={onClose}
+            className="ml-auto shrink-0 grid h-10 w-10 place-items-center rounded-xl bg-base text-muted"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* スタンプグリッド */}
+        {currentPack ? (
+          <div className="grid grid-cols-5 gap-2 overflow-y-auto p-3 pb-6" style={{ maxHeight: '45vh' }}>
+            {getStickers(currentPack).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { onSelect(s); onClose(); }}
+                className="flex flex-col items-center gap-1 rounded-2xl bg-base p-2 active:scale-95 transition"
+              >
+                <span className="text-3xl">{s.emoji}</span>
+                <span className="text-[9px] font-bold text-muted leading-tight text-center">{s.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <p className="text-2xl mb-2">🎭</p>
+            <p className="text-sm font-black text-ink">スタンプがありません</p>
+            <p className="text-xs font-bold text-muted">ショップでスタンプを入手しよう</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CreateScreen({
   go,
   onPost,
   question,
   onCreateDiary,
+  ownedPackIds,
+  ownedGachaStickers,
 }: {
   go: (s: Screen, payload?: any) => void;
   onPost: (draft: DraftAnswer) => string;
   question?: any;
   onCreateDiary: (caption: string, photoUrl: string, font: string, textColor: string, visibility: 'public' | 'followers' | 'mentioned', mentionedUserIds: string[]) => string;
+  ownedPackIds: string[];
+  ownedGachaStickers: string[];
 }) {
   const [createMode, setCreateMode] = useState<'question' | 'diary'>('question');
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   // --- お題モード ---
   const [draft, setDraft] = useState<DraftAnswer>({
     questionId: question?.id || questions[0].id,
     body: '',
-    sticker: '🎀',
+    sticker: '🌸',
     visibility: 'public',
   });
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -1132,11 +1216,25 @@ function CreateScreen({
               )}
             </section>
             <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <SectionHeader title="デコる" />
-              <div className="flex gap-2">
-                {['🎀','⭐️','🧸','💿','🌈','📎'].map((s) => <button key={s} onClick={() => setDraft({ ...draft, sticker: s })} className={`grid h-12 w-12 place-items-center rounded-2xl text-xl ${draft.sticker === s ? 'bg-pink text-white' : 'bg-purple/10'}`}>{s}</button>)}
+              <SectionHeader title="スタンプ" />
+              <div className="flex items-center gap-3">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-pink/10 text-3xl">{draft.sticker}</span>
+                <button
+                  onClick={() => setShowStickerPicker(true)}
+                  className="flex-1 rounded-full border-2 border-dashed border-pink/30 py-3 text-sm font-black text-pink hover:bg-pink/5 active:scale-[0.98]"
+                >
+                  🎭 スタンプを変える
+                </button>
               </div>
             </section>
+            {showStickerPicker && (
+              <StickerPickerPanel
+                ownedPackIds={ownedPackIds}
+                ownedGachaStickers={ownedGachaStickers}
+                onSelect={(s) => setDraft({ ...draft, sticker: s.emoji })}
+                onClose={() => setShowStickerPicker(false)}
+              />
+            )}
             <section className="rounded-[28px] bg-white p-4 shadow-card">
               <label className="mb-2 block text-sm font-bold">公開範囲</label>
               <div className="grid grid-cols-3 gap-2 text-xs font-bold">
@@ -1359,7 +1457,7 @@ function ProfileBookContent({
           ✿ PROFILE ✿
         </div>
         <div className="flex items-center gap-4">
-          <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-4xl shadow-inner ring-2 ring-white">
+          <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-5xl shadow-inner ring-2 ring-white">
             {avatarUrl
               ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
               : avatarEmoji}
@@ -1571,19 +1669,19 @@ function OtherProfileScreen({
       {(() => {
         const titles = getUserTitles(profile.id);
         if (titles.length === 0) return null;
-        const hasTester = titles.includes('tester');
+        const hasFounder = titles.includes('founder');
         return (
           <div className="space-y-2 px-4 pt-3">
             <div className="flex flex-wrap gap-2">
               {titles.map((t) => <TitleBadge key={t} type={t} userId={profile.id} />)}
             </div>
-            {hasTester && (
+            {hasFounder && (
               <div className="rounded-[20px] bg-zinc-900 p-4">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xs font-black text-amber-400 tracking-widest">激レア</span>
                   <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-black text-amber-400">ULTRA RARE</span>
                 </div>
-                <p className="text-xs font-bold leading-5 text-zinc-400">{TITLE_DEFS.tester.description}</p>
+                <p className="text-xs font-bold leading-5 text-zinc-400">{TITLE_DEFS.founder.description}</p>
               </div>
             )}
           </div>
@@ -1678,7 +1776,6 @@ function OtherProfileScreen({
 
 function ProfileScreen({
   go,
-  answers,
   profileBookInfo,
   best3,
   profileQuestions,
@@ -1687,7 +1784,6 @@ function ProfileScreen({
   customFields,
 }: {
   go: (s: Screen, answerId?: string) => void;
-  answers: Answer[];
   profileBookInfo: typeof defaultProfileBookInfo;
   best3: typeof defaultBest3;
   profileQuestions: typeof defaultProfileQuestions;
@@ -1695,7 +1791,7 @@ function ProfileScreen({
   favoritePhotos: string[];
   customFields?: Record<string, string>;
 }) {
-  const myAnswers = answers.filter((a) => a.user.id === me.id);
+  const [showShare, setShowShare] = useState(false);
   return (
     <>
       <AppHeader title="わたしのプロフ帳" back onBack={() => go('home')} onBell={() => go('notifications')} />
@@ -1705,6 +1801,12 @@ function ProfileScreen({
           className="flex-1 rounded-full bg-white py-3 text-sm font-black text-pink shadow-card active:scale-[0.99]"
         >
           ✏️ 編集する
+        </button>
+        <button
+          onClick={() => setShowShare(true)}
+          className="rounded-full bg-white px-4 py-3 text-sm font-black text-muted shadow-card active:scale-[0.99]"
+        >
+          <Share2 size={17} />
         </button>
         {me.isOfficial && (
           <button
@@ -1731,15 +1833,26 @@ function ProfileScreen({
         info={profileBookInfo}
         best3={best3}
         questions={profileQuestions}
-        answers={myAnswers}
+        answers={[]}
         avatarEmoji="🎀"
         avatarUrl={avatarUrl || undefined}
         userId="@koki"
         themeColor="pink"
         favoritePhotos={favoritePhotos}
         customFields={customFields}
-        onGoDetail={(id) => go('detail', id)}
       />
+
+      {showShare && (
+        <ProfileShareModal
+          name={profileBookInfo.name}
+          userId={me.id}
+          avatar={me.avatar}
+          avatarUrl={avatarUrl || undefined}
+          catchphrase={profileBookInfo.catchphrase}
+          best3={best3}
+          onClose={() => setShowShare(false)}
+        />
+      )}
     </>
   );
 }
@@ -1788,6 +1901,7 @@ function ProfileEditScreen({
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
   const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
+  const [showShare, setShowShare] = useState(false);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2261,6 +2375,18 @@ function ProfileEditScreen({
           </section>
         )}
 
+        {/* ── シェア ── */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
+          <p className="mb-4 text-xs font-bold text-muted">QRコードや画像でプロフィールを友達にシェアできます</p>
+          <button
+            onClick={() => setShowShare(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink to-purple py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]"
+          >
+            <Share2 size={16} />シェア・QRコードを表示
+          </button>
+        </section>
+
         <button
           onClick={() => {
             onSave(form);
@@ -2277,9 +2403,326 @@ function ProfileEditScreen({
           保存してプロフィール帳に反映
         </button>
       </div>
+
+      {showShare && (
+        <ProfileShareModal
+          name={form.name}
+          userId={me.id}
+          avatar={me.avatar}
+          avatarUrl={localAvatarUrl || undefined}
+          catchphrase={form.catchphrase}
+          best3={best3Form}
+          onClose={() => setShowShare(false)}
+        />
+      )}
     </>
   );
 }
+// ── Canvas roundRect ポリフィル ──────────────────────────────
+function canvasRoundRect(
+  ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function truncateStr(str: string, max: number) {
+  return str.length > max ? str.slice(0, max) + '…' : str;
+}
+
+// ── プロフィールシェアモーダル ───────────────────────────────
+function ProfileShareModal({
+  name, userId, avatar, avatarUrl, catchphrase, best3, onClose,
+}: {
+  name: string;
+  userId: string;
+  avatar: string;
+  avatarUrl?: string;
+  catchphrase: string;
+  best3: typeof defaultBest3;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<'qr' | 'image'>('qr');
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [imageGenerated, setImageGenerated] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://miri-delta.vercel.app';
+
+  // canvas は tab='image' になった後レンダリングされるので useEffect で生成する
+  useEffect(() => {
+    if (tab === 'image' && !imageGenerated) {
+      handleGenerateImage();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // QRコード生成
+  useEffect(() => {
+    import('qrcode').then(({ default: QRCode }) => {
+      QRCode.toDataURL(shareUrl, {
+        width: 300,
+        margin: 2,
+        color: { dark: '#1a1a2e', light: '#ffffff' },
+      }).then(setQrDataUrl);
+    });
+  }, [shareUrl]);
+
+  function drawCard(imgEl?: HTMLImageElement) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const W = 1080, H = 1350;
+    canvas.width = W;
+    canvas.height = H;
+
+    // 背景グラデーション
+    const bg = ctx.createLinearGradient(0, 0, W, H);
+    bg.addColorStop(0, '#ffe4f0');
+    bg.addColorStop(1, '#e8d8ff');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // ホワイトカード
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
+    canvasRoundRect(ctx, 60, 60, W - 120, H - 120, 64);
+    ctx.fill();
+
+    // デコライン（上部）
+    ctx.fillStyle = '#ffb3d1';
+    ctx.fillRect(140, 140, W - 280, 6);
+
+    // アバター円
+    const cx = W / 2, cy = 320, r = 130;
+    const avatarBg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 16);
+    avatarBg.addColorStop(0, '#ffdcea');
+    avatarBg.addColorStop(1, '#e8d0ff');
+    ctx.fillStyle = avatarBg;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (imgEl) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(imgEl, cx - r, cy - r, r * 2, r * 2);
+      ctx.restore();
+    } else {
+      ctx.font = '112px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(avatar, cx, cy);
+    }
+
+    // 名前
+    ctx.fillStyle = '#1a1a2e';
+    ctx.font = 'bold 70px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(truncateStr(name, 12), W / 2, 510);
+
+    // ID
+    ctx.fillStyle = '#aaa';
+    ctx.font = '36px sans-serif';
+    ctx.fillText(userId, W / 2, 570);
+
+    // キャッチフレーズ
+    if (catchphrase) {
+      ctx.fillStyle = '#ff6b9d';
+      ctx.font = 'italic bold 40px serif';
+      ctx.fillText(`"${truncateStr(catchphrase, 20)}"`, W / 2, 660);
+    }
+
+    // 区切り
+    ctx.fillStyle = '#ffb3d1';
+    ctx.fillRect(W / 2 - 50, 700, 100, 5);
+
+    // Best3 ラベル
+    ctx.fillStyle = '#bbb';
+    ctx.font = '30px sans-serif';
+    ctx.fillText('MY BEST 3', W / 2, 750);
+
+    // Best3 アイテム
+    const best3Items: [string, string[]][] = [
+      ['テレビ・YouTube', best3.tv],
+      ['食べもの', best3.food],
+      ['場所', best3.places],
+    ];
+    best3Items.forEach(([label, vals], i) => {
+      const y = 790 + i * 130;
+      const val = vals[0] ?? '—';
+
+      ctx.fillStyle = 'rgba(255,179,209,0.12)';
+      canvasRoundRect(ctx, 140, y, W - 280, 100, 28);
+      ctx.fill();
+
+      ctx.font = '30px sans-serif';
+      ctx.fillStyle = '#bbb';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, 180, y + 42);
+      ctx.font = 'bold 46px sans-serif';
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillText(truncateStr(val, 14), 180, y + 85);
+    });
+
+    // デコライン（下部）
+    ctx.fillStyle = '#ffb3d1';
+    ctx.fillRect(140, H - 200, W - 280, 6);
+
+    // ブランディング
+    ctx.font = 'bold 52px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff6b9d';
+    ctx.fillText('✿ Miri', W / 2, H - 110);
+
+    setImageGenerated(true);
+  }
+
+  function handleGenerateImage() {
+    setImageGenerated(false);
+    if (avatarUrl) {
+      const img = new Image();
+      img.onload = () => drawCard(img);
+      img.src = avatarUrl;
+    } else {
+      drawCard();
+    }
+  }
+
+  function handleDownload() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const a = document.createElement('a');
+    a.download = `miri-profile-${userId}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }
+
+  function handleShare(withImage = false) {
+    if (!navigator.share) return;
+    if (withImage && canvasRef.current) {
+      canvasRef.current.toBlob((blob) => {
+        if (!blob) return;
+        const file = new File([blob], 'miri-profile.png', { type: 'image/png' });
+        navigator.share({ title: `${name}のMiriプロフィール`, files: [file] }).catch(() => {
+          navigator.share({ title: `${name}のMiriプロフィール`, url: shareUrl });
+        });
+      });
+    } else {
+      navigator.share({ title: `${name}のMiriプロフィール`, url: shareUrl });
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-full max-h-[92vh] overflow-y-auto rounded-t-[32px] bg-white pb-10 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-pink/30" />
+        <div className="flex items-center justify-between px-5 py-4">
+          <p className="text-base font-black text-ink">プロフィールをシェア</p>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-base text-muted">✕</button>
+        </div>
+
+        {/* タブ */}
+        <div className="flex gap-2 px-5 pb-5">
+          {[
+            { key: 'qr' as const, label: '🔲 QRコード' },
+            { key: 'image' as const, label: '🖼 シェア画像' },
+          ].map(({ key, label }) => (
+            <button key={key}
+              onClick={() => setTab(key)}
+              className={`rounded-full px-5 py-2.5 text-sm font-black transition ${tab === key ? 'bg-pink text-white shadow-card' : 'bg-base text-muted'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── QRコードタブ ── */}
+        {tab === 'qr' && (
+          <div className="flex flex-col items-center gap-4 px-5">
+            <div className="rounded-[28px] bg-base p-4 shadow-card">
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt="QR code" className="h-52 w-52 rounded-xl" />
+              ) : (
+                <div className="grid h-52 w-52 place-items-center">
+                  <p className="text-sm font-bold text-muted">生成中…</p>
+                </div>
+              )}
+            </div>
+            <p className="text-xs font-bold text-muted text-center">
+              スキャンするとMiriが開きます
+            </p>
+            <div className="w-full rounded-2xl bg-base px-4 py-3 text-center text-xs font-black text-ink">
+              {shareUrl}
+            </div>
+            <div className="flex w-full gap-3">
+              <button onClick={() => handleShare(false)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-pink py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]">
+                <Share2 size={15} />シェアする
+              </button>
+              {qrDataUrl && (
+                <a href={qrDataUrl} download="miri-qr.png"
+                  className="flex flex-1 items-center justify-center rounded-full bg-base py-3.5 text-sm font-black text-ink shadow-card active:scale-[0.98]">
+                  💾 QR保存
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── シェア画像タブ ── */}
+        {tab === 'image' && (
+          <div className="flex flex-col items-center gap-4 px-5">
+            <div className="relative w-full max-w-[280px]">
+              <canvas
+                ref={canvasRef}
+                className="w-full rounded-2xl shadow-card"
+                style={{ aspectRatio: '1080/1350' }}
+              />
+              {!imageGenerated && (
+                <div className="absolute inset-0 grid place-items-center rounded-2xl bg-base">
+                  <p className="text-sm font-bold text-muted">生成中…</p>
+                </div>
+              )}
+            </div>
+            <p className="text-xs font-bold text-muted text-center">
+              iOS: 長押し → 写真に追加 / Android: 下のボタンで保存
+            </p>
+            <div className="flex w-full gap-3">
+              <button onClick={handleDownload} disabled={!imageGenerated}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-pink text-white active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                💾 画像を保存
+              </button>
+              <button onClick={() => handleShare(true)} disabled={!imageGenerated}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-base text-ink active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                <Share2 size={15} />シェア
+              </button>
+            </div>
+            <button onClick={handleGenerateImage}
+              className="w-full rounded-full border-2 border-dashed border-pink/30 py-3 text-sm font-black text-pink hover:bg-pink/5">
+              🔄 画像を再生成
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OfficialQuestionCreateScreen({
   go,
   onCreate,
@@ -2556,7 +2999,7 @@ function DetailScreen({
   );
 }
 
-function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void }) {
+function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
@@ -2569,7 +3012,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks }: { go: (s: Scree
 >
   <div className="flex items-center justify-between">
     <div className="flex items-center gap-4">
-      <div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/10 text-2xl">
+      <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full bg-pink/10 text-3xl">
         {avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : '📷'}
       </div>
       <div>
@@ -2607,10 +3050,14 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks }: { go: (s: Scree
       <p className="text-xl">38</p>
       <p className="text-[11px]">フォロワー</p>
     </button>
-    <div>
-      <p className="text-xl">8</p>
-      <p>シール</p>
-    </div>
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); go('shop'); }}
+      className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
+    >
+      <p className="text-xl">{ownedStickerCount}</p>
+      <p className="text-[11px]">スタンプ</p>
+    </button>
   </div>
 </section>
 
@@ -3381,9 +3828,9 @@ function CircleCreateScreen({
 
 // ===================== ショップ画面 =====================
 
-type ShopCategory = 'theme' | 'sticker' | 'deco' | 'font';
+type ShopCategory = 'theme' | 'stamp' | 'deco' | 'font';
 
-const SHOP_ITEMS: Record<ShopCategory, { id: string; name: string; preview: string; price: number; owned: boolean }[]> = {
+const SHOP_ITEMS: Record<Exclude<ShopCategory, 'stamp'>, { id: string; name: string; preview: string; price: number; owned: boolean }[]> = {
   theme: [
     { id: 'sakura', name: '🌸 さくら夜', preview: 'from-pink-200 via-rose-100 to-purple-100', price: 120, owned: false },
     { id: 'ocean', name: '🌊 ディープオーシャン', preview: 'from-blue-200 via-cyan-100 to-sky-100', price: 150, owned: false },
@@ -3391,14 +3838,6 @@ const SHOP_ITEMS: Record<ShopCategory, { id: string; name: string; preview: stri
     { id: 'autumn', name: '🍂 もみじ', preview: 'from-orange-200 via-amber-100 to-yellow-100', price: 120, owned: false },
     { id: 'rainbow', name: '🌈 レインボー', preview: 'from-pink-200 via-yellow-100 to-green-100', price: 180, owned: false },
     { id: 'mist', name: '🌙 ミスティパープル', preview: 'from-violet-300 via-purple-200 to-fuchsia-100', price: 150, owned: false },
-  ],
-  sticker: [
-    { id: 'ribbon', name: '🎀 リボンパック', preview: '🎀🎗️💝🎁🎀🎗️', price: 100, owned: false },
-    { id: 'glitter', name: '✨ キラキラセット', preview: '✨⭐💫🌟✨⭐', price: 150, owned: false },
-    { id: 'cat', name: '🐱 ねこセット', preview: '🐱😸🐾🌸🐱😺', price: 120, owned: false },
-    { id: 'flower', name: '🌸 お花セット', preview: '🌸🌺🌼🌻🌹💐', price: 100, owned: false },
-    { id: 'heart', name: '💕 ハートセット', preview: '💕💖💗💓💞💝', price: 80, owned: false },
-    { id: 'butterfly', name: '🦋 ちょうちょセット', preview: '🦋🌺🌸🍃🦋🌼', price: 100, owned: false },
   ],
   deco: [
     { id: 'gold-frame', name: '🖼 ゴールドフレーム', preview: '✦ ── ✦ ── ✦', price: 200, owned: false },
@@ -3417,82 +3856,274 @@ const SHOP_ITEMS: Record<ShopCategory, { id: string; name: string; preview: stri
 };
 
 const SHOP_CATEGORY_LABELS: { key: ShopCategory; label: string; emoji: string }[] = [
+  { key: 'stamp', label: 'スタンプ', emoji: '🎭' },
   { key: 'theme', label: 'テーマ', emoji: '🎨' },
-  { key: 'sticker', label: 'シール', emoji: '🌟' },
-  { key: 'deco', label: 'デコ', emoji: '✨' },
-  { key: 'font', label: 'フォント', emoji: '🔤' },
+  { key: 'deco',  label: 'デコ',   emoji: '✨' },
+  { key: 'font',  label: 'フォント', emoji: '🔤' },
 ];
 
-function ShopScreen({ go }: { go: (s: Screen) => void }) {
-  const [tab, setTab] = useState<ShopCategory>('theme');
-  const items = SHOP_ITEMS[tab];
+type GachaResult = { sticker: StickerItem; isNew: boolean }[];
+
+function ShopScreen({
+  go,
+  coins,
+  ownedPackIds,
+  ownedGachaStickers,
+  onPurchasePack,
+  onAddGachaStickers,
+  onSpendCoins,
+}: {
+  go: (s: Screen) => void;
+  coins: number;
+  ownedPackIds: string[];
+  ownedGachaStickers: string[];
+  onPurchasePack: (packId: string) => void;
+  onAddGachaStickers: (ids: string[]) => void;
+  onSpendCoins: (amount: number) => void;
+}) {
+  const [tab, setTab] = useState<ShopCategory>('stamp');
+  const [gachaResult, setGachaResult] = useState<GachaResult | null>(null);
+  const [detailPack, setDetailPack] = useState<StickerPack | null>(null);
+
+  function handleDraw(pack: StickerPack, count: 1 | 10) {
+    if (pack.acquisition.type !== 'gacha') return;
+    const cost = pack.acquisition.coinCost * count;
+    if (coins < cost) return;
+    onSpendCoins(cost);
+    const results = count === 1
+      ? [drawGacha(pack, ownedGachaStickers)]
+      : draw10Gacha(pack, ownedGachaStickers);
+    const newIds = results.filter((r) => r.isNew).map((r) => r.sticker.id);
+    if (newIds.length > 0) onAddGachaStickers(newIds);
+    setGachaResult(results);
+  }
+
+  const freePacks     = STICKER_PACKS.filter((p) => p.acquisition.type === 'free');
+  const purchasePacks = STICKER_PACKS.filter((p) => p.acquisition.type === 'purchase');
+  const gachaPacks    = STICKER_PACKS.filter((p) => p.acquisition.type === 'gacha');
 
   return (
     <>
       <AppHeader title="ショップ" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
 
-      {/* プレミアムバナー */}
-      <div className="mx-4 mt-3 rounded-[28px] bg-gradient-to-r from-pink to-purple p-5 shadow-floating">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[11px] font-black text-white/70">Miriプレミアム</p>
-            <p className="mt-0.5 text-xl font-black text-white">全アイテムが使い放題</p>
-            <p className="mt-1 text-xs font-bold text-white/80">テーマ・シール・デコ・フォントをすべて解放</p>
-            <button className="mt-4 rounded-full bg-white px-5 py-2 text-sm font-black text-pinkStrong shadow-card active:scale-[0.98]">
-              今すぐ始める — ¥480 / 月
-            </button>
-          </div>
-          <div className="flex flex-col items-end gap-3 pl-2 pt-1">
-            <RetroStar scale={1.4} />
-            <RetroRibbon scale={1.1} />
-          </div>
+      {/* コインバランス */}
+      <div className="mx-4 mt-3 flex items-center justify-between rounded-[24px] bg-zinc-900 px-5 py-3">
+        <div>
+          <p className="text-[10px] font-black text-zinc-500">Miriコイン残高</p>
+          <p className="text-xl font-black text-amber-400">🪙 {coins.toLocaleString()}</p>
         </div>
+        <button className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-zinc-900 shadow-card active:scale-[0.98]">
+          コインを買う
+        </button>
       </div>
 
       {/* カテゴリタブ */}
       <div className="mt-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {SHOP_CATEGORY_LABELS.map(({ key, label, emoji }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
+          <button key={key} onClick={() => setTab(key)}
             className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-black transition ${
               tab === key ? 'bg-pink text-white shadow-card' : 'bg-white text-muted shadow-card hover:bg-pink/10'
-            }`}
-          >
+            }`}>
             <span>{emoji}</span>{label}
           </button>
         ))}
       </div>
 
-      {/* アイテムグリッド */}
-      <div className="grid grid-cols-2 gap-3 px-4 pb-8 pt-3">
-        {items.map((item) => (
-          <div key={item.id} className="rounded-[24px] bg-white p-4 shadow-card">
-            {/* プレビュー */}
-            <div className={`mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${
-              tab === 'theme' ? item.preview : 'from-pink/10 to-purple/10'
-            } text-center text-2xl font-black leading-snug`}>
-              {tab !== 'theme' ? item.preview : <span className="text-xs font-black text-ink/60">プレビュー</span>}
+      {/* ── スタンプタブ ── */}
+      {tab === 'stamp' && (
+        <div className="space-y-6 px-4 pb-10 pt-3">
+
+          {/* 無料 */}
+          <section>
+            <p className="mb-3 text-sm font-black text-ink">🆓 無料スタンプ</p>
+            <div className="space-y-2">
+              {freePacks.map((pack) => (
+                <PackRow key={pack.id} pack={pack} owned={true} onDetail={() => setDetailPack(pack)}
+                  action={<span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-black text-green-600">無料</span>} />
+              ))}
             </div>
-            <p className="text-sm font-black text-ink">{item.name}</p>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs font-black text-pinkStrong">¥{item.price}</span>
-              <button
-                disabled
-                className="rounded-full bg-base px-3 py-1.5 text-[11px] font-black text-muted ring-1 ring-pink/20"
-              >
-                🔒 準備中
-              </button>
+          </section>
+
+          {/* 有料 */}
+          <section>
+            <p className="mb-3 text-sm font-black text-ink">💳 有料スタンプ（買い切り）</p>
+            <div className="space-y-2">
+              {purchasePacks.map((pack) => {
+                const price = (pack.acquisition as { type: 'purchase'; price: number }).price;
+                const owned = ownedPackIds.includes(pack.id);
+                return (
+                  <PackRow key={pack.id} pack={pack} owned={owned} onDetail={() => setDetailPack(pack)}
+                    action={
+                      owned
+                        ? <span className="rounded-full bg-pink/10 px-3 py-1 text-[11px] font-black text-pink">購入済み</span>
+                        : <button onClick={() => onPurchasePack(pack.id)}
+                            className="rounded-full bg-pink px-3 py-1 text-[11px] font-black text-white shadow-card active:scale-[0.97]">
+                            ¥{price}
+                          </button>
+                    } />
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ガチャ */}
+          <section>
+            <p className="mb-3 text-sm font-black text-ink">🎰 ガチャスタンプ</p>
+            <div className="space-y-3">
+              {gachaPacks.map((pack) => {
+                const cost = (pack.acquisition as { type: 'gacha'; coinCost: number }).coinCost;
+                const ownedCount = pack.stickers.filter((s) => ownedGachaStickers.includes(s.id)).length;
+                return (
+                  <div key={pack.id} className="rounded-[24px] bg-white p-4 shadow-card">
+                    <div className="mb-3 flex items-center gap-3">
+                      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-zinc-900 text-2xl">{pack.thumbnail}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-black text-ink">{pack.name}</p>
+                          {pack.isNew && <span className="rounded-full bg-pink px-2 py-0.5 text-[9px] font-black text-white">NEW</span>}
+                        </div>
+                        <p className="text-[11px] font-bold text-muted">{pack.description}</p>
+                        <p className="mt-1 text-[10px] font-bold text-muted">
+                          所持: {ownedCount}/{pack.stickers.length} · SR 5% · R 20% · N 75%
+                        </p>
+                      </div>
+                    </div>
+                    {/* ガチャ排出一覧プレビュー */}
+                    <button onClick={() => setDetailPack(pack)} className="mb-3 flex gap-1">
+                      {pack.stickers.slice(0, 8).map((s) => (
+                        <span key={s.id}
+                          className={`grid h-8 w-8 place-items-center rounded-xl text-lg ${ownedGachaStickers.includes(s.id) ? '' : 'opacity-30'}`}>
+                          {s.emoji}
+                        </span>
+                      ))}
+                      {pack.stickers.length > 8 && <span className="grid h-8 w-8 place-items-center rounded-xl bg-base text-[10px] font-black text-muted">+{pack.stickers.length - 8}</span>}
+                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDraw(pack, 1)}
+                        disabled={coins < cost}
+                        className={`flex-1 rounded-full py-2.5 text-sm font-black transition ${coins >= cost ? 'bg-zinc-900 text-amber-400 active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                        🪙 {cost} で1回引く
+                      </button>
+                      <button
+                        onClick={() => handleDraw(pack, 10)}
+                        disabled={coins < cost * 10}
+                        className={`flex-1 rounded-full py-2.5 text-sm font-black transition ${coins >= cost * 10 ? 'bg-amber-400 text-zinc-900 active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                        🪙 {cost * 10} で10連
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── 通常タブ（theme/deco/font） ── */}
+      {tab !== 'stamp' && (
+        <>
+          <div className="grid grid-cols-2 gap-3 px-4 pb-8 pt-3">
+            {(SHOP_ITEMS[tab as Exclude<ShopCategory, 'stamp'>] ?? []).map((item) => (
+              <div key={item.id} className="rounded-[24px] bg-white p-4 shadow-card">
+                <div className={`mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${
+                  tab === 'theme' ? item.preview : 'from-pink/10 to-purple/10'
+                } text-center text-2xl font-black leading-snug`}>
+                  {tab !== 'theme' ? item.preview : <span className="text-xs font-black text-ink/60">プレビュー</span>}
+                </div>
+                <p className="text-sm font-black text-ink">{item.name}</p>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-xs font-black text-pinkStrong">¥{item.price}</span>
+                  <button disabled className="rounded-full bg-base px-3 py-1.5 text-[11px] font-black text-muted ring-1 ring-pink/20">
+                    🔒 準備中
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="px-6 pb-6 text-center text-[11px] font-bold text-muted">購入機能は近日公開予定です。</p>
+        </>
+      )}
+
+      {/* ── パック詳細モーダル ── */}
+      {detailPack && (
+        <div className="fixed inset-0 z-50 flex items-end" onClick={() => setDetailPack(null)}>
+          <div className="w-full max-h-[70vh] overflow-y-auto rounded-t-[32px] bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center gap-3">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-base text-3xl">{detailPack.thumbnail}</span>
+              <div>
+                <p className="font-black text-ink">{detailPack.name}</p>
+                <p className="text-xs font-bold text-muted">{detailPack.creator}</p>
+              </div>
+              <button onClick={() => setDetailPack(null)} className="ml-auto text-xl text-muted">✕</button>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {detailPack.stickers.map((s) => (
+                <div key={s.id} className="flex flex-col items-center gap-1 rounded-2xl bg-base p-2">
+                  <span className={`text-3xl ${detailPack.acquisition.type === 'gacha' && !ownedGachaStickers.includes(s.id) ? 'opacity-30' : ''}`}>{s.emoji}</span>
+                  <span className="text-[9px] font-bold text-muted text-center leading-tight">{s.name}</span>
+                  {s.rarity && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[s.rarity]}`}>{s.rarity}</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* フッター注記 */}
-      <p className="px-6 pb-6 text-center text-[11px] font-bold text-muted">
-        購入機能は近日公開予定です。お楽しみに！
-      </p>
+      {/* ── ガチャ結果モーダル ── */}
+      {gachaResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-[32px] bg-white p-6 shadow-2xl">
+            <p className="mb-4 text-center text-base font-black text-ink">
+              {gachaResult.length === 1 ? 'ガチャ結果' : '10連ガチャ結果 🎉'}
+            </p>
+            <div className={`${gachaResult.length === 1 ? 'flex justify-center' : 'grid grid-cols-5 gap-2'}`}>
+              {gachaResult.map((r, i) => (
+                <div key={i} className={`flex flex-col items-center gap-1 rounded-2xl p-2 ${r.sticker.rarity === 'SR' ? 'bg-zinc-900' : r.sticker.rarity === 'R' ? 'bg-sky-50' : 'bg-base'} ${gachaResult.length === 1 ? 'h-32 w-32' : ''}`}>
+                  <span className={gachaResult.length === 1 ? 'text-6xl' : 'text-2xl'}>{r.sticker.emoji}</span>
+                  {r.sticker.rarity && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[r.sticker.rarity]}`}>{r.sticker.rarity}</span>
+                  )}
+                  {!r.isNew && <span className="text-[9px] font-bold text-muted">重複</span>}
+                  {r.isNew && <span className="text-[9px] font-black text-pink">NEW!</span>}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setGachaResult(null)}
+              className="mt-5 w-full rounded-full bg-pink py-3 text-base font-black text-white shadow-card active:scale-[0.98]">
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function PackRow({ pack, owned, onDetail, action }: {
+  pack: StickerPack;
+  owned: boolean;
+  onDetail: () => void;
+  action: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-[20px] bg-white p-3 shadow-card">
+      <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${owned ? 'bg-pink/10' : 'bg-base'}`}>{pack.thumbnail}</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-black text-ink">{pack.name}</p>
+          {pack.isNew && <span className="rounded-full bg-pink px-1.5 py-0.5 text-[9px] font-black text-white">NEW</span>}
+          {pack.collab && <span className="rounded-full bg-purple/15 px-1.5 py-0.5 text-[9px] font-black text-purple">コラボ</span>}
+        </div>
+        <p className="text-[11px] font-bold text-muted">{pack.creator}</p>
+        <button onClick={onDetail} className="mt-1 flex gap-0.5">
+          {pack.stickers.slice(0, 6).map((s) => <span key={s.id} className="text-base">{s.emoji}</span>)}
+        </button>
+      </div>
+      {action}
+    </div>
   );
 }
 
@@ -3801,6 +4432,56 @@ const [circlePosts, setCirclePosts] = useState<CirclePost[]>(() => {
   return saved ? JSON.parse(saved) : initialCirclePosts;
 });
 const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
+
+  // ── スタンプ・ガチャ ──────────────────────────────────────
+  const [coins, setCoins] = useState<number>(() => {
+    if (typeof window === 'undefined') return 500;
+    const s = localStorage.getItem('miri_coins');
+    return s ? Number(s) : 500;
+  });
+  const [ownedPackIds, setOwnedPackIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const s = localStorage.getItem('miri_owned_packs');
+    return s ? JSON.parse(s) : [];
+  });
+  const [ownedGachaStickers, setOwnedGachaStickers] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    const s = localStorage.getItem('miri_gacha_stickers');
+    return s ? JSON.parse(s) : [];
+  });
+
+  function purchasePack(packId: string) {
+    setOwnedPackIds((prev) => {
+      const next = [...prev, packId];
+      localStorage.setItem('miri_owned_packs', JSON.stringify(next));
+      return next;
+    });
+    showToast('✨ スタンプを購入しました！');
+  }
+
+  function addGachaStickers(ids: string[]) {
+    setOwnedGachaStickers((prev) => {
+      const next = [...new Set([...prev, ...ids])];
+      localStorage.setItem('miri_gacha_stickers', JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function spendCoins(amount: number) {
+    setCoins((prev) => {
+      const next = Math.max(0, prev - amount);
+      localStorage.setItem('miri_coins', String(next));
+      return next;
+    });
+  }
+
+  const ownedStickerCount = useMemo(() =>
+    STICKER_PACKS.reduce((total, pack) => {
+      if (pack.acquisition.type === 'free') return total + pack.stickers.length;
+      if (pack.acquisition.type === 'purchase') return total + (ownedPackIds.includes(pack.id) ? pack.stickers.length : 0);
+      return total + pack.stickers.filter((s) => ownedGachaStickers.includes(s.id)).length;
+    }, 0),
+  [ownedPackIds, ownedGachaStickers]);
 
   // ── 公認ユーザー購読 ─────────────────────────────────────────
   const [subscribedOfficials, setSubscribedOfficials] = useState<string[]>(() => {
@@ -4182,6 +4863,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onCreateDiary={(caption, photoUrl, font, textColor, visibility, mentionedUserIds) =>
         createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, font, textColor)
       }
+      ownedPackIds={ownedPackIds}
+      ownedGachaStickers={ownedGachaStickers}
     />
   );
     if (screen === 'profile') {
@@ -4191,7 +4874,6 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       }
       return <ProfileScreen
         go={go}
-        answers={answers}
         profileBookInfo={profileBookInfo}
         best3={best3}
         profileQuestions={profileQuestions}
@@ -4216,12 +4898,21 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
     if (screen === 'notifications') return <NotificationsScreen go={go} />;
     if (screen === 'followers') return <FollowersScreen go={go} />;
-    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} />;
-    if (screen === 'shop') return <ShopScreen go={go} />;
+    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} />;
+    if (screen === 'shop') return (
+      <ShopScreen
+        go={go}
+        coins={coins}
+        ownedPackIds={ownedPackIds}
+        ownedGachaStickers={ownedGachaStickers}
+        onPurchasePack={purchasePack}
+        onAddGachaStickers={addGachaStickers}
+        onSpendCoins={spendCoins}
+      />
+    );
 
 return <ProfileScreen
   go={go}
-  answers={answers}
   profileBookInfo={profileBookInfo}
   best3={best3}
   profileQuestions={profileQuestions}
@@ -4253,7 +4944,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl}>{current}</DesktopShell>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );

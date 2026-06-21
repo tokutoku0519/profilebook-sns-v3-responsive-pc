@@ -1,7 +1,7 @@
 import { Heart, Sparkles } from 'lucide-react';
 import type { answers, profiles, questions } from '@/lib/mock';
 import { RetroText } from '@/components/RetroEmoji';
-import { getUserTitles, TESTER_SERIALS, TITLE_DEFS, type TitleType } from '@/lib/titles';
+import { getUserTitles, TITLE_DEFS, type TitleType } from '@/lib/titles';
 
 type Question = (typeof questions)[number];
 type Answer = (typeof answers)[number];
@@ -16,15 +16,13 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
   );
 }
 
-export function TitleBadge({ type, userId }: { type: TitleType; userId?: string }) {
+export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
   const def = TITLE_DEFS[type];
 
-  if (type === 'tester') {
-    const serial = userId !== undefined ? TESTER_SERIALS[userId] : undefined;
-    const serialStr = serial !== undefined ? ` #${String(serial).padStart(3, '0')}` : '';
+  if (type === 'founder') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-0.5 text-[10px] font-black tracking-widest text-amber-400 ring-1 ring-amber-500/40 shadow-sm">
-        {def.emoji} {def.label}{serialStr}
+        {def.emoji} {def.label}
       </span>
     );
   }
@@ -61,7 +59,7 @@ export function AnswerCard({ answer, detail = false }: { answer: Answer; detail?
       <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={answer.body} /></p>
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-pink/15 text-lg">{answer.user.avatar}</span>
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-pink/15 text-xl">{answer.user.avatar}</span>
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-bold">{answer.user.name}</span>
@@ -82,7 +80,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const titles = getUserTitles(profile.id);
   return (
     <article className="min-w-[150px] rounded-[26px] border border-purple-100 bg-white p-4 text-center shadow-card">
-      <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-pink/20 to-purple/20 text-2xl">{profile.avatar}</div>
+      <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-pink/20 to-purple/20 text-3xl">{profile.avatar}</div>
       <h3 className="font-bold text-ink">{profile.name}</h3>
       {titles.length > 0 && (
         <div className="mt-1 flex flex-wrap justify-center gap-1">
