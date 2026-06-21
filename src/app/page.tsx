@@ -2866,13 +2866,13 @@ function ProfileShareModal({
               iOS: 長押し → 写真に追加 / Android: 下のボタンで保存
             </p>
             <div className="flex w-full gap-3">
-              <button onClick={handleDownload} disabled={!imageGenerated}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-pink text-white active:scale-[0.98]' : 'bg-base text-muted'}`}>
-                💾 画像を保存
-              </button>
               <button onClick={() => handleShare(true)} disabled={!imageGenerated}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-base text-ink active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-pink text-white active:scale-[0.98]' : 'bg-base text-muted'}`}>
                 <Share2 size={15} />シェア
+              </button>
+              <button onClick={handleDownload} disabled={!imageGenerated}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-black shadow-card transition ${imageGenerated ? 'bg-base text-ink active:scale-[0.98]' : 'bg-base text-muted'}`}>
+                💾 画像を保存
               </button>
             </div>
             <button onClick={handleGenerateImage}
