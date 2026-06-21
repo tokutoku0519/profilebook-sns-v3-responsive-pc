@@ -744,6 +744,7 @@ function HomeScreen({
   hasAnsweredPR,
   translatedAnswerBodies,
   isTranslating,
+  lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
@@ -757,6 +758,7 @@ function HomeScreen({
   hasAnsweredPR: boolean;
   translatedAnswerBodies: Record<string, string>;
   isTranslating: boolean;
+  lang?: Lang;
 }) {
   return (
     <>
@@ -852,7 +854,7 @@ function HomeScreen({
 
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
-          <SectionHeader title="いま盛り上がってる回答" action="もっと見る" onAction={() => go('search')} />
+          <SectionHeader title={t('sec_trending', lang)} action={t('btn_see_more', lang)} onAction={() => go('search')} />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {isTranslating && (
               <p className="w-full text-center text-xs font-bold text-muted py-2">🌐 翻訳中...</p>
@@ -866,27 +868,27 @@ function HomeScreen({
         </section>
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />交換日記</h2>
-            <button onClick={() => go('diary-list')} className="text-xs font-black text-pink">もっと見る</button>
+            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />{t('sec_diary', lang)}</h2>
+            <button onClick={() => go('diary-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
           </div>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {diaryPages.slice(0, 5).map((page) => (
               <button key={page.id} onClick={() => go('diary-detail', page.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-pink/10 via-white to-purple/10 p-4 text-left shadow-card active:scale-[0.98]">
                 <p className="font-black text-ink">{page.theme}</p>
                 <p className="mt-1 line-clamp-2 text-xs font-bold text-muted">{page.description}</p>
-                <p className="mt-3 text-xs font-black text-pink">✍ {page.entries.length}件の書き込み</p>
+                <p className="mt-3 text-xs font-black text-pink">✍ {t('msg_entries', lang).replace('%n', String(page.entries.length))}</p>
               </button>
             ))}
             <button onClick={() => go('diary-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
-              ＋ 作る
+              {t('btn_create', lang)}
             </button>
           </div>
         </section>
         {circles.length > 0 && (
           <section>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-ink">🔒 サークル</h2>
-              <button onClick={() => go('circles')} className="text-xs font-black text-pink">すべて見る</button>
+              <h2 className="text-lg font-black text-ink">🔒 {t('nav_circles', lang)}</h2>
+              <button onClick={() => go('circles')} className="text-xs font-black text-pink">{t('btn_see_all', lang)}</button>
             </div>
             <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
               {circles.map((c) => {
@@ -896,21 +898,21 @@ function HomeScreen({
                     className="min-w-[200px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
                     <p className="text-2xl">{c.emoji}</p>
                     <p className="mt-1 font-black text-ink">{c.name}</p>
-                    <p className="mt-0.5 text-[11px] font-bold text-muted">{c.memberIds.length}人</p>
+                    <p className="mt-0.5 text-[11px] font-bold text-muted">{c.memberIds.length}{t('label_members', lang)}</p>
                     {latest && <p className="mt-2 line-clamp-1 text-xs font-bold text-muted">「{latest.body.slice(0, 18)}…」</p>}
                   </button>
                 );
               })}
               <button onClick={() => go('circle-create')}
                 className="grid min-w-[100px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
-                ＋ 作る
+                {t('btn_create', lang)}
               </button>
             </div>
           </section>
         )}
         <section className="relative">
           <span className="pointer-events-none absolute -right-1 -top-3 z-10"><RetroFlower /></span>
-          <SectionHeader title="新着プロフィール帳" action="見る" onAction={() => go('search')} />
+          <SectionHeader title={t('sec_new_profiles', lang)} action={t('btn_see', lang)} onAction={() => go('search')} />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {profiles.map((profile) => (
               <button key={profile.id} onClick={() => go('profile', profile.id)} className="text-left transition active:scale-[0.98]">
@@ -920,7 +922,7 @@ function HomeScreen({
           </div>
         </section>
         <section>
-          <SectionHeader title="今週のコラボお題" />
+          <SectionHeader title={t('sec_collab', lang)} />
           <button onClick={() => go('create')} className="block w-full text-left"><QuestionCard question={questions[2]} /></button>
         </section>
       </div>
@@ -1495,6 +1497,29 @@ function ProfileBookContent({
     })();
     return () => { cancelled = true; };
   }, [lang, questions]);
+
+  const TRANSLATE_FIELDS = [
+    'favoriteFood','dislikeFood','favoriteColor','favoriteSubject','dislikeSubject',
+    'favoriteCharacter','favoriteMusic','favoriteTv','favoriteArtist','favoriteManga',
+    'favoriteGame','hobby','specialty','personality','catchphrase','charmPoint','dream',
+    'message','hometown',
+  ] as const;
+  const [translatedInfo, setTranslatedInfo] = useState<Partial<typeof info>>({});
+  useEffect(() => {
+    if (lang === 'ja') { setTranslatedInfo({}); return; }
+    let cancelled = false;
+    (async () => {
+      const result: Partial<typeof info> = {};
+      for (const key of TRANSLATE_FIELDS) {
+        if (cancelled) break;
+        const val = info[key as keyof typeof info] as string;
+        if (val) result[key as keyof typeof info] = await translateText(val, lang) as any;
+      }
+      if (!cancelled) setTranslatedInfo(result);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang, info.favoriteFood, info.dislikeFood]);
   const medals = ['🥇', '🥈', '🥉'];
   const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
@@ -1523,7 +1548,7 @@ function ProfileBookContent({
         </div>
         {/* ひとこと帯 */}
         <div className="mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
-          ✉ {info.message}
+          ✉ {translatedInfo.message ?? info.message}
         </div>
       </section>
 
@@ -1536,38 +1561,38 @@ function ProfileBookContent({
         {t('show_bloodType', lang) === 'true' && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
         {info.gender && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
         <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
-        <ProfileLine label={t('field_hometown', lang)} value={info.hometown} />
+        <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />
       </section>
 
       {/* ── すきなもの ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
         <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
-        <ProfileLine label={t('field_favoriteFood', lang)} value={info.favoriteFood} />
-        <ProfileLine label={t('field_dislikeFood', lang)} value={info.dislikeFood} />
-        <ProfileLine label={t('field_favoriteColor', lang)} value={info.favoriteColor} />
+        <ProfileLine label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
+        <ProfileLine label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
+        <ProfileLine label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
         {(lifeStageDef?.showSubjectFields ?? true) && (
           <>
-            <ProfileLine label={t('field_favoriteSubject', lang)} value={info.favoriteSubject} />
-            <ProfileLine label={t('field_dislikeSubject', lang)} value={info.dislikeSubject} />
+            <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />
+            <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />
           </>
         )}
-        <ProfileLine label={t('field_favoriteCharacter', lang)} value={info.favoriteCharacter} />
-        <ProfileLine label={t('field_favoriteMusic', lang)} value={info.favoriteMusic} />
-        <ProfileLine label={t('field_favoriteTv', lang)} value={info.favoriteTv} />
-        <ProfileLine label={t('field_favoriteArtist', lang)} value={info.favoriteArtist} />
-        <ProfileLine label={t('field_favoriteManga', lang)} value={info.favoriteManga} />
-        <ProfileLine label={t('field_favoriteGame', lang)} value={info.favoriteGame} />
+        <ProfileLine label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
+        <ProfileLine label={t('field_favoriteMusic', lang)} value={translatedInfo.favoriteMusic ?? info.favoriteMusic} />
+        <ProfileLine label={t('field_favoriteTv', lang)} value={translatedInfo.favoriteTv ?? info.favoriteTv} />
+        <ProfileLine label={t('field_favoriteArtist', lang)} value={translatedInfo.favoriteArtist ?? info.favoriteArtist} />
+        <ProfileLine label={t('field_favoriteManga', lang)} value={translatedInfo.favoriteManga ?? info.favoriteManga} />
+        <ProfileLine label={t('field_favoriteGame', lang)} value={translatedInfo.favoriteGame ?? info.favoriteGame} />
       </section>
 
       {/* ── わたしのこと ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
-        <ProfileLine label={t('field_hobby', lang)} value={info.hobby} />
-        <ProfileLine label={t('field_specialty', lang)} value={info.specialty} />
-        <ProfileLine label={t('field_personality', lang)} value={info.personality} />
-        <ProfileLine label={t('field_catchphrase', lang)} value={info.catchphrase} />
-        <ProfileLine label={t('field_charmPoint', lang)} value={info.charmPoint} />
-        <ProfileLine label={t('field_dream', lang)} value={info.dream} />
+        <ProfileLine label={t('field_hobby', lang)} value={translatedInfo.hobby ?? info.hobby} />
+        <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />
+        <ProfileLine label={t('field_personality', lang)} value={translatedInfo.personality ?? info.personality} />
+        <ProfileLine label={t('field_catchphrase', lang)} value={translatedInfo.catchphrase ?? info.catchphrase} />
+        <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
+        <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
       </section>
 
       {/* ── ライフステージ専用セクション ── */}
@@ -1633,7 +1658,7 @@ function ProfileBookContent({
       {/* ── お気に入り写真 ── */}
       {favoritePhotos && favoritePhotos.length > 0 && (
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <ProfSectionHeader icon="📷" title="お気に入り写真" theme={themeColor} />
+          <ProfSectionHeader icon="📷" title={t('sec_fav_photos', lang)} theme={themeColor} />
           <div className="grid grid-cols-3 gap-2">
             {favoritePhotos.map((photo, i) => (
               <div key={i} className="aspect-square overflow-hidden rounded-2xl">
@@ -1647,7 +1672,7 @@ function ProfileBookContent({
       {/* ── さいきんの回答 ── */}
       {answers.length > 0 && onGoDetail && (
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <ProfSectionHeader icon="📝" title="さいきんのかいとう" theme={themeColor} />
+          <ProfSectionHeader icon="📝" title={t('sec_recent_answers', lang)} theme={themeColor} />
           <div className="space-y-2">
             {answers.slice(0, 3).map((answer) => (
               <button
@@ -1854,7 +1879,7 @@ function ProfileScreen({
   const [showShare, setShowShare] = useState(false);
   return (
     <>
-      <AppHeader title="わたしのプロフ帳" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('header_profile', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="flex gap-2 px-4 pt-2">
         <button
           onClick={() => go('settings')}
@@ -3089,7 +3114,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
     <>
-      <AppHeader title="マイページ" onBell={() => go('notifications')} />
+      <AppHeader title={t('header_mypage', lang)} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
         <section
   onClick={() => go('profile')}
@@ -3105,13 +3130,13 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
         <p className="text-sm font-bold text-muted">@koki</p>
       </div>
     </div>
-    <span className="text-xs font-black text-pink">プロフィール帳を見る</span>
+    <span className="text-xs font-black text-pink">{t('btn_view_profile_book', lang)}</span>
   </div>
 
   <div className="mt-5 grid grid-cols-4 rounded-[24px] bg-pink/5 p-4 text-center text-sm font-black text-ink">
     <div>
       <p className="text-xl">{myAnswers.length}</p>
-      <p>回答</p>
+      <p>{t('label_answers', lang)}</p>
     </div>
     <button
       type="button"
@@ -3122,7 +3147,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
       <p className="text-xl">{followers.length}</p>
-      <p className="text-[11px]">フォロー中</p>
+      <p className="text-[11px]">{t('btn_following', lang)}</p>
     </button>
     <button
       type="button"
@@ -3133,7 +3158,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
       <p className="text-xl">38</p>
-      <p className="text-[11px]">フォロワー</p>
+      <p className="text-[11px]">{t('label_followers_count', lang)}</p>
     </button>
     <button
       type="button"
@@ -3141,7 +3166,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
       <p className="text-xl">{ownedStickerCount}</p>
-      <p className="text-[11px]">スタンプ</p>
+      <p className="text-[11px]">{t('label_stamps_count', lang)}</p>
     </button>
   </div>
 </section>
@@ -3157,7 +3182,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
           </div>
           <div className="text-right">
             <p className="text-xs font-black text-white/90">{t('coins_earn', lang)} →</p>
-            <p className="text-[10px] font-bold text-white/70">履歴・使い道を見る</p>
+            <p className="text-[10px] font-bold text-white/70">{t('btn_coin_history', lang)}</p>
           </div>
         </button>
 
@@ -3170,8 +3195,8 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
               <Bookmark size={18} />
             </span>
             <div className="text-left">
-              <p className="text-sm font-black text-ink">ブックマーク</p>
-              <p className="text-xs font-bold text-muted">保存した回答</p>
+              <p className="text-sm font-black text-ink">{t('nav_bookmark', lang)}</p>
+              <p className="text-xs font-bold text-muted">{t('nav_saved_answers', lang)}</p>
             </div>
           </button>
           <button
@@ -3182,8 +3207,8 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
               <ShoppingBag size={18} />
             </span>
             <div className="text-left">
-              <p className="text-sm font-black text-ink">ショップ</p>
-              <p className="text-xs font-bold text-muted">テーマ・シール</p>
+              <p className="text-sm font-black text-ink">{t('nav_shop', lang)}</p>
+              <p className="text-xs font-bold text-muted">{t('nav_theme_sticker', lang)}</p>
             </div>
           </button>
         </div>
@@ -3206,14 +3231,14 @@ function ProfileLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FollowersScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
+function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) => void; lang?: Lang }) {
   const [tab, setTab] = useState<'following' | 'followers'>('following');
 
   const mockFollowersList = [...followers].reverse();
 
   return (
     <>
-      <AppHeader title="フォロー" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
+      <AppHeader title={t('header_follow', lang)} back onBack={() => go('mypage')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3">
         {/* タブ */}
         <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
@@ -3221,13 +3246,13 @@ function FollowersScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
             onClick={() => setTab('following')}
             className={`rounded-xl py-2 text-sm font-black transition ${tab === 'following' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}
           >
-            フォロー中 {followers.length}
+            {t('btn_following', lang)} {followers.length}
           </button>
           <button
             onClick={() => setTab('followers')}
             className={`rounded-xl py-2 text-sm font-black transition ${tab === 'followers' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}
           >
-            フォロワー 38
+            {t('label_followers_tab', lang)} 38
           </button>
         </div>
 
@@ -3972,6 +3997,7 @@ function ShopScreen({
   onPurchasePack,
   onAddGachaStickers,
   onSpendCoins,
+  lang = 'ja',
 }: {
   go: (s: Screen) => void;
   coins: number;
@@ -3980,6 +4006,7 @@ function ShopScreen({
   onPurchasePack: (packId: string) => void;
   onAddGachaStickers: (ids: string[]) => void;
   onSpendCoins: (amount: number) => void;
+  lang?: Lang;
 }) {
   const [tab, setTab] = useState<ShopCategory>('stamp');
   const [gachaResult, setGachaResult] = useState<GachaResult | null>(null);
@@ -4004,27 +4031,27 @@ function ShopScreen({
 
   return (
     <>
-      <AppHeader title="ショップ" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
+      <AppHeader title={t('header_shop', lang)} back onBack={() => go('mypage')} onBell={() => go('notifications')} />
 
       {/* コインバランス */}
       <div className="mx-4 mt-3 flex items-center justify-between rounded-[24px] bg-zinc-900 px-5 py-3">
         <div>
-          <p className="text-[10px] font-black text-zinc-500">Miriコイン残高</p>
+          <p className="text-[10px] font-black text-zinc-500">{t('label_coin_balance', lang)}</p>
           <p className="text-xl font-black text-amber-400">🪙 {coins.toLocaleString()}</p>
         </div>
         <button className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-zinc-900 shadow-card active:scale-[0.98]">
-          コインを買う
+          {t('btn_buy_coins', lang)}
         </button>
       </div>
 
       {/* カテゴリタブ */}
       <div className="mt-4 flex gap-2 overflow-x-auto px-4 pb-1">
-        {SHOP_CATEGORY_LABELS.map(({ key, label, emoji }) => (
+        {SHOP_CATEGORY_LABELS.map(({ key, emoji }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-black transition ${
               tab === key ? 'bg-pink text-white shadow-card' : 'bg-white text-muted shadow-card hover:bg-pink/10'
             }`}>
-            <span>{emoji}</span>{label}
+            <span>{emoji}</span>{t(`tab_${key}`, lang)}
           </button>
         ))}
       </div>
@@ -4035,18 +4062,18 @@ function ShopScreen({
 
           {/* 無料 */}
           <section>
-            <p className="mb-3 text-sm font-black text-ink">🆓 無料スタンプ</p>
+            <p className="mb-3 text-sm font-black text-ink">🆓 {t('sec_free_stamps', lang)}</p>
             <div className="space-y-2">
               {freePacks.map((pack) => (
                 <PackRow key={pack.id} pack={pack} owned={true} onDetail={() => setDetailPack(pack)}
-                  action={<span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-black text-green-600">無料</span>} />
+                  action={<span className="rounded-full bg-green-100 px-3 py-1 text-[11px] font-black text-green-600">{t('label_free', lang)}</span>} />
               ))}
             </div>
           </section>
 
           {/* 有料 */}
           <section>
-            <p className="mb-3 text-sm font-black text-ink">💳 有料スタンプ（買い切り）</p>
+            <p className="mb-3 text-sm font-black text-ink">💳 {t('sec_paid_stamps', lang)}</p>
             <div className="space-y-2">
               {purchasePacks.map((pack) => {
                 const price = (pack.acquisition as { type: 'purchase'; price: number }).price;
@@ -4068,7 +4095,7 @@ function ShopScreen({
 
           {/* ガチャ */}
           <section>
-            <p className="mb-3 text-sm font-black text-ink">🎰 ガチャスタンプ</p>
+            <p className="mb-3 text-sm font-black text-ink">🎰 {t('sec_gacha_stamps', lang)}</p>
             <div className="space-y-3">
               {gachaPacks.map((pack) => {
                 const cost = (pack.acquisition as { type: 'gacha'; coinCost: number }).coinCost;
@@ -5126,6 +5153,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       hasAnsweredPR={hasAnsweredPR}
       translatedAnswerBodies={translatedAnswerBodies}
       isTranslating={isTranslating}
+      lang={lang}
     />
   );
     if (screen === 'diary-list') return <DiaryListScreen go={go} diaryPages={diaryPages} />;
@@ -5186,7 +5214,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       <BookmarksScreen go={go} answers={answers} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} />
     );
     if (screen === 'notifications') return <NotificationsScreen go={go} />;
-    if (screen === 'followers') return <FollowersScreen go={go} />;
+    if (screen === 'followers') return <FollowersScreen go={go} lang={lang} />;
     if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} />;
     if (screen === 'shop') return (
       <ShopScreen
@@ -5197,6 +5225,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         onPurchasePack={purchasePack}
         onAddGachaStickers={addGachaStickers}
         onSpendCoins={spendCoins}
+        lang={lang}
       />
     );
 
