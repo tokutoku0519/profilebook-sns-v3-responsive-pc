@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BRANCH=$(git -C /home/user/profilebook-sns-v3-responsive-pc rev-parse --abbrev-ref HEAD 2>/dev/null); [ -n \"$BRANCH\" ] && [ \"$BRANCH\" != \"main\" ] && git -C /home/user/profilebook-sns-v3-responsive-pc push origin \"$BRANCH:main\" 2>/dev/null || true",
+            "statusMessage": "Vercelへ反映中..."
+          }
+        ]
+      }
+    ]
+  }
+}
