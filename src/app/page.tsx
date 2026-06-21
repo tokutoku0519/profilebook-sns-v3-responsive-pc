@@ -5178,6 +5178,9 @@ return <ProfileScreen
   circlePosts,
   selectedCircleId,
   bookmarks,
+  lang,
+  coins,
+  hasAnsweredPR,
 ]);
 
   const active = tabFromScreen(screen);
