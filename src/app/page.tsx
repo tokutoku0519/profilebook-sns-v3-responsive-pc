@@ -7,6 +7,9 @@ import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
+import { getQuestionsForLang } from '@/lib/localeQuestions';
+import { getGenderOptions } from '@/lib/localeConfig';
+import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
@@ -92,6 +95,7 @@ const defaultProfileBookInfo = {
   nickname: 'こうき',
   birthday: '5月19日',
   bloodType: 'A型',
+  gender: '',
   mbti: 'ENFP',
   hometown: '東京',
   favoriteFood: 'オムライス',
@@ -157,7 +161,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'pink',
     info: {
       name: 'まゆ', nickname: 'まゆにゃん', birthday: '3月3日（ひな祭り！）',
-      bloodType: 'B型', mbti: 'ISFJ', hometown: '神奈川',
+      bloodType: 'B型', gender: '', mbti: 'ISFJ', hometown: '神奈川',
       favoriteFood: '揚げパン・苺のショートケーキ', dislikeFood: '納豆（においがムリ）',
       favoriteColor: 'ピンク・ベージュ', favoriteSubject: '家庭科・音楽', dislikeSubject: '数学',
       favoriteCharacter: 'シナモロール', favoriteMusic: 'BoA・浜崎あゆみ',
@@ -200,7 +204,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'purple',
     info: {
       name: 'りん', nickname: 'りんりん', birthday: '11月11日（ポッキーの日！）',
-      bloodType: 'A型', mbti: 'INFP', hometown: '京都',
+      bloodType: 'A型', gender: '', mbti: 'INFP', hometown: '京都',
       favoriteFood: 'おはぎ・和菓子全般', dislikeFood: '辛いもの（苦手）',
       favoriteColor: '紫・ネイビー', favoriteSubject: '国語・美術', dislikeSubject: '体育',
       favoriteCharacter: 'ムーミン', favoriteMusic: '椎名林檎・くるり',
@@ -243,7 +247,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'blue',
     info: {
       name: 'なな', nickname: 'なな・7ちゃん', birthday: '7月7日（七夕！）',
-      bloodType: 'O型', mbti: 'ESFP', hometown: '大阪',
+      bloodType: 'O型', gender: '', mbti: 'ESFP', hometown: '大阪',
       favoriteFood: 'たこ焼き・クレープ', dislikeFood: 'レバー',
       favoriteColor: '水色・白', favoriteSubject: '家庭科・体育', dislikeSubject: '古文',
       favoriteCharacter: 'ハローキティ', favoriteMusic: 'モーニング娘。・SPEED',
@@ -275,7 +279,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'green',
     info: {
       name: 'はる', nickname: 'はるちゃん', birthday: '4月4日',
-      bloodType: 'AB型', mbti: 'ISFP', hometown: '神戸',
+      bloodType: 'AB型', gender: '', mbti: 'ISFP', hometown: '神戸',
       favoriteFood: 'サンドイッチ・珈琲', dislikeFood: 'ジャンクフード',
       favoriteColor: '緑・アイボリー', favoriteSubject: '生物・現代文', dislikeSubject: '数学・物理',
       favoriteCharacter: 'リラックマ', favoriteMusic: 'カフェBGM・ジャズ',
@@ -307,7 +311,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'orange',
     info: {
       name: 'ゆい', nickname: 'ゆいゆい', birthday: '1月14日',
-      bloodType: 'A型', mbti: 'INTJ', hometown: '埼玉',
+      bloodType: 'A型', gender: '', mbti: 'INTJ', hometown: '埼玉',
       favoriteFood: '和食全般・おにぎり', dislikeFood: 'パクチー',
       favoriteColor: 'からし色・白', favoriteSubject: '国語・歴史', dislikeSubject: '音楽（音痴）',
       favoriteCharacter: 'ムーミン・クロミ', favoriteMusic: 'BUMP OF CHICKEN・Mr.Children',
@@ -339,7 +343,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
     themeColor: 'pink',
     info: {
       name: 'あかり', nickname: 'あかりん', birthday: '2月8日',
-      bloodType: 'B型', mbti: 'ESFJ', hometown: '福岡',
+      bloodType: 'B型', gender: '', mbti: 'ESFJ', hometown: '福岡',
       favoriteFood: 'チョコレート・イチゴ系', dislikeFood: 'ゴーヤ',
       favoriteColor: '赤・ゴールド', favoriteSubject: '美術・英語', dislikeSubject: '数学・理科',
       favoriteCharacter: 'マイメロ・ポムポムプリン', favoriteMusic: 'Perfume・きゃりーぱみゅぱみゅ',
@@ -750,6 +754,8 @@ function HomeScreen({
   hasAnsweredToday,
   prQuestion,
   hasAnsweredPR,
+  translatedAnswerBodies,
+  isTranslating,
 }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
@@ -761,6 +767,8 @@ function HomeScreen({
   hasAnsweredToday: boolean;
   prQuestion: PRQuestion;
   hasAnsweredPR: boolean;
+  translatedAnswerBodies: Record<string, string>;
+  isTranslating: boolean;
 }) {
   return (
     <>
@@ -858,9 +866,12 @@ function HomeScreen({
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
           <SectionHeader title="いま盛り上がってる回答" action="もっと見る" onAction={() => go('search')} />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
+            {isTranslating && (
+              <p className="w-full text-center text-xs font-bold text-muted py-2">🌐 翻訳中...</p>
+            )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} />
               </button>
             ))}
           </div>
@@ -1518,6 +1529,7 @@ function ProfileBookContent({
         <ProfileLine label={t('field_nickname', lang)} value={info.nickname} />
         <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />
         {t('show_bloodType', lang) === 'true' && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
+        {info.gender && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
         <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
         <ProfileLine label={t('field_hometown', lang)} value={info.hometown} />
       </section>
@@ -2197,6 +2209,7 @@ function ProfileEditScreen({
           <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
           <EditField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} />
           <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={4} />
+          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} />
           <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} />
           <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} />
           <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
@@ -4516,6 +4529,43 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof window === 'undefined') return 'ja';
+    return (localStorage.getItem('miri_lang') as Lang) || 'ja';
+  });
+
+  function changeLang(l: Lang) {
+    setLang(l);
+    localStorage.setItem('miri_lang', l);
+  }
+
+  const localizedQuestions = useMemo(() => getQuestionsForLang(lang), [lang]);
+
+  const [translatedAnswerBodies, setTranslatedAnswerBodies] = useState<Record<string, string>>({});
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  // 言語切り替え時にフィード上の回答を自動翻訳
+  useEffect(() => {
+    if (lang === 'ja') { setTranslatedAnswerBodies({}); return; }
+    let cancelled = false;
+    setIsTranslating(true);
+    (async () => {
+      const targets = initialAnswers.slice(0, 12);
+      const pairs: [string, string][] = [];
+      for (const a of targets) {
+        if (cancelled) break;
+        const txt = await translateText(a.body, lang);
+        pairs.push([a.id, txt]);
+      }
+      if (!cancelled) {
+        setTranslatedAnswerBodies(Object.fromEntries(pairs));
+        setIsTranslating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
+
 const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   const [screen, setScreen] = useState<Screen>(() => {
@@ -4527,13 +4577,13 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
-  // ── 今日のお題 ────────────────────────────────────────────────
+  // ── 今日のお題（言語に応じて切り替わる）────────────────────────
   const dailyQuestion = useMemo(() => {
     const today = new Date().toDateString();
     let h = 0;
     for (let i = 0; i < today.length; i++) h = Math.imul(31, h) + today.charCodeAt(i) | 0;
-    return questions[Math.abs(h) % questions.length];
-  }, []);
+    return localizedQuestions[Math.abs(h) % localizedQuestions.length];
+  }, [localizedQuestions]);
 
   const [dailyRecord, setDailyRecord] = useState<{ date: string; body: string } | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -4600,17 +4650,6 @@ const [circlePosts, setCirclePosts] = useState<CirclePost[]>(() => {
   return saved ? JSON.parse(saved) : initialCirclePosts;
 });
 const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
-
-  // ── 言語設定 ──────────────────────────────────────────────
-  const [lang, setLang] = useState<Lang>(() => {
-    if (typeof window === 'undefined') return 'ja';
-    return (localStorage.getItem('miri_lang') as Lang) || 'ja';
-  });
-
-  function changeLang(l: Lang) {
-    setLang(l);
-    localStorage.setItem('miri_lang', l);
-  }
 
   // ── スタンプ・ガチャ ──────────────────────────────────────
   const [coins, setCoins] = useState<number>(() => {
@@ -4896,7 +4935,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 }
 
   function postAnswer(draft: DraftAnswer) {
-  const allQuestions = [...communityQuestions, ...questions];
+  const allQuestions = [...communityQuestions, ...localizedQuestions];
 
   const q =
     allQuestions.find((question) => question.id === draft.questionId) ||
@@ -5077,6 +5116,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       hasAnsweredToday={dailyRecord !== null}
       prQuestion={prQuestion}
       hasAnsweredPR={hasAnsweredPR}
+      translatedAnswerBodies={translatedAnswerBodies}
+      isTranslating={isTranslating}
     />
   );
     if (screen === 'diary-list') return <DiaryListScreen go={go} diaryPages={diaryPages} />;

@@ -47,7 +47,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false }: { answer: Answer; detail?: boolean }) {
+export function AnswerCard({ answer, detail = false, translatedBody }: { answer: Answer; detail?: boolean; translatedBody?: string }) {
   const titles = getUserTitles(answer.user.id);
   return (
     <article className={`rounded-[28px] border border-purple-100 bg-white p-4 shadow-card ${detail ? 'min-h-56' : ''}`}>
@@ -56,7 +56,7 @@ export function AnswerCard({ answer, detail = false }: { answer: Answer; detail?
         <Sparkles size={18} className="text-pink" />
       </div>
       <p className="mb-2 text-xs font-bold text-muted">{answer.question.title}</p>
-      <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={answer.body} /></p>
+      <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="grid h-11 w-11 place-items-center rounded-full bg-pink/15 text-xl">{answer.user.avatar}</span>
