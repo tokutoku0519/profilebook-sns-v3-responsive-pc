@@ -1,0 +1,106 @@
+export type Lang = 'ja' | 'en';
+
+const dict: Record<Lang, Record<string, string>> = {
+  ja: {
+    // BottomTab
+    tab_home: 'ホーム',
+    tab_search: 'さがす',
+    tab_create: 'つくる',
+    tab_notifications: '通知',
+    tab_mypage: 'マイページ',
+    // Profile sections
+    sec_basic: 'きほんじょうほう',
+    sec_likes: 'すきなもの・きらいなもの',
+    sec_about: 'わたしのこと',
+    // Profile fields
+    field_name: 'なまえ',
+    field_nickname: 'ニックネーム',
+    field_birthday: 'たんじょうび',
+    field_bloodType: 'けつえきがた',
+    field_mbti: 'MBTI',
+    field_hometown: '出身地',
+    field_favoriteFood: '好きな食べ物',
+    field_dislikeFood: 'きらいな食べ物',
+    field_favoriteColor: '好きな色',
+    field_favoriteSubject: '好きな教科',
+    field_dislikeSubject: '苦手な教科',
+    field_favoriteCharacter: '好きなキャラ',
+    field_favoriteMusic: '好きな音楽',
+    field_favoriteTv: '好きなテレビ',
+    field_favoriteArtist: '好きな芸能人',
+    field_favoriteManga: '好きな漫画',
+    field_favoriteGame: '好きなゲーム',
+    field_hobby: '趣味',
+    field_specialty: '特技',
+    field_personality: '性格',
+    field_catchphrase: '口ぐせ',
+    field_charmPoint: 'チャームポイント',
+    field_dream: '将来のゆめ',
+    // Coin
+    coins_wallet: 'コインウォレット',
+    coins_earn: 'コインを稼ぐ',
+    coins_history: 'コイン履歴',
+    coins_daily: 'デイリーログイン',
+    coins_post: '回答ボーナス',
+    coins_pr: 'PR案件回答',
+    coins_streak: '7日連続ログイン',
+    coins_invite: '友達招待',
+    // Misc
+    lang_flag: '🇯🇵',
+    lang_name: '日本語',
+    show_bloodType: 'true',
+  },
+  en: {
+    // BottomTab
+    tab_home: 'Home',
+    tab_search: 'Explore',
+    tab_create: 'Post',
+    tab_notifications: 'Alerts',
+    tab_mypage: 'Profile',
+    // Profile sections
+    sec_basic: 'Basic Info',
+    sec_likes: 'Likes & Dislikes',
+    sec_about: 'About Me',
+    // Profile fields
+    field_name: 'Name',
+    field_nickname: 'Nickname',
+    field_birthday: 'Birthday',
+    field_bloodType: '',
+    field_mbti: 'MBTI',
+    field_hometown: 'Hometown',
+    field_favoriteFood: 'Fav. food',
+    field_dislikeFood: 'Disliked food',
+    field_favoriteColor: 'Fav. color',
+    field_favoriteSubject: 'Best subject',
+    field_dislikeSubject: 'Worst subject',
+    field_favoriteCharacter: 'Fav. character',
+    field_favoriteMusic: 'Fav. music',
+    field_favoriteTv: 'Fav. TV show',
+    field_favoriteArtist: 'Fav. celebrity',
+    field_favoriteManga: 'Fav. manga',
+    field_favoriteGame: 'Fav. game',
+    field_hobby: 'Hobbies',
+    field_specialty: 'Skills',
+    field_personality: 'Personality',
+    field_catchphrase: 'Catchphrase',
+    field_charmPoint: 'Charm point',
+    field_dream: 'Dream job',
+    // Coin
+    coins_wallet: 'Coin Wallet',
+    coins_earn: 'Earn Coins',
+    coins_history: 'History',
+    coins_daily: 'Daily login',
+    coins_post: 'Post bonus',
+    coins_pr: 'Sponsored Q',
+    coins_streak: '7-day streak',
+    coins_invite: 'Invite friend',
+    // Misc
+    lang_flag: '🇺🇸',
+    lang_name: 'English',
+    show_bloodType: 'false',
+  },
+};
+
+export function t(key: string, lang: Lang = 'ja'): string {
+  return dict[lang][key] ?? dict.ja[key] ?? key;
+}

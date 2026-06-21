@@ -9,8 +9,10 @@ import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, Re
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
+import { t, type Lang } from '@/lib/i18n';
+import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -614,18 +616,18 @@ const initialCirclePosts: CirclePost[] = [
 function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'search') return 'search';
   if (screen === 'create') return 'create';
-  if (screen === 'mypage' || screen === 'followers' || screen === 'settings' || screen === 'official-question-create' || screen === 'shop') return 'mypage';
+  if (screen === 'mypage' || screen === 'followers' || screen === 'settings' || screen === 'official-question-create' || screen === 'shop' || screen === 'wallet') return 'mypage';
   if (screen === 'notifications') return 'notifications';
   if (screen === 'diary-list' || screen === 'diary-detail' || screen === 'diary-create') return 'home';
   if (screen === 'circles' || screen === 'circle-detail' || screen === 'circle-create') return 'home';
   return 'home';
 }
 
-function Phone({ children, active, go }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void }) {
+function Phone({ children, active, go, lang }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang }) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-w-none lg:rounded-[32px]">
       <div className="h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
-      <div className="lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} /></div>
+      <div className="lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} /></div>
     </main>
   );
 }
@@ -713,12 +715,12 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount }: { answers: Ans
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number }) {
+function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} />
-        <div className="min-w-0 flex-1"><Phone active={active} go={go}>{children}</Phone></div>
+        <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang}>{children}</Phone></div>
         <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} />
       </div>
     </div>
@@ -746,6 +748,8 @@ function HomeScreen({
   circlePosts,
   dailyQuestion,
   hasAnsweredToday,
+  prQuestion,
+  hasAnsweredPR,
 }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
@@ -755,6 +759,8 @@ function HomeScreen({
   circlePosts: CirclePost[];
   dailyQuestion: Question;
   hasAnsweredToday: boolean;
+  prQuestion: PRQuestion;
+  hasAnsweredPR: boolean;
 }) {
   return (
     <>
@@ -821,6 +827,33 @@ function HomeScreen({
             </div>
           </button>
         </section>
+        {/* ── PR案件 ── */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">コインが稼げる</span>
+          </div>
+          <button
+            onClick={() => !hasAnsweredPR && go('create', { ...prQuestion, id: prQuestion.id, category: 'PR', title: prQuestion.question })}
+            className={`w-full text-left rounded-[24px] bg-gradient-to-br ${prQuestion.brandBg} p-4 shadow-card transition ${hasAnsweredPR ? 'opacity-60' : 'active:scale-[0.99]'}`}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{prQuestion.brandEmoji}</span>
+                <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-ink">{prQuestion.brand}</span>
+                <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-amber-600">PR</span>
+              </div>
+              <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-black text-white">
+                🪙 +{prQuestion.reward}
+              </span>
+            </div>
+            <p className="text-sm font-black text-ink leading-relaxed">{prQuestion.question}</p>
+            <p className="mt-2 text-[10px] font-bold text-ink/60">
+              {hasAnsweredPR ? '✅ 本日分回答済み' : '答えるとコインがもらえます'}
+            </p>
+          </button>
+        </section>
+
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
           <SectionHeader title="いま盛り上がってる回答" action="もっと見る" onAction={() => go('search')} />
@@ -1428,6 +1461,7 @@ function ProfileBookContent({
   favoritePhotos,
   customFields = {},
   onGoDetail,
+  lang = 'ja',
 }: {
   info: typeof defaultProfileBookInfo;
   best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
@@ -1440,6 +1474,7 @@ function ProfileBookContent({
   favoritePhotos?: string[];
   customFields?: Record<string, string>;
   onGoDetail?: (id: string) => void;
+  lang?: Lang;
 }) {
   const grad = THEME_GRADIENT[themeColor] ?? THEME_GRADIENT.pink;
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
@@ -1478,44 +1513,44 @@ function ProfileBookContent({
 
       {/* ── きほんじょうほう ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="☆" title="きほんじょうほう" theme={themeColor} />
-        <ProfileLine label="なまえ" value={info.name} />
-        <ProfileLine label="ニックネーム" value={info.nickname} />
-        <ProfileLine label="たんじょうび" value={info.birthday} />
-        <ProfileLine label="けつえきがた" value={info.bloodType} />
-        <ProfileLine label="MBTI" value={info.mbti} />
-        <ProfileLine label="出身地" value={info.hometown} />
+        <ProfSectionHeader icon="☆" title={t('sec_basic', lang)} theme={themeColor} />
+        <ProfileLine label={t('field_name', lang)} value={info.name} />
+        <ProfileLine label={t('field_nickname', lang)} value={info.nickname} />
+        <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />
+        {t('show_bloodType', lang) === 'true' && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
+        <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
+        <ProfileLine label={t('field_hometown', lang)} value={info.hometown} />
       </section>
 
       {/* ── すきなもの ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="♡" title="すきなもの・きらいなもの" theme={themeColor} />
-        <ProfileLine label="好きな食べ物" value={info.favoriteFood} />
-        <ProfileLine label="きらいな食べ物" value={info.dislikeFood} />
-        <ProfileLine label="好きな色" value={info.favoriteColor} />
+        <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
+        <ProfileLine label={t('field_favoriteFood', lang)} value={info.favoriteFood} />
+        <ProfileLine label={t('field_dislikeFood', lang)} value={info.dislikeFood} />
+        <ProfileLine label={t('field_favoriteColor', lang)} value={info.favoriteColor} />
         {(lifeStageDef?.showSubjectFields ?? true) && (
           <>
-            <ProfileLine label="好きな教科" value={info.favoriteSubject} />
-            <ProfileLine label="苦手な教科" value={info.dislikeSubject} />
+            <ProfileLine label={t('field_favoriteSubject', lang)} value={info.favoriteSubject} />
+            <ProfileLine label={t('field_dislikeSubject', lang)} value={info.dislikeSubject} />
           </>
         )}
-        <ProfileLine label="好きなキャラ" value={info.favoriteCharacter} />
-        <ProfileLine label="好きな音楽" value={info.favoriteMusic} />
-        <ProfileLine label="好きなテレビ" value={info.favoriteTv} />
-        <ProfileLine label="好きな芸能人" value={info.favoriteArtist} />
-        <ProfileLine label="好きな漫画" value={info.favoriteManga} />
-        <ProfileLine label="好きなゲーム" value={info.favoriteGame} />
+        <ProfileLine label={t('field_favoriteCharacter', lang)} value={info.favoriteCharacter} />
+        <ProfileLine label={t('field_favoriteMusic', lang)} value={info.favoriteMusic} />
+        <ProfileLine label={t('field_favoriteTv', lang)} value={info.favoriteTv} />
+        <ProfileLine label={t('field_favoriteArtist', lang)} value={info.favoriteArtist} />
+        <ProfileLine label={t('field_favoriteManga', lang)} value={info.favoriteManga} />
+        <ProfileLine label={t('field_favoriteGame', lang)} value={info.favoriteGame} />
       </section>
 
       {/* ── わたしのこと ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="✿" title="わたしのこと" theme={themeColor} />
-        <ProfileLine label="趣味" value={info.hobby} />
-        <ProfileLine label="特技" value={info.specialty} />
-        <ProfileLine label="性格" value={info.personality} />
-        <ProfileLine label="口ぐせ" value={info.catchphrase} />
-        <ProfileLine label="チャームポイント" value={info.charmPoint} />
-        <ProfileLine label="将来のゆめ" value={info.dream} />
+        <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
+        <ProfileLine label={t('field_hobby', lang)} value={info.hobby} />
+        <ProfileLine label={t('field_specialty', lang)} value={info.specialty} />
+        <ProfileLine label={t('field_personality', lang)} value={info.personality} />
+        <ProfileLine label={t('field_catchphrase', lang)} value={info.catchphrase} />
+        <ProfileLine label={t('field_charmPoint', lang)} value={info.charmPoint} />
+        <ProfileLine label={t('field_dream', lang)} value={info.dream} />
       </section>
 
       {/* ── ライフステージ専用セクション ── */}
@@ -1620,12 +1655,14 @@ function OtherProfileScreen({
   answers,
   subscribedOfficials,
   onToggleSubscription,
+  lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
   profile: Profile;
   answers: Answer[];
   subscribedOfficials: string[];
   onToggleSubscription: (userId: string) => void;
+  lang?: Lang;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
   const [isFollowing, setIsFollowing] = useState(alreadyFollowing);
@@ -1697,6 +1734,7 @@ function OtherProfileScreen({
         userId={profile.id}
         themeColor={themeColor}
         onGoDetail={(id) => go('detail', id)}
+        lang={lang}
       />
 
       {/* ── プレミアムコンテンツ ── */}
@@ -1714,7 +1752,7 @@ function OtherProfileScreen({
               </div>
               <p className="text-xs font-bold text-white/80">{premium.description}</p>
               {!isSubscribed && (
-                <p className="mt-1 text-[10px] font-bold text-white/60">¥{premium.price.toLocaleString()} 買い切り · 一度購入すればずっと読めます</p>
+                <p className="mt-1 text-[10px] font-bold text-white/60">🪙 200コイン · 一度解除すればずっと読めます</p>
               )}
             </div>
 
@@ -1734,13 +1772,13 @@ function OtherProfileScreen({
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[3px]">
                   <span className="mb-2 text-4xl">🔒</span>
-                  <p className="mb-1 text-base font-black text-ink">¥{premium.price.toLocaleString()} で解除</p>
-                  <p className="mb-5 text-xs font-bold text-muted">買い切り · 一度購入すればずっと読めます</p>
+                  <p className="mb-1 text-base font-black text-ink">🪙 200コインで解除</p>
+                  <p className="mb-5 text-xs font-bold text-muted">一度解除すればずっと読めます</p>
                   <button
                     onClick={() => onToggleSubscription(profile.id)}
                     className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-8 py-3 text-sm font-black text-white shadow-floating active:scale-[0.98] transition"
                   >
-                    購入して続きを読む
+                    🪙 コインで解除する
                   </button>
                 </div>
               </div>
@@ -1782,6 +1820,7 @@ function ProfileScreen({
   avatarUrl,
   favoritePhotos,
   customFields,
+  lang = 'ja',
 }: {
   go: (s: Screen, answerId?: string) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -1790,6 +1829,7 @@ function ProfileScreen({
   avatarUrl: string;
   favoritePhotos: string[];
   customFields?: Record<string, string>;
+  lang?: Lang;
 }) {
   const [showShare, setShowShare] = useState(false);
   return (
@@ -1840,6 +1880,7 @@ function ProfileScreen({
         themeColor="pink"
         favoritePhotos={favoritePhotos}
         customFields={customFields}
+        lang={lang}
       />
 
       {showShare && (
@@ -1875,6 +1916,8 @@ function ProfileEditScreen({
   onSaveCustomFields,
   premiumContent,
   onSavePremiumContent,
+  lang,
+  onChangeLang,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -1893,6 +1936,8 @@ function ProfileEditScreen({
   onSaveCustomFields: (next: Record<string, string>) => void;
   premiumContent: PremiumSection;
   onSavePremiumContent: (next: PremiumSection) => void;
+  lang: Lang;
+  onChangeLang: (l: Lang) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
@@ -1949,6 +1994,25 @@ function ProfileEditScreen({
       <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
       <div className="space-y-4 px-4 pt-3 pb-32">
+
+        {/* ===== 言語設定 ===== */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">🌐 言語 / Language</p>
+          <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります</p>
+          <div className="grid grid-cols-2 gap-3">
+            {(['ja', 'en'] as Lang[]).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => onChangeLang(l)}
+                className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-black transition ${lang === l ? 'bg-pink/10 ring-2 ring-pink text-ink' : 'bg-base text-muted hover:bg-pink/5'}`}
+              >
+                <span>{l === 'ja' ? '🇯🇵' : '🇺🇸'}</span>
+                <span>{l === 'ja' ? '日本語' : 'English'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* ===== テーマカラー ===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -2999,7 +3063,7 @@ function DetailScreen({
   );
 }
 
-function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number }) {
+function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount, coins, lang }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number; coins: number; lang: Lang }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
@@ -3061,6 +3125,21 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
   </div>
 </section>
 
+        {/* コイン残高バナー */}
+        <button
+          onClick={() => go('wallet')}
+          className="flex items-center justify-between rounded-[24px] bg-gradient-to-r from-amber-400 to-orange-400 px-5 py-4 shadow-card transition active:scale-[0.98]"
+        >
+          <div className="text-left">
+            <p className="text-[10px] font-black text-white/80">{t('coins_wallet', lang)}</p>
+            <p className="text-2xl font-black text-white">🪙 {coins.toLocaleString()}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-black text-white/90">{t('coins_earn', lang)} →</p>
+            <p className="text-[10px] font-bold text-white/70">履歴・使い道を見る</p>
+          </div>
+        </button>
+
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={onGoBookmarks}
@@ -3095,7 +3174,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
 
 function ProfileLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-end gap-3 border-b border-dashed border-purple/25 py-2">
+    <div className="flex items-center gap-3 border-b border-dashed border-purple/25 py-2">
       <div className="w-28 shrink-0 text-sm font-black text-ink">
         ♡ {label}
       </div>
@@ -4145,6 +4224,95 @@ function EmptyState({ text }: { text: string }) {
   return <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">{text}</div>;
 }
 
+// ── コインウォレット画面 ────────────────────────────────────────
+function WalletScreen({ go, coins }: { go: (s: Screen) => void; coins: number }) {
+  const history: Array<{ amount: number; reason: string; date: string }> =
+    typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('miri_coin_history') || '[]')
+      : [];
+
+  const earnMethods = [
+    { icon: '🌅', label: 'デイリーログイン', reward: '+3', desc: '毎日ログインするだけ' },
+    { icon: '✍', label: 'お題に回答', reward: '+5', desc: '回答を投稿するたびに' },
+    { icon: '💼', label: 'PR案件に回答', reward: '+15〜20', desc: '毎日ホームに1問掲載' },
+    { icon: '🔥', label: '7日連続ログイン', reward: '+20', desc: 'ストリークボーナス' },
+    { icon: '👋', label: '友達を招待', reward: '+50', desc: '近日実装予定' },
+  ];
+
+  return (
+    <>
+      <AppHeader title="🪙 コインウォレット" back onBack={() => go('mypage')} />
+      <div className="space-y-4 px-4 pt-3 pb-32">
+        {/* 残高 */}
+        <section className="rounded-[32px] bg-gradient-to-br from-amber-400 to-orange-400 p-6 shadow-card text-white text-center">
+          <p className="text-sm font-black opacity-80">コイン残高</p>
+          <p className="mt-1 text-5xl font-black">🪙 {coins.toLocaleString()}</p>
+          <p className="mt-2 text-xs font-bold opacity-70">コインを使ってプレミアムコンテンツやシールをゲット！</p>
+        </section>
+
+        {/* 使い道 */}
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <p className="mb-3 text-sm font-black text-ink">💎 コインの使い道</p>
+          <div className="space-y-2">
+            {[
+              { icon: '🔒', label: 'プレミアムプロフィール解除', cost: '200' },
+              { icon: '🎰', label: 'シールガチャ（1回）', cost: '30〜50' },
+              { icon: '🎨', label: 'テーマスキン', cost: '80〜120' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between rounded-2xl bg-base px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span>{item.icon}</span>
+                  <span className="text-sm font-bold text-ink">{item.label}</span>
+                </div>
+                <span className="text-sm font-black text-amber-500">🪙 {item.cost}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 稼ぎ方 */}
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <p className="mb-3 text-sm font-black text-ink">🪙 コインの稼ぎ方</p>
+          <div className="space-y-2">
+            {earnMethods.map((m) => (
+              <div key={m.label} className="flex items-center justify-between rounded-2xl bg-base px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{m.icon}</span>
+                  <div>
+                    <p className="text-sm font-black text-ink">{m.label}</p>
+                    <p className="text-[10px] font-bold text-muted">{m.desc}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-green-500">{m.reward}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 履歴 */}
+        {history.length > 0 && (
+          <section className="rounded-[28px] bg-white p-5 shadow-card">
+            <p className="mb-3 text-sm font-black text-ink">📋 履歴</p>
+            <div className="space-y-2">
+              {history.slice(0, 20).map((item, i) => (
+                <div key={i} className="flex items-center justify-between border-b border-dashed border-purple/15 py-2 last:border-0">
+                  <div>
+                    <p className="text-sm font-bold text-ink">{item.reason}</p>
+                    <p className="text-[10px] font-bold text-muted">{new Date(item.date).toLocaleDateString('ja-JP')}</p>
+                  </div>
+                  <span className={`text-sm font-black ${item.amount > 0 ? 'text-green-500' : 'text-red-400'}`}>
+                    {item.amount > 0 ? '+' : ''}{item.amount}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── オンボーディング画面 ────────────────────────────────────────
 function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const steps = [
@@ -4433,12 +4601,27 @@ const [circlePosts, setCirclePosts] = useState<CirclePost[]>(() => {
 });
 const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
+  // ── 言語設定 ──────────────────────────────────────────────
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof window === 'undefined') return 'ja';
+    return (localStorage.getItem('miri_lang') as Lang) || 'ja';
+  });
+
+  function changeLang(l: Lang) {
+    setLang(l);
+    localStorage.setItem('miri_lang', l);
+  }
+
   // ── スタンプ・ガチャ ──────────────────────────────────────
   const [coins, setCoins] = useState<number>(() => {
     if (typeof window === 'undefined') return 500;
     const s = localStorage.getItem('miri_coins');
     return s ? Number(s) : 500;
   });
+
+  // ── PR案件 ────────────────────────────────────────────────
+  const [prQuestion] = useState<PRQuestion>(() => getTodaysPRQuestion());
+  const [hasAnsweredPR, setHasAnsweredPR] = useState<boolean>(() => hasAnsweredPRToday());
   const [ownedPackIds, setOwnedPackIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
     const s = localStorage.getItem('miri_owned_packs');
@@ -4467,13 +4650,45 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     });
   }
 
-  function spendCoins(amount: number) {
+  function addCoins(amount: number, reason = '') {
     setCoins((prev) => {
-      const next = Math.max(0, prev - amount);
+      const next = prev + amount;
       localStorage.setItem('miri_coins', String(next));
+      if (reason) {
+        const history = JSON.parse(localStorage.getItem('miri_coin_history') || '[]');
+        history.unshift({ amount, reason, date: new Date().toISOString() });
+        localStorage.setItem('miri_coin_history', JSON.stringify(history.slice(0, 100)));
+      }
       return next;
     });
   }
+
+  function spendCoins(amount: number): boolean {
+    if (coins < amount) return false;
+    setCoins((prev) => {
+      const next = prev - amount;
+      localStorage.setItem('miri_coins', String(next));
+      return next;
+    });
+    return true;
+  }
+
+  // デイリーログインボーナス
+  useEffect(() => {
+    const today = new Date().toDateString();
+    const last = localStorage.getItem('miri_daily_login');
+    if (last === today) return;
+    localStorage.setItem('miri_daily_login', today);
+    const streak = parseInt(localStorage.getItem('miri_streak') || '0') + 1;
+    localStorage.setItem('miri_streak', String(streak));
+    const bonus = streak >= 7 ? 20 : 0;
+    const total = 3 + bonus;
+    addCoins(total, streak >= 7 ? `7日連続ログイン（${streak}日目）` : 'デイリーログイン');
+    setTimeout(() => {
+      showToast(`🪙 +${total} デイリーログインボーナス！${streak >= 7 ? `（${streak}日連続！）` : ''}`);
+    }, 800);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ownedStickerCount = useMemo(() =>
     STICKER_PACKS.reduce((total, pack) => {
@@ -4491,12 +4706,18 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   });
 
   function toggleSubscription(userId: string) {
+    if (subscribedOfficials.includes(userId)) return; // 解除不可
+    const ok = spendCoins(200);
+    if (!ok) {
+      showToast('🪙 コインが足りません（200枚必要）');
+      return;
+    }
     setSubscribedOfficials((prev) => {
-      const next = prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId];
+      const next = [...prev, userId];
       localStorage.setItem('miri_subscribed_officials', JSON.stringify(next));
-      showToast(prev.includes(userId) ? '購入を取り消しました' : '✨ 購入しました！プレミアムコンテンツが解放されました');
       return next;
     });
+    showToast('✨ プレミアムコンテンツが解放されました！');
   }
 
   // ── 自分のプレミアムコンテンツ（公認ユーザー用） ─────────────
@@ -4692,6 +4913,19 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   };
 
   setAnswers((prev) => [newAnswer, ...prev]);
+
+  // PR案件への回答かチェック
+  if (draft.questionId.startsWith('pr-')) {
+    const reward = prQuestion.id === draft.questionId ? prQuestion.reward : 15;
+    addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
+    markPRAnswered();
+    setHasAnsweredPR(true);
+    showToast(`🪙 +${reward} PR案件ボーナス獲得！`);
+  } else {
+    addCoins(5, 'お題に回答');
+    showToast('🪙 +5 回答ボーナス！');
+  }
+
   return id;
 }
 
@@ -4798,6 +5032,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onSaveCustomFields={updateProfileCustomFields}
       premiumContent={premiumContent}
       onSavePremiumContent={updatePremiumContent}
+      lang={lang}
+      onChangeLang={changeLang}
     />
   );
 
@@ -4809,6 +5045,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     />
   );
     
+    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} />;
     if (screen === 'circles') return <CirclesScreen go={go} circles={circles} circlePosts={circlePosts} />;
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
@@ -4838,6 +5075,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       circlePosts={circlePosts}
       dailyQuestion={dailyQuestion}
       hasAnsweredToday={dailyRecord !== null}
+      prQuestion={prQuestion}
+      hasAnsweredPR={hasAnsweredPR}
     />
   );
     if (screen === 'diary-list') return <DiaryListScreen go={go} diaryPages={diaryPages} />;
@@ -4870,7 +5109,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'profile') {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} lang={lang} />;
       }
       return <ProfileScreen
         go={go}
@@ -4880,6 +5119,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         avatarUrl={avatarUrl}
         favoritePhotos={favoritePhotos}
         customFields={profileCustomFields}
+        lang={lang}
       />;
     }
     if (screen === 'onboarding') return <OnboardingScreen onDone={completeOnboarding} />;
@@ -4898,7 +5138,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
     if (screen === 'notifications') return <NotificationsScreen go={go} />;
     if (screen === 'followers') return <FollowersScreen go={go} />;
-    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} />;
+    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} />;
     if (screen === 'shop') return (
       <ShopScreen
         go={go}
@@ -4944,7 +5184,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount}>{current}</DesktopShell>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );
