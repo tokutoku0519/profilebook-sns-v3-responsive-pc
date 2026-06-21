@@ -2590,6 +2590,7 @@ function ProfileShareModal({
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [imageGenerated, setImageGenerated] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const qrIncludedRef = useRef(false);
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://miri-delta.vercel.app';
 
   // canvas は tab='image' になった後レンダリングされるので useEffect で生成する
@@ -2610,6 +2611,14 @@ function ProfileShareModal({
       }).then(setQrDataUrl);
     });
   }, [shareUrl]);
+
+  // QR生成が画像タブより遅れた場合に再描画
+  useEffect(() => {
+    if (qrDataUrl && !qrIncludedRef.current && tab === 'image') {
+      handleGenerateImage();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrDataUrl]);
 
   function drawCard(imgEl?: HTMLImageElement, qrEl?: HTMLImageElement) {
     const canvas = canvasRef.current;
@@ -2714,21 +2723,21 @@ function ProfileShareModal({
 
     // デコライン（下部）
     ctx.fillStyle = '#ffb3d1';
-    ctx.fillRect(140, H - 210, W - 280, 5);
+    ctx.fillRect(140, qrEl ? H - 270 : H - 210, W - 280, 5);
 
     // QRコード（右下）
     if (qrEl) {
-      const qrSize = 110;
-      const qrX = W - 75 - qrSize;
-      const qrY = H - 198;
+      const qrSize = 160;
+      const qrX = W - 90 - qrSize;
+      const qrY = H - 258;
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      canvasRoundRect(ctx, qrX - 6, qrY - 6, qrSize + 12, qrSize + 16, 14);
+      canvasRoundRect(ctx, qrX - 10, qrY - 10, qrSize + 20, qrSize + 38, 18);
       ctx.fill();
       ctx.drawImage(qrEl, qrX, qrY, qrSize, qrSize);
-      ctx.font = '22px sans-serif';
+      ctx.font = '28px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#bbb';
-      ctx.fillText('開く', qrX + qrSize / 2, qrY + qrSize + 22);
+      ctx.fillStyle = '#aaa';
+      ctx.fillText('QRで開く', qrX + qrSize / 2, qrY + qrSize + 26);
     }
 
     // ブランディング
@@ -2737,6 +2746,7 @@ function ProfileShareModal({
     ctx.fillStyle = '#ff6b9d';
     ctx.fillText('✿ Miri', qrEl ? 140 : W / 2, H - 120);
 
+    qrIncludedRef.current = !!qrEl;
     setImageGenerated(true);
   }
 
@@ -2757,7 +2767,9 @@ function ProfileShareModal({
 
     if (avatarUrl) {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => loadQr(img);
+      img.onerror = () => loadQr();
       img.src = avatarUrl;
     } else {
       loadQr();
@@ -2767,10 +2779,21 @@ function ProfileShareModal({
   function handleDownload() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const a = document.createElement('a');
-    a.download = `miri-profile-${userId}.png`;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const file = new File([blob], `miri-profile-${userId}.png`, { type: 'image/png' });
+      if (isIOS && navigator.share && (navigator as { canShare?: (d: object) => boolean }).canShare?.({ files: [file] })) {
+        navigator.share({ files: [file], title: 'Miriプロフィール画像' }).catch(() => {});
+      } else {
+        const a = document.createElement('a');
+        a.download = `miri-profile-${userId}.png`;
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    });
   }
 
   function handleShare(withImage = false) {
