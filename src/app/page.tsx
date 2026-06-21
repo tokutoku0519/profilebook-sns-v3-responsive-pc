@@ -9,7 +9,7 @@ import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, Re
 import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
-import { t, type Lang } from '@/lib/i18n';
+import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
@@ -1998,17 +1998,17 @@ function ProfileEditScreen({
         {/* ===== 言語設定 ===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">🌐 言語 / Language</p>
-          <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります</p>
-          <div className="grid grid-cols-2 gap-3">
-            {(['ja', 'en'] as Lang[]).map((l) => (
+          <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります（20言語対応）</p>
+          <div className="grid grid-cols-4 gap-2">
+            {LANG_LIST.map((l) => (
               <button
-                key={l}
+                key={l.id}
                 type="button"
-                onClick={() => onChangeLang(l)}
-                className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-black transition ${lang === l ? 'bg-pink/10 ring-2 ring-pink text-ink' : 'bg-base text-muted hover:bg-pink/5'}`}
+                onClick={() => onChangeLang(l.id)}
+                className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 px-1 text-center transition ${lang === l.id ? 'bg-pink/10 ring-2 ring-pink' : 'bg-base hover:bg-pink/5'}`}
               >
-                <span>{l === 'ja' ? '🇯🇵' : '🇺🇸'}</span>
-                <span>{l === 'ja' ? '日本語' : 'English'}</span>
+                <span className="text-xl">{l.flag}</span>
+                <span className={`text-[9px] font-black leading-tight ${lang === l.id ? 'text-pink' : 'text-muted'}`}>{l.name}</span>
               </button>
             ))}
           </div>
