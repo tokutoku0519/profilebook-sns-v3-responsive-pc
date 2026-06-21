@@ -623,8 +623,8 @@ function tabFromScreen(screen: Screen): TabKey {
 
 function Phone({ children, active, go }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void }) {
   return (
-    <main className="relative mx-auto h-[844px] w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-w-none lg:rounded-[32px]">
-      <div className="h-full overflow-y-auto pb-28 lg:pb-8">{children}</div>
+    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-w-none lg:rounded-[32px]">
+      <div className="h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
       <div className="lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} /></div>
     </main>
   );
@@ -1449,7 +1449,7 @@ function ProfileBookContent({
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
 
   return (
-    <div className="space-y-4 px-4 pt-3 pb-28">
+    <div className="space-y-4 px-4 pt-3 pb-32">
 
       {/* ── 表紙カード ── */}
       <section className={`relative overflow-hidden rounded-[32px] border border-purple/10 bg-gradient-to-br ${grad} p-5 shadow-card`}>
@@ -1948,7 +1948,7 @@ function ProfileEditScreen({
     <>
       <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
 
         {/* ===== テーマカラー ===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -2747,7 +2747,7 @@ function OfficialQuestionCreateScreen({
   return (
     <>
       <AppHeader title="お題を作成" back onBack={() => go('profile')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <div className="mb-2 flex items-center gap-2">
             <OfficialBadge />
@@ -3167,7 +3167,7 @@ function DiaryListScreen({
   return (
     <>
       <AppHeader title="交換日記" back onBack={() => go('home')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
         <button
           onClick={() => go('diary-create')}
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]"
@@ -3493,7 +3493,7 @@ function DiaryCreateScreen({
   return (
     <>
       <AppHeader title="日記を作る" back onBack={() => go('diary-list')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
 
         {/* テーマ・説明 */}
         <section className="space-y-4 rounded-[32px] bg-white p-5 shadow-card">
@@ -3630,7 +3630,7 @@ function CirclesScreen({
   return (
     <>
       <AppHeader title="サークル" back onBack={() => go('home')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
         <button onClick={() => go('circle-create')}
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
           🔒 新しいサークルを作る
@@ -3684,7 +3684,7 @@ function CircleDetailScreen({
   return (
     <>
       <AppHeader title={`${circle.emoji} ${circle.name}`} back onBack={() => go('circles')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[24px] bg-white p-4 shadow-card">
           <p className="mb-3 text-xs font-black text-muted">メンバー {members.length + 1}人</p>
           <div className="flex flex-wrap gap-3">
@@ -3771,7 +3771,7 @@ function CircleCreateScreen({
   return (
     <>
       <AppHeader title="サークルを作る" back onBack={() => go('circles')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-2 font-black text-ink">サークル名</p>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={20}
@@ -4224,7 +4224,7 @@ function DailyQuestionScreen({
   return (
     <>
       <AppHeader title="今日のお題" back onBack={() => go('home')} onBell={() => go('notifications')} />
-      <div className="space-y-4 px-4 pt-3 pb-28">
+      <div className="space-y-4 px-4 pt-3 pb-32">
 
         {/* 問題カード */}
         <section className="overflow-hidden rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/15 via-white to-purple/15 p-5 shadow-card">
@@ -4329,7 +4329,7 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
   return (
     <>
       <AppHeader title="ブックマーク" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
-      <div className="space-y-3 px-4 pt-3 pb-28">
+      <div className="space-y-3 px-4 pt-3 pb-32">
         {saved.length === 0 ? (
           <div className="mt-10 flex flex-col items-center gap-4 text-center">
             <span className="text-5xl">🔖</span>

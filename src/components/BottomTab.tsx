@@ -12,7 +12,7 @@ const items: { key: TabKey; label: string; icon: any; center?: boolean }[] = [
 
 export function BottomTab({ active, onChange }: { active: TabKey; onChange: (key: TabKey) => void }) {
   return (
-    <nav className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border border-purple-100 bg-white/95 px-4 pb-5 pt-2 shadow-floating backdrop-blur">
+    <nav className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border border-purple-100 bg-white/95 px-4 pt-2 shadow-floating backdrop-blur" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
       <div className="grid grid-cols-5 items-end gap-1">
         {items.map((item) => {
           const Icon = item.icon;
