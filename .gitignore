@@ -27,3 +27,5 @@ npm-debug.log*
 
 # Claude
 .claude/
+node_modules/
+.next/
