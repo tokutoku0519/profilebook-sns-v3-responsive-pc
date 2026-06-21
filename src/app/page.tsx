@@ -1729,7 +1729,7 @@ function OtherProfileScreen({
   const questions = book?.questions ?? [];
   const themeColor = book?.themeColor ?? 'pink';
   const premium = book?.premium;
-  const isSubscribed = subscribedOfficials.includes(profile.id);
+  const isSubscribed = subscribedOfficials.includes(profile.id) || (me.isOfficial && book?.isOfficial === true);
 
   return (
     <>
@@ -1963,6 +1963,8 @@ function ProfileEditScreen({
   onSavePremiumContent,
   lang,
   onChangeLang,
+  notifyOdai,
+  onToggleNotifyOdai,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -1983,6 +1985,8 @@ function ProfileEditScreen({
   onSavePremiumContent: (next: PremiumSection) => void;
   lang: Lang;
   onChangeLang: (l: Lang) => void;
+  notifyOdai: boolean;
+  onToggleNotifyOdai: (val: boolean) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
@@ -2485,6 +2489,27 @@ function ProfileEditScreen({
           </section>
         )}
 
+        {/* ── 通知設定 ── */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">🔔 通知設定</p>
+          <p className="mb-4 text-xs font-bold text-muted">ブラウザ通知の許可が必要です</p>
+          <label className="flex cursor-pointer items-center justify-between rounded-2xl bg-base px-4 py-3.5">
+            <div>
+              <p className="text-sm font-black text-ink">今日のお題を通知</p>
+              <p className="text-xs font-bold text-muted">毎日お題が届いたら即お知らせ</p>
+            </div>
+            <div
+              onClick={() => onToggleNotifyOdai(!notifyOdai)}
+              className={`relative h-7 w-12 rounded-full transition-colors ${notifyOdai ? 'bg-pink' : 'bg-zinc-200'}`}
+            >
+              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${notifyOdai ? 'translate-x-6' : 'translate-x-1'}`} />
+            </div>
+          </label>
+          {notifyOdai && (
+            <p className="mt-2 text-center text-[11px] font-bold text-pink">✓ 通知オン — 毎日のお題をお知らせします</p>
+          )}
+        </section>
+
         {/* ── シェア ── */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
@@ -2586,7 +2611,7 @@ function ProfileShareModal({
     });
   }, [shareUrl]);
 
-  function drawCard(imgEl?: HTMLImageElement) {
+  function drawCard(imgEl?: HTMLImageElement, qrEl?: HTMLImageElement) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -2689,25 +2714,53 @@ function ProfileShareModal({
 
     // デコライン（下部）
     ctx.fillStyle = '#ffb3d1';
-    ctx.fillRect(140, H - 200, W - 280, 6);
+    ctx.fillRect(140, H - 210, W - 280, 5);
+
+    // QRコード（右下）
+    if (qrEl) {
+      const qrSize = 110;
+      const qrX = W - 75 - qrSize;
+      const qrY = H - 198;
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      canvasRoundRect(ctx, qrX - 6, qrY - 6, qrSize + 12, qrSize + 16, 14);
+      ctx.fill();
+      ctx.drawImage(qrEl, qrX, qrY, qrSize, qrSize);
+      ctx.font = '22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#bbb';
+      ctx.fillText('開く', qrX + qrSize / 2, qrY + qrSize + 22);
+    }
 
     // ブランディング
     ctx.font = 'bold 52px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.textAlign = qrEl ? 'left' : 'center';
     ctx.fillStyle = '#ff6b9d';
-    ctx.fillText('✿ Miri', W / 2, H - 110);
+    ctx.fillText('✿ Miri', qrEl ? 140 : W / 2, H - 120);
 
     setImageGenerated(true);
   }
 
   function handleGenerateImage() {
     setImageGenerated(false);
+    const doDraw = (avatarImg?: HTMLImageElement, qrImg?: HTMLImageElement) =>
+      drawCard(avatarImg, qrImg);
+
+    const loadQr = (avatarImg?: HTMLImageElement) => {
+      if (qrDataUrl) {
+        const qrImg = new Image();
+        qrImg.onload = () => doDraw(avatarImg, qrImg);
+        qrImg.src = qrDataUrl;
+      } else {
+        doDraw(avatarImg);
+      }
+    };
+
     if (avatarUrl) {
       const img = new Image();
-      img.onload = () => drawCard(img);
+      img.onload = () => loadQr(img);
       img.src = avatarUrl;
     } else {
-      drawCard();
+      loadQr();
     }
   }
 
@@ -4273,7 +4326,14 @@ function EmptyState({ text }: { text: string }) {
 }
 
 // ── コインウォレット画面 ────────────────────────────────────────
-function WalletScreen({ go, coins }: { go: (s: Screen) => void; coins: number }) {
+const COIN_PACKAGES = [
+  { coins: 100,  price: 120,  bonus: 0,   popular: false },
+  { coins: 500,  price: 480,  bonus: 50,  popular: true  },
+  { coins: 1000, price: 980,  bonus: 200, popular: false },
+  { coins: 3000, price: 2800, bonus: 800, popular: false },
+];
+
+function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void; coins: number; onPurchaseCoins: (amount: number) => void }) {
   const history: Array<{ amount: number; reason: string; date: string }> =
     typeof window !== 'undefined'
       ? JSON.parse(localStorage.getItem('miri_coin_history') || '[]')
@@ -4296,6 +4356,33 @@ function WalletScreen({ go, coins }: { go: (s: Screen) => void; coins: number })
           <p className="text-sm font-black opacity-80">コイン残高</p>
           <p className="mt-1 text-5xl font-black">🪙 {coins.toLocaleString()}</p>
           <p className="mt-2 text-xs font-bold opacity-70">コインを使ってプレミアムコンテンツやシールをゲット！</p>
+        </section>
+
+        {/* コイン購入 */}
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-sm font-black text-ink">💳 コインを購入する</p>
+          <p className="mb-4 text-xs font-bold text-muted">※ 現在はテスト購入（実際の決済は発生しません）</p>
+          <div className="space-y-2">
+            {COIN_PACKAGES.map((pkg) => (
+              <button
+                key={pkg.coins}
+                onClick={() => onPurchaseCoins(pkg.coins + pkg.bonus)}
+                className={`flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition active:scale-[0.98] ${pkg.popular ? 'bg-gradient-to-r from-amber-400 to-orange-400 shadow-card' : 'bg-base hover:bg-amber-50'}`}
+              >
+                <div className="flex items-center gap-2 text-left">
+                  <span className="text-xl">🪙</span>
+                  <div>
+                    <p className={`text-sm font-black ${pkg.popular ? 'text-white' : 'text-ink'}`}>
+                      {pkg.coins.toLocaleString()}コイン
+                      {pkg.bonus > 0 && <span className={`ml-1.5 text-[10px] ${pkg.popular ? 'text-white/80' : 'text-green-500'}`}>+{pkg.bonus}ボーナス</span>}
+                    </p>
+                    {pkg.popular && <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-black text-white">人気 No.1</span>}
+                  </div>
+                </div>
+                <span className={`text-base font-black ${pkg.popular ? 'text-white' : 'text-amber-500'}`}>¥{pkg.price.toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
         {/* 使い道 */}
@@ -4747,6 +4834,43 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     return true;
   }
 
+  // ── 通知設定 ────────────────────────────────────────────────
+  const [notifyOdai, setNotifyOdai] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('miri_notify_odai') === 'true';
+  });
+
+  function toggleNotifyOdai(val: boolean) {
+    if (val) {
+      if (typeof Notification === 'undefined' || Notification.permission === 'denied') {
+        showToast('通知がブロックされています。ブラウザの設定から許可してください。');
+        return;
+      }
+      Notification.requestPermission().then((perm) => {
+        const granted = perm === 'granted';
+        setNotifyOdai(granted);
+        localStorage.setItem('miri_notify_odai', String(granted));
+        if (!granted) showToast('通知の許可が必要です。ブラウザ設定で許可してください。');
+        else showToast('🔔 お題通知をオンにしました');
+      });
+    } else {
+      setNotifyOdai(false);
+      localStorage.setItem('miri_notify_odai', 'false');
+    }
+  }
+
+  // お題変更時に通知
+  useEffect(() => {
+    if (!notifyOdai) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+    const today = new Date().toDateString();
+    if (localStorage.getItem('miri_last_notified_odai') === today) return;
+    new Notification('✿ Miri — 今日のお題', { body: dailyQuestion.title, tag: 'miri-daily' });
+    localStorage.setItem('miri_last_notified_odai', today);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifyOdai, dailyQuestion]);
+
   // デイリーログインボーナス
   useEffect(() => {
     const today = new Date().toDateString();
@@ -5108,6 +5232,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onSavePremiumContent={updatePremiumContent}
       lang={lang}
       onChangeLang={changeLang}
+      notifyOdai={notifyOdai}
+      onToggleNotifyOdai={toggleNotifyOdai}
     />
   );
 
@@ -5119,7 +5245,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     />
   );
     
-    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} />;
+    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} onPurchaseCoins={(amount) => addCoins(amount, 'コイン購入')} />;
     if (screen === 'circles') return <CirclesScreen go={go} circles={circles} circlePosts={circlePosts} />;
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
