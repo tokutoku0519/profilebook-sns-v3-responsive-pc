@@ -827,9 +827,8 @@ function HomeScreen({
         </section>
         {/* ── PR案件 ── */}
         <section>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center mb-3">
             <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">コインが稼げる</span>
           </div>
           <button
             onClick={() => !hasAnsweredPR && go('create', { ...prQuestion, id: prQuestion.id, category: 'PR', title: prQuestion.question })}
