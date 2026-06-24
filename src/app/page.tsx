@@ -629,7 +629,7 @@ function tabFromScreen(screen: Screen): TabKey {
 
 function Phone({ children, active, go, lang }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang }) {
   return (
-    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-w-none lg:rounded-[32px]">
+    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-h-none lg:max-w-none lg:rounded-[32px]">
       <div className="h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
       <div className="lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} /></div>
     </main>
