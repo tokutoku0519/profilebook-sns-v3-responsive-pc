@@ -6,7 +6,8 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
-import { answers as initialAnswers, profiles, questions } from '@/lib/mock';
+import { initialAnswers, profiles, questions } from '@/lib/data';
+import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
@@ -576,13 +577,13 @@ const initialDiaryPages: DiaryPage[] = [
   },
 ];
 
-const initialCircles: Circle[] = [
+const initialCircles: Circle[] = isDev ? [
   { id: 'circle-1', name: 'ダンスサークル', emoji: '🕺', memberIds: ['@koki', '@mayu_note', '@nana_7', '@akari_28'], createdBy: '@koki' },
   { id: 'circle-2', name: '写真好き集まれ', emoji: '📸', memberIds: ['@koki', '@rin_puri', '@haru_cafe'], createdBy: '@rin_puri' },
   { id: 'circle-3', name: '深夜散歩部', emoji: '🌙', memberIds: ['@koki', '@haru_cafe', '@yui_book', '@rin_puri'], createdBy: '@koki' },
-];
+] : [];
 
-const initialCirclePosts: CirclePost[] = [
+const initialCirclePosts: CirclePost[] = isDev ? [
   {
     id: 'cp-1', circleId: 'circle-1',
     body: '最近の練習でいちばん苦戦したところは？',
@@ -615,7 +616,7 @@ const initialCirclePosts: CirclePost[] = [
       { userId: '@yui_book', userName: 'ゆい', userAvatar: '📚', body: '住宅街をランダムに歩くのが好き、迷子になっても楽しい', postedAt: '2024-04-14T00:10:00Z' },
     ],
   },
-];
+] : [];
 
 function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'search') return 'search';
