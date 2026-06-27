@@ -4472,12 +4472,13 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
 }
 
 // ── 認証画面（production のみ表示）──────────────────────────────
-function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
+function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -4487,18 +4488,31 @@ function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
     if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
 
     if (mode === 'signup') {
-      const { error: err } = await supabase.auth.signUp({ email, password });
+      const { data, error: err } = await supabase.auth.signUp({ email, password });
       if (err) { setError(err.message); setLoading(false); return; }
+      if (data.session) {
+        // メール確認不要の場合はそのままアプリへ（onAuthStateChange が検知）
+        setDone(true);
+      } else {
+        setError('確認メールを送信しました。メールのリンクをクリックしてください。');
+      }
     } else {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+      // onAuthStateChange が自動で authed = true にする
     }
     setLoading(false);
-    onAuthed();
   }
 
+  // onAuthStateChange 経由で authed が true になるのを待つ間の表示
+  if (done) return (
+    <div className="flex min-h-screen items-center justify-center bg-base">
+      <span className="text-3xl animate-pulse">🎀</span>
+    </div>
+  );
+
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-base px-6 gap-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 gap-8">
       <div className="flex flex-col items-center gap-3">
         <img src="/icon.png" alt="Miri" className="h-20 w-20 rounded-[24px] shadow-card" />
         <p className="text-2xl font-black text-ink">Miri</p>
