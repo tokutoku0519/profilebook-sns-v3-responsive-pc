@@ -4471,6 +4471,82 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
   );
 }
 
+// ── 認証画面（production のみ表示）──────────────────────────────
+function AuthScreen({ onAuthed }: { onAuthed: () => void }) {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { supabase } = await import('@/lib/supabase');
+    if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
+
+    if (mode === 'signup') {
+      const { error: err } = await supabase.auth.signUp({ email, password });
+      if (err) { setError(err.message); setLoading(false); return; }
+    } else {
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+    }
+    setLoading(false);
+    onAuthed();
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center bg-base px-6 gap-8">
+      <div className="flex flex-col items-center gap-3">
+        <img src="/icon.png" alt="Miri" className="h-20 w-20 rounded-[24px] shadow-card" />
+        <p className="text-2xl font-black text-ink">Miri</p>
+        <p className="text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
+      </div>
+
+      <div className="w-full max-w-sm rounded-[32px] bg-white p-8 shadow-card">
+        <p className="mb-6 text-center text-lg font-black text-ink">
+          {mode === 'login' ? 'ログイン' : 'アカウント作成'}
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <input
+            type="email"
+            placeholder="メールアドレス"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+          />
+          <input
+            type="password"
+            placeholder="パスワード（6文字以上）"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+          />
+          {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
+          >
+            {loading ? '...' : mode === 'login' ? 'ログイン' : '登録する'}
+          </button>
+        </form>
+        <button
+          onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setError(''); }}
+          className="mt-4 w-full text-center text-xs font-bold text-muted"
+        >
+          {mode === 'login' ? 'アカウントを作成する →' : '← ログインに戻る'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── オンボーディング画面 ────────────────────────────────────────
 function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const steps = [
@@ -4674,6 +4750,36 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
+  // production のみ Supabase 認証を要求
+  const [authed, setAuthed] = useState<boolean>(() => isDev);
+  const [authChecked, setAuthChecked] = useState(isDev);
+
+  useEffect(() => {
+    if (isDev) return;
+    import('@/lib/supabase').then(({ supabase }) => {
+      if (!supabase) { setAuthed(false); setAuthChecked(true); return; }
+      supabase.auth.getSession().then(({ data }) => {
+        setAuthed(!!data.session);
+        setAuthChecked(true);
+      });
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+        setAuthed(!!session);
+      });
+      return () => subscription.unsubscribe();
+    });
+  }, []);
+
+  if (!authChecked) {
+    return <div className="flex h-full items-center justify-center bg-base"><span className="text-3xl">🎀</span></div>;
+  }
+  if (!authed) {
+    return <AuthScreen onAuthed={() => setAuthed(true)} />;
+  }
+
+  return <AppContent />;
+}
+
+function AppContent() {
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window === 'undefined') return 'ja';
     return (localStorage.getItem('miri_lang') as Lang) || 'ja';
@@ -4717,7 +4823,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     if (typeof window === 'undefined') return 'home';
     return localStorage.getItem('miri_onboarded') ? 'home' : 'onboarding';
   });
-  const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0].id);
+  const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0]?.id ?? '');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
