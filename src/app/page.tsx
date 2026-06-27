@@ -1,6 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: any) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, fontFamily: 'monospace', fontSize: 13 }}>
+          <p style={{ fontWeight: 'bold', color: '#e11d48', marginBottom: 8 }}>クラッシュエラー（開発用）</p>
+          <pre style={{ background: '#fef2f2', padding: 12, borderRadius: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            {this.state.error.message}{'\n'}{this.state.error.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { ArrowLeft, Bell, Bookmark, Home, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
@@ -4790,7 +4808,7 @@ export default function Page() {
     return <AuthScreen onAuthed={() => setAuthed(true)} />;
   }
 
-  return <AppContent />;
+  return <ErrorBoundary><AppContent /></ErrorBoundary>;
 }
 
 function AppContent() {
