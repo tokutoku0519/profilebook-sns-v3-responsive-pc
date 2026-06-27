@@ -4785,6 +4785,15 @@ export default function Page() {
   // production のみ Supabase 認証を要求
   const [authed, setAuthed] = useState<boolean>(() => isDev);
   const [authChecked, setAuthChecked] = useState(isDev);
+  const [fatalError, setFatalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const h = (e: ErrorEvent) => setFatalError(`${e.message}\n${e.filename}:${e.lineno}:${e.colno}`);
+    const p = (e: PromiseRejectionEvent) => setFatalError(String(e.reason));
+    window.addEventListener('error', h);
+    window.addEventListener('unhandledrejection', p);
+    return () => { window.removeEventListener('error', h); window.removeEventListener('unhandledrejection', p); };
+  }, []);
 
   useEffect(() => {
     if (isDev) return;
@@ -4807,6 +4816,12 @@ export default function Page() {
   if (!authed) {
     return <AuthScreen onAuthed={() => setAuthed(true)} />;
   }
+
+  if (fatalError) return (
+    <div style={{ padding: 24, fontFamily: 'monospace', fontSize: 12, background: '#fef2f2', minHeight: '100vh', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+      <b style={{ color: '#e11d48' }}>クラッシュエラー（開発用）</b>{'\n\n'}{fatalError}
+    </div>
+  );
 
   return <ErrorBoundary><AppContent /></ErrorBoundary>;
 }
