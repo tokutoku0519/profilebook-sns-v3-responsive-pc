@@ -4904,14 +4904,18 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   const [profileBookInfo, setProfileBookInfo] = useState(() => {
   if (typeof window === 'undefined') return defaultProfileBookInfo;
-  const saved = localStorage.getItem('profileBookInfo');
-  return saved ? { ...defaultProfileBookInfo, ...JSON.parse(saved) } : defaultProfileBookInfo;
+  try {
+    const saved = localStorage.getItem('profileBookInfo');
+    return saved ? { ...defaultProfileBookInfo, ...JSON.parse(saved) } : defaultProfileBookInfo;
+  } catch { return defaultProfileBookInfo; }
 });
 
 const [communityQuestions, setCommunityQuestions] = useState(() => {
   if (typeof window === 'undefined') return [];
-  const saved = localStorage.getItem('communityQuestions');
-  return saved ? JSON.parse(saved) : [];
+  try {
+    const saved = localStorage.getItem('communityQuestions');
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
 });
 
 const [avatarUrl, setAvatarUrl] = useState<string>(() => {
@@ -4942,13 +4946,11 @@ function changeTheme(id: AppThemeId) {
 
 const [circles, setCircles] = useState<Circle[]>(() => {
   if (typeof window === 'undefined') return initialCircles;
-  const saved = localStorage.getItem('circles');
-  return saved ? JSON.parse(saved) : initialCircles;
+  try { const saved = localStorage.getItem('circles'); return saved ? JSON.parse(saved) : initialCircles; } catch { return initialCircles; }
 });
 const [circlePosts, setCirclePosts] = useState<CirclePost[]>(() => {
   if (typeof window === 'undefined') return initialCirclePosts;
-  const saved = localStorage.getItem('circlePosts');
-  return saved ? JSON.parse(saved) : initialCirclePosts;
+  try { const saved = localStorage.getItem('circlePosts'); return saved ? JSON.parse(saved) : initialCirclePosts; } catch { return initialCirclePosts; }
 });
 const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
@@ -4964,13 +4966,11 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   const [hasAnsweredPR, setHasAnsweredPR] = useState<boolean>(() => hasAnsweredPRToday());
   const [ownedPackIds, setOwnedPackIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
-    const s = localStorage.getItem('miri_owned_packs');
-    return s ? JSON.parse(s) : [];
+    try { const s = localStorage.getItem('miri_owned_packs'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
   const [ownedGachaStickers, setOwnedGachaStickers] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
-    const s = localStorage.getItem('miri_gacha_stickers');
-    return s ? JSON.parse(s) : [];
+    try { const s = localStorage.getItem('miri_gacha_stickers'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
 
   function purchasePack(packId: string) {
@@ -5078,8 +5078,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   // ── 公認ユーザー購読 ─────────────────────────────────────────
   const [subscribedOfficials, setSubscribedOfficials] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
-    const s = localStorage.getItem('miri_subscribed_officials');
-    return s ? JSON.parse(s) : [];
+    try { const s = localStorage.getItem('miri_subscribed_officials'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
 
   function toggleSubscription(userId: string) {
@@ -5101,8 +5100,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   const defaultPremiumContent: PremiumSection = { price: 480, description: '', questions: [], note: '' };
   const [premiumContent, setPremiumContent] = useState<PremiumSection>(() => {
     if (typeof window === 'undefined') return defaultPremiumContent;
-    const s = localStorage.getItem('miri_premium_content');
-    return s ? JSON.parse(s) : defaultPremiumContent;
+    try { const s = localStorage.getItem('miri_premium_content'); return s ? JSON.parse(s) : defaultPremiumContent; } catch { return defaultPremiumContent; }
   });
 
   function updatePremiumContent(next: PremiumSection) {
@@ -5132,8 +5130,10 @@ function postToCircle(circleId: string, body: string) {
 
 const [favoritePhotos, setFavoritePhotos] = useState<string[]>(() => {
   if (typeof window === 'undefined') return [];
-  const saved = localStorage.getItem('favoritePhotos');
-  return saved ? JSON.parse(saved) : [];
+  try {
+    const saved = localStorage.getItem('favoritePhotos');
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
 });
 
 function updateFavoritePhotos(photos: string[]) {
@@ -5168,8 +5168,10 @@ function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
 
 const [profileCustomFields, setProfileCustomFields] = useState<Record<string, string>>(() => {
   if (typeof window === 'undefined') return {};
-  const saved = localStorage.getItem('profileCustomFields');
-  return saved ? JSON.parse(saved) : {};
+  try {
+    const saved = localStorage.getItem('profileCustomFields');
+    return saved ? JSON.parse(saved) : {};
+  } catch { return {}; }
 });
 
 function updateProfileCustomFields(next: Record<string, string>) {
@@ -5179,8 +5181,7 @@ function updateProfileCustomFields(next: Record<string, string>) {
 
 const [best3, setBest3] = useState(() => {
   if (typeof window === 'undefined') return defaultBest3;
-  const saved = localStorage.getItem('best3');
-  return saved ? JSON.parse(saved) : defaultBest3;
+  try { const saved = localStorage.getItem('best3'); return saved ? JSON.parse(saved) : defaultBest3; } catch { return defaultBest3; }
 });
 
 function updateBest3(next: typeof defaultBest3) {
@@ -5190,8 +5191,7 @@ function updateBest3(next: typeof defaultBest3) {
 
 const [profileQuestions, setProfileQuestions] = useState(() => {
   if (typeof window === 'undefined') return defaultProfileQuestions;
-  const saved = localStorage.getItem('profileQuestions');
-  return saved ? JSON.parse(saved) : defaultProfileQuestions;
+  try { const saved = localStorage.getItem('profileQuestions'); return saved ? JSON.parse(saved) : defaultProfileQuestions; } catch { return defaultProfileQuestions; }
 });
 
 function updateProfileQuestions(next: typeof defaultProfileQuestions) {
@@ -5200,8 +5200,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 }
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('profilebook_answers_v2');
-    if (saved) setAnswers(JSON.parse(saved));
+    try {
+      const saved = window.localStorage.getItem('profilebook_answers_v2');
+      if (saved) setAnswers(JSON.parse(saved));
+    } catch { /* corrupted data — ignore */ }
   }, []);
 
   useEffect(() => {
@@ -5221,8 +5223,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   // ── ブックマーク ──────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
-    const saved = localStorage.getItem('miri_bookmarks');
-    return saved ? JSON.parse(saved) : [];
+    try { const saved = localStorage.getItem('miri_bookmarks'); return saved ? JSON.parse(saved) : []; } catch { return []; }
   });
   function toggleBookmark(id: string) {
     setBookmarks(prev => {
