@@ -34,7 +34,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'initial-setup';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -702,12 +702,12 @@ function OfficialBadge() {
   );
 }
 
-function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', translatedAnswerBodies = {} }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number; lang?: Lang; translatedAnswerBodies?: Record<string, string> }) {
-  const myAnswers = answers.filter((a) => a.user.id === me.id);
+function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', translatedAnswerBodies = {}, myName = me.name, myAccountId = me.id }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number; lang?: Lang; translatedAnswerBodies?: Record<string, string>; myName?: string; myAccountId?: string }) {
+  const myAnswers = answers.filter((a) => a.user.id === myAccountId);
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[320px] shrink-0 overflow-y-auto rounded-[32px] border border-white/70 bg-white/70 p-5 shadow-card backdrop-blur xl:block">
       <section className="cursor-pointer rounded-[28px] bg-white p-4 shadow-card transition hover:bg-pink/5 active:scale-[0.99]" onClick={() => go('profile')}>
-        <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">{avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : me.avatar}</div><div><p className="font-black">{me.name}</p><p className="text-xs font-bold text-muted">{me.id}</p></div></div>
+        <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">{avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : me.avatar}</div><div><p className="font-black">{myName}</p><p className="text-xs font-bold text-muted">{myAccountId}</p></div></div>
         <div className="mt-4 grid grid-cols-3 rounded-3xl bg-base p-3 text-center text-xs font-bold">
           <div><p className="text-lg text-ink">{myAnswers.length}</p>{t('tab_create', lang)}</div>
           <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">38</p>{t('btn_following', lang)}</button>
@@ -726,13 +726,13 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; translatedAnswerBodies?: Record<string, string> }) {
+function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, translatedAnswerBodies = {}, myName, myAccountId }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; translatedAnswerBodies?: Record<string, string>; myName?: string; myAccountId?: string }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} lang={lang} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang}>{children}</Phone></div>
-        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} />
+        <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} myName={myName} myAccountId={myAccountId} />
       </div>
     </div>
   );
@@ -4582,6 +4582,210 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
   );
 }
 
+// ── 初期設定画面 ────────────────────────────────────────────────
+function InitialSetupScreen({
+  onComplete,
+  initialTheme,
+  initialLang,
+}: {
+  onComplete: (displayName: string, accountId: string, lang: Lang, theme: AppThemeId) => void;
+  initialTheme: AppThemeId;
+  initialLang: Lang;
+}) {
+  const [step, setStep] = useState(0);
+  const [accountId, setAccountId] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [selectedLang, setSelectedLang] = useState<Lang>(initialLang);
+  const [selectedTheme, setSelectedTheme] = useState<AppThemeId>(initialTheme);
+  const [accountIdError, setAccountIdError] = useState('');
+  const totalSteps = 4;
+
+  useEffect(() => {
+    applyTheme(selectedTheme);
+  }, [selectedTheme]);
+
+  function validateAccountId(id: string) {
+    const clean = id.replace(/^@/, '');
+    if (!clean) return 'IDを入力してください';
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(clean)) return '3〜20文字の英数字・アンダーバーで入力してください';
+    return '';
+  }
+
+  function handleNext() {
+    if (step === 0) {
+      const err = validateAccountId(accountId);
+      if (err) { setAccountIdError(err); return; }
+      setAccountIdError('');
+    }
+    if (step === 1 && !displayName.trim()) return;
+    if (step < totalSteps - 1) {
+      setStep(s => s + 1);
+    } else {
+      const cleanId = '@' + accountId.replace(/^@/, '');
+      onComplete(displayName.trim() || 'ゲスト', cleanId, selectedLang, selectedTheme);
+    }
+  }
+
+  const TOP_LANGS: Lang[] = ['ja', 'en', 'ko', 'zh', 'zh-tw', 'th', 'id', 'vi'];
+
+  const stepContent = [
+    // Step 1: Account ID
+    <div key="step-account">
+      <div className="mb-6 text-center">
+        <p className="mb-3 text-4xl">🪪</p>
+        <p className="text-xl font-black text-ink">アカウントIDを決めよう</p>
+        <p className="mt-2 text-sm font-bold text-muted">@から始まるIDです（後から変更不可）</p>
+      </div>
+      <div className="space-y-3">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-sm font-black text-muted">@</span>
+          <input
+            type="text"
+            placeholder="your_id"
+            value={accountId.replace(/^@/, '')}
+            onChange={e => { setAccountId(e.target.value.replace(/^@/, '')); setAccountIdError(''); }}
+            className="h-14 w-full rounded-full border-2 border-purple/20 bg-base pl-10 pr-5 text-sm font-black text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+            maxLength={20}
+            autoFocus
+          />
+        </div>
+        {accountIdError && <p className="text-center text-xs font-bold text-red-400">{accountIdError}</p>}
+        {accountId && !accountIdError && (
+          <div className="rounded-2xl bg-pink/5 p-3 text-center">
+            <p className="text-sm font-black text-pink">@{accountId.replace(/^@/, '')} で登録します</p>
+          </div>
+        )}
+        <p className="text-center text-[11px] text-muted">英数字・アンダーバー（_）3〜20文字</p>
+      </div>
+    </div>,
+
+    // Step 2: Display name
+    <div key="step-name">
+      <div className="mb-6 text-center">
+        <p className="mb-3 text-4xl">✍️</p>
+        <p className="text-xl font-black text-ink">ニックネームを入力</p>
+        <p className="mt-2 text-sm font-bold text-muted">みんなに表示される名前です</p>
+      </div>
+      <div className="space-y-3">
+        <input
+          type="text"
+          placeholder="ニックネーム"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          className="h-14 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-black text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+          maxLength={20}
+          autoFocus
+        />
+        {displayName && (
+          <div className="rounded-[20px] bg-white p-4 shadow-card">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-pink/15 text-2xl">{me.avatar}</div>
+              <div>
+                <p className="font-black text-ink">{displayName}</p>
+                <p className="text-xs font-bold text-muted">@{accountId.replace(/^@/, '')}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+
+    // Step 3: Language
+    <div key="step-lang">
+      <div className="mb-5 text-center">
+        <p className="mb-3 text-4xl">🌏</p>
+        <p className="text-xl font-black text-ink">使用言語を選んでね</p>
+        <p className="mt-2 text-sm font-bold text-muted">アプリの表示言語を選びます</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {LANG_LIST.filter(l => (TOP_LANGS as string[]).includes(l.id)).map(lang => (
+          <button
+            key={lang.id}
+            onClick={() => setSelectedLang(lang.id)}
+            className={`flex items-center gap-2 rounded-2xl border-2 p-3 text-sm font-black transition ${
+              selectedLang === lang.id
+                ? 'border-pink bg-pink/10 text-pink'
+                : 'border-purple/20 bg-white text-ink hover:border-pink/40'
+            }`}
+          >
+            <span className="text-base">{lang.flag}</span>
+            <span className="flex-1 text-left">{lang.name}</span>
+            {selectedLang === lang.id && <span className="text-pink">✓</span>}
+          </button>
+        ))}
+      </div>
+    </div>,
+
+    // Step 4: Theme
+    <div key="step-theme">
+      <div className="mb-5 text-center">
+        <p className="mb-3 text-4xl">🎨</p>
+        <p className="text-xl font-black text-ink">テーマカラーを選んでね</p>
+        <p className="mt-2 text-sm font-bold text-muted">あとから変えることもできます</p>
+      </div>
+      <div className="grid grid-cols-4 gap-3">
+        {APP_THEMES.map(theme => (
+          <button
+            key={theme.id}
+            onClick={() => setSelectedTheme(theme.id)}
+            className={`flex flex-col items-center gap-2 rounded-2xl p-2.5 transition ${
+              selectedTheme === theme.id ? 'bg-white shadow-card scale-105' : 'hover:bg-white/60'
+            }`}
+          >
+            <span
+              className={`h-10 w-10 rounded-full shadow-sm ${selectedTheme === theme.id ? 'ring-2 ring-offset-2 ring-pink' : ''}`}
+              style={{ background: theme.preview }}
+            />
+            <span className="text-[10px] font-black text-ink leading-tight">{theme.emoji} {theme.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>,
+  ];
+
+  const stepLabels = ['アカウントID', 'ニックネーム', '言語', 'テーマ'];
+
+  return (
+    <div className="flex h-full flex-col bg-base px-5 pb-8 pt-8">
+      <div className="mb-5 text-center">
+        <img src="/icon.png" alt="Miri" className="mx-auto h-14 w-14 rounded-[20px] shadow-card" />
+        <p className="mt-2 text-base font-black text-ink">はじめに設定しよう</p>
+        <p className="text-xs font-bold text-muted">{step + 1} / {totalSteps}：{stepLabels[step]}</p>
+      </div>
+
+      <div className="mb-5 flex gap-1.5">
+        {Array.from({ length: totalSteps }).map((_, i) => (
+          <div
+            key={i}
+            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${i <= step ? 'bg-pink' : 'bg-purple/20'}`}
+          />
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto rounded-[28px] bg-white p-5 shadow-card">
+        {stepContent[step]}
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <button
+          onClick={handleNext}
+          className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating transition active:scale-[0.98]"
+        >
+          {step === totalSteps - 1 ? 'Miriをはじめる ✨' : 'つぎへ →'}
+        </button>
+        {step > 0 && (
+          <button
+            onClick={() => setStep(s => s - 1)}
+            className="w-full py-2 text-sm font-black text-muted"
+          >
+            ← もどる
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── オンボーディング画面 ────────────────────────────────────────
 function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const steps = [
@@ -4830,6 +5034,15 @@ export default function Page() {
 }
 
 function AppContent() {
+  const [myDisplayName, setMyDisplayName] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('miri_display_name') || '';
+  });
+  const [myAccountId, setMyAccountId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('miri_account_id') || '';
+  });
+
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window === 'undefined') return 'ja';
     return (localStorage.getItem('miri_lang') as Lang) || 'ja';
@@ -4871,6 +5084,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   const [screen, setScreen] = useState<Screen>(() => {
     if (typeof window === 'undefined') return 'home';
+    if (!localStorage.getItem('miri_setup_done')) return 'initial-setup';
     return localStorage.getItem('miri_onboarded') ? 'home' : 'onboarding';
   });
   const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0]?.id ?? '');
@@ -5110,7 +5324,8 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
 function createCircle(name: string, emoji: string, memberIds: string[]): string {
   const id = `circle-${Date.now()}`;
-  const newCircle: Circle = { id, name, emoji, memberIds: [me.id, ...memberIds], createdBy: me.id };
+  const myId = myAccountId || me.id;
+  const newCircle: Circle = { id, name, emoji, memberIds: [myId, ...memberIds], createdBy: myId };
   const next = [newCircle, ...circles];
   setCircles(next);
   localStorage.setItem('circles', JSON.stringify(next));
@@ -5118,9 +5333,11 @@ function createCircle(name: string, emoji: string, memberIds: string[]): string 
 }
 
 function postToCircle(circleId: string, body: string) {
+  const myId = myAccountId || me.id;
+  const myName = myDisplayName || me.name;
   const newPost: CirclePost = {
     id: `cp-${Date.now()}`, circleId, body,
-    postedBy: me.id, postedByName: me.name, postedByAvatar: me.avatar,
+    postedBy: myId, postedByName: myName, postedByAvatar: me.avatar,
     postedAt: new Date().toISOString(), replies: [],
   };
   const next = [newPost, ...circlePosts];
@@ -5148,8 +5365,8 @@ function createCommunityQuestion(title: string, description: string, answerType:
     title,
     description,
     sponsor: null,
-    createdBy: me.id,
-    createdByName: me.name,
+    createdBy: myAccountId || me.id,
+    createdByName: myDisplayName || me.name,
     isOfficialQuestion: true,
     createdAt: new Date().toISOString(),
     answerType,
@@ -5243,6 +5460,22 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     }
   }
 
+  // ── 初期設定完了 ──────────────────────────────────────────────
+  function completeInitialSetup(displayName: string, accountId: string, selectedLang: Lang, selectedTheme: AppThemeId) {
+    const cleanId = accountId.startsWith('@') ? accountId : '@' + accountId;
+    localStorage.setItem('miri_display_name', displayName);
+    localStorage.setItem('miri_account_id', cleanId);
+    localStorage.setItem('miri_setup_done', '1');
+    setMyDisplayName(displayName);
+    setMyAccountId(cleanId);
+    const next = { ...profileBookInfo, name: displayName, nickname: displayName };
+    setProfileBookInfo(next);
+    localStorage.setItem('profileBookInfo', JSON.stringify(next));
+    changeLang(selectedLang);
+    changeTheme(selectedTheme);
+    setScreen('onboarding');
+  }
+
   // ── オンボーディング完了 ──────────────────────────────────────
   function completeOnboarding() {
     localStorage.setItem('miri_onboarded', '1');
@@ -5286,7 +5519,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     id,
     question: q,
     body: `${draft.sticker} ${draft.body}`,
-    user: { name: me.name, id: me.id, avatar: me.avatar },
+    user: { name: myDisplayName || me.name, id: myAccountId || me.id, avatar: me.avatar },
     reactions: { like: 0, same: 0, wakaru: 0, natsukashii: 0 },
   };
 
@@ -5333,15 +5566,17 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     textColor?: string
   ): string {
     const id = `diary-${Date.now()}`;
+    const myId = myAccountId || me.id;
+    const myName = myDisplayName || me.name;
     const firstEntry: DiaryEntry | null = firstEntryBody.trim() || firstPhotoUrl
-      ? { id: `entry-${Date.now()}`, authorId: me.id, authorName: me.name, authorAvatar: me.avatar, body: firstEntryBody.trim(), photoUrl: firstPhotoUrl || undefined, font, textColor, postedAt: new Date().toISOString() }
+      ? { id: `entry-${Date.now()}`, authorId: myId, authorName: myName, authorAvatar: me.avatar, body: firstEntryBody.trim(), photoUrl: firstPhotoUrl || undefined, font, textColor, postedAt: new Date().toISOString() }
       : null;
     const newPage: DiaryPage = {
       id,
       theme,
       description,
-      createdBy: me.id,
-      createdByName: me.name,
+      createdBy: myId,
+      createdByName: myName,
       createdByAvatar: me.avatar,
       createdAt: new Date().toISOString(),
       entries: firstEntry ? [firstEntry] : [],
@@ -5355,8 +5590,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   function addDiaryEntry(pageId: string, body: string, photoUrl?: string, font?: string, textColor?: string) {
     const entry: DiaryEntry = {
       id: `entry-${Date.now()}`,
-      authorId: me.id,
-      authorName: me.name,
+      authorId: myAccountId || me.id,
+      authorName: myDisplayName || me.name,
       authorAvatar: me.avatar,
       body,
       photoUrl: photoUrl || undefined,
@@ -5505,6 +5740,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         lang={lang}
       />;
     }
+    if (screen === 'initial-setup') return <InitialSetupScreen onComplete={completeInitialSetup} initialTheme={appTheme} initialLang={lang} />;
     if (screen === 'onboarding') return <OnboardingScreen onDone={completeOnboarding} />;
     if (screen === 'detail' && selectedAnswer) return (
       <DetailScreen
@@ -5565,13 +5801,15 @@ return <ProfileScreen
   lang,
   coins,
   hasAnsweredPR,
+  myDisplayName,
+  myAccountId,
 ]);
 
   const active = tabFromScreen(screen);
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} myName={myDisplayName || me.name} myAccountId={myAccountId || me.id}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );
