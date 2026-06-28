@@ -4588,13 +4588,14 @@ function InitialSetupScreen({
   initialTheme,
   initialLang,
 }: {
-  onComplete: (displayName: string, accountId: string, lang: Lang, theme: AppThemeId) => void;
+  onComplete: (displayName: string, realName: string, accountId: string, lang: Lang, theme: AppThemeId) => void;
   initialTheme: AppThemeId;
   initialLang: Lang;
 }) {
   const [step, setStep] = useState(0);
   const [accountId, setAccountId] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [realName, setRealName] = useState('');
   const [selectedLang, setSelectedLang] = useState<Lang>(initialLang);
   const [selectedTheme, setSelectedTheme] = useState<AppThemeId>(initialTheme);
   const [accountIdError, setAccountIdError] = useState('');
@@ -4622,7 +4623,7 @@ function InitialSetupScreen({
       setStep(s => s + 1);
     } else {
       const cleanId = '@' + accountId.replace(/^@/, '');
-      onComplete(displayName.trim() || 'ゲスト', cleanId, selectedLang, selectedTheme);
+      onComplete(displayName.trim() || 'ゲスト', realName.trim(), cleanId, selectedLang, selectedTheme);
     }
   }
 
@@ -4659,29 +4660,44 @@ function InitialSetupScreen({
       </div>
     </div>,
 
-    // Step 2: Display name
+    // Step 2: Display name & real name
     <div key="step-name">
-      <div className="mb-6 text-center">
+      <div className="mb-5 text-center">
         <p className="mb-3 text-4xl">✍️</p>
-        <p className="text-xl font-black text-ink">ニックネームを入力</p>
-        <p className="mt-2 text-sm font-bold text-muted">みんなに表示される名前です</p>
+        <p className="text-xl font-black text-ink">名前を入力してね</p>
+        <p className="mt-2 text-sm font-bold text-muted">プロフィール帳に表示されます</p>
       </div>
-      <div className="space-y-3">
-        <input
-          type="text"
-          placeholder="ニックネーム"
-          value={displayName}
-          onChange={e => setDisplayName(e.target.value)}
-          className="h-14 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-black text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-          maxLength={20}
-          autoFocus
-        />
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-xs font-black text-muted">ニックネーム <span className="text-pink">（必須）</span></label>
+          <input
+            type="text"
+            placeholder="ニックネーム"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
+            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-black text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+            maxLength={20}
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-black text-muted">氏名・本名 <span className="text-muted font-bold">（任意）</span></label>
+          <input
+            type="text"
+            placeholder="例：田中 花子"
+            value={realName}
+            onChange={e => setRealName(e.target.value)}
+            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-black text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+            maxLength={30}
+          />
+          <p className="mt-1.5 text-[11px] text-muted text-center">プロフィール帳の「なまえ」欄に表示されます</p>
+        </div>
         {displayName && (
-          <div className="rounded-[20px] bg-white p-4 shadow-card">
+          <div className="rounded-[20px] bg-pink/5 p-3">
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-pink/15 text-2xl">{me.avatar}</div>
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-pink/15 text-xl">{me.avatar}</div>
               <div>
-                <p className="font-black text-ink">{displayName}</p>
+                <p className="text-sm font-black text-ink">{displayName}{realName && <span className="ml-1 text-xs font-bold text-muted">（{realName}）</span>}</p>
                 <p className="text-xs font-bold text-muted">@{accountId.replace(/^@/, '')}</p>
               </div>
             </div>
@@ -4743,7 +4759,7 @@ function InitialSetupScreen({
     </div>,
   ];
 
-  const stepLabels = ['アカウントID', 'ニックネーム', '言語', 'テーマ'];
+  const stepLabels = ['アカウントID', 'ニックネーム・氏名', '言語', 'テーマ'];
 
   return (
     <div className="flex h-full flex-col bg-base px-5 pb-8 pt-8">
@@ -5461,14 +5477,14 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   // ── 初期設定完了 ──────────────────────────────────────────────
-  function completeInitialSetup(displayName: string, accountId: string, selectedLang: Lang, selectedTheme: AppThemeId) {
+  function completeInitialSetup(displayName: string, realName: string, accountId: string, selectedLang: Lang, selectedTheme: AppThemeId) {
     const cleanId = accountId.startsWith('@') ? accountId : '@' + accountId;
     localStorage.setItem('miri_display_name', displayName);
     localStorage.setItem('miri_account_id', cleanId);
     localStorage.setItem('miri_setup_done', '1');
     setMyDisplayName(displayName);
     setMyAccountId(cleanId);
-    const next = { ...profileBookInfo, name: displayName, nickname: displayName };
+    const next = { ...profileBookInfo, name: realName || displayName, nickname: displayName };
     setProfileBookInfo(next);
     localStorage.setItem('profileBookInfo', JSON.stringify(next));
     changeLang(selectedLang);
