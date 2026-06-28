@@ -4495,85 +4495,260 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
 // ── 認証画面（production のみ表示）──────────────────────────────
 function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
+
+  // ログイン用
+  const [identifier, setIdentifier] = useState('');
+
+  // サインアップ用
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [done, setDone] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  function resetFields() {
+    setError(''); setInfo(''); setOtp(''); setOtpSent(false);
+  }
+
+  function switchMode(next: 'login' | 'signup') {
+    setMode(next); resetFields();
+  }
+
+  function formatPhoneE164(val: string): string {
+    let s = val.replace(/[\s\-\(\)]/g, '');
+    if (s.startsWith('0')) s = '+81' + s.slice(1);
+    if (!s.startsWith('+')) s = '+81' + s;
+    return s;
+  }
+
+  function detectLoginType(val: string) {
+    if (val.startsWith('@')) return 'accountId';
+    if (/^[+0-9]/.test(val)) return 'phone';
+    return 'email';
+  }
+
+  // ── ログイン ──────────────────────────────────────────────────
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
     const { supabase } = await import('@/lib/supabase');
     if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
 
-    if (mode === 'signup') {
-      const { data, error: err } = await supabase.auth.signUp({ email, password });
-      if (err) { setError(err.message); setLoading(false); return; }
-      if (data.session) {
-        // メール確認不要の場合はそのままアプリへ（onAuthStateChange が検知）
-        setDone(true);
-      } else {
-        setError('確認メールを送信しました。メールのリンクをクリックしてください。');
+    const type = detectLoginType(identifier);
+
+    if (type === 'accountId') {
+      const username = identifier.replace(/^@/, '');
+      const { data: prof, error: lookupErr } = await supabase
+        .from('profiles')
+        .select('email, phone')
+        .eq('username', username)
+        .single();
+      if (lookupErr || !prof) {
+        setError('アカウントIDが見つかりません');
+        setLoading(false); return;
       }
+      const loginTarget = (prof as any).email || (prof as any).phone;
+      if (!loginTarget) {
+        setError('このアカウントIDではログインできません。メールまたは電話番号を使ってください');
+        setLoading(false); return;
+      }
+      const key = (prof as any).email ? { email: (prof as any).email, password } : { phone: (prof as any).phone, password };
+      const { error: err } = await supabase.auth.signInWithPassword(key as any);
+      if (err) { setError('パスワードが違います'); setLoading(false); return; }
+    } else if (type === 'phone') {
+      const { error: err } = await supabase.auth.signInWithPassword({ phone: formatPhoneE164(identifier), password });
+      if (err) { setError('電話番号またはパスワードが違います'); setLoading(false); return; }
     } else {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
-      // onAuthStateChange が自動で authed = true にする
+      const { error: err } = await supabase.auth.signInWithPassword({ email: identifier, password });
+      if (err) { setError('メールアドレスまたはパスワードが違います'); setLoading(false); return; }
     }
     setLoading(false);
   }
 
-  // onAuthStateChange 経由で authed が true になるのを待つ間の表示
+  // ── メール登録 ────────────────────────────────────────────────
+  async function handleEmailSignup(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { supabase } = await import('@/lib/supabase');
+    if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
+
+    const { data, error: err } = await supabase.auth.signUp({ email, password });
+    if (err) { setError(err.message); setLoading(false); return; }
+    if (data.session) {
+      setDone(true);
+    } else {
+      setInfo('確認メールを送信しました。メールのリンクをクリックしてください。');
+    }
+    setLoading(false);
+  }
+
+  // ── 電話番号登録（OTP送信） ────────────────────────────────────
+  async function handlePhoneSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { supabase } = await import('@/lib/supabase');
+    if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
+
+    const formatted = formatPhoneE164(phone);
+    const { data, error: err } = await supabase.auth.signUp({ phone: formatted, password });
+    if (err) { setError(err.message); setLoading(false); return; }
+    if (data.session) {
+      setDone(true);
+    } else {
+      setOtpSent(true);
+      setInfo(`${formatted} にSMSで確認コードを送りました`);
+    }
+    setLoading(false);
+  }
+
+  // ── 電話番号認証（OTP検証） ────────────────────────────────────
+  async function handlePhoneVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const { supabase } = await import('@/lib/supabase');
+    if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
+
+    const { error: err } = await supabase.auth.verifyOtp({
+      phone: formatPhoneE164(phone),
+      token: otp,
+      type: 'sms',
+    });
+    if (err) { setError('確認コードが違います。もう一度お試しください'); setLoading(false); return; }
+    setLoading(false);
+  }
+
+  const inputCls = 'h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none';
+
   if (done) return (
     <div className="flex min-h-screen items-center justify-center bg-base">
       <span className="text-3xl animate-pulse">🎀</span>
     </div>
   );
 
+  const loginType = detectLoginType(identifier);
+  const loginHint = identifier.length === 0 ? '' : loginType === 'accountId' ? '🪪 アカウントID' : loginType === 'phone' ? '📱 電話番号' : '📧 メールアドレス';
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 gap-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 gap-6">
       <div className="flex flex-col items-center gap-3">
         <img src="/icon.png" alt="Miri" className="h-20 w-20 rounded-[24px] shadow-card" />
         <p className="text-2xl font-black text-ink">Miri</p>
         <p className="text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
       </div>
 
-      <div className="w-full max-w-sm rounded-[32px] bg-white p-8 shadow-card">
-        <p className="mb-6 text-center text-lg font-black text-ink">
+      <div className="w-full max-w-sm rounded-[32px] bg-white p-7 shadow-card">
+        <p className="mb-5 text-center text-lg font-black text-ink">
           {mode === 'login' ? 'ログイン' : 'アカウント作成'}
         </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="email"
-            placeholder="メールアドレス"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-          />
-          <input
-            type="password"
-            placeholder="パスワード（6文字以上）"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={6}
-            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-          />
-          {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
-          >
-            {loading ? '...' : mode === 'login' ? 'ログイン' : '登録する'}
-          </button>
-        </form>
+
+        {mode === 'login' ? (
+          // ── ログインフォーム ──
+          <form onSubmit={handleLogin} className="flex flex-col gap-3">
+            <div>
+              <input
+                type="text"
+                placeholder="メール / 電話番号 / @アカウントID"
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
+                required
+                className={inputCls}
+              />
+              {loginHint && (
+                <p className="mt-1.5 text-center text-[10px] font-bold text-muted">{loginHint} として認識中</p>
+              )}
+            </div>
+            <input
+              type="password"
+              placeholder="パスワード"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength={6}
+              className={inputCls}
+            />
+            {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
+            <button type="submit" disabled={loading} className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60">
+              {loading ? '...' : 'ログイン'}
+            </button>
+          </form>
+        ) : (
+          // ── サインアップフォーム ──
+          <>
+            <div className="mb-5 flex rounded-2xl bg-base p-1">
+              {(['email', 'phone'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setAuthMethod(m); resetFields(); }}
+                  className={`flex-1 rounded-xl py-2 text-sm font-black transition ${authMethod === m ? 'bg-white shadow-card text-pink' : 'text-muted hover:text-ink'}`}
+                >
+                  {m === 'email' ? '📧 メール' : '📱 電話番号'}
+                </button>
+              ))}
+            </div>
+
+            {authMethod === 'email' ? (
+              <form onSubmit={handleEmailSignup} className="flex flex-col gap-3">
+                <input type="email" placeholder="メールアドレス" value={email} onChange={e => setEmail(e.target.value)} required className={inputCls} />
+                <input type="password" placeholder="パスワード（6文字以上）" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className={inputCls} />
+                {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
+                {info && <p className="rounded-2xl bg-green-50 p-3 text-center text-xs font-bold text-green-600">{info}</p>}
+                <button type="submit" disabled={loading} className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60">
+                  {loading ? '...' : '登録する'}
+                </button>
+              </form>
+            ) : !otpSent ? (
+              <form onSubmit={handlePhoneSendOtp} className="flex flex-col gap-3">
+                <div>
+                  <input type="tel" placeholder="電話番号（例：090-1234-5678）" value={phone} onChange={e => setPhone(e.target.value)} required className={inputCls} />
+                  <p className="mt-1.5 text-center text-[10px] text-muted">日本の番号は自動的に +81 に変換されます</p>
+                </div>
+                <input type="password" placeholder="パスワード（6文字以上）" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} className={inputCls} />
+                {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
+                <button type="submit" disabled={loading} className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60">
+                  {loading ? '...' : 'SMSで確認コードを送る'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handlePhoneVerifyOtp} className="flex flex-col gap-3">
+                {info && <div className="rounded-2xl bg-green-50 p-3 text-center"><p className="text-xs font-bold text-green-600">{info}</p></div>}
+                <div>
+                  <input
+                    type="text"
+                    placeholder="確認コード（6桁）"
+                    value={otp}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    inputMode="numeric"
+                    className="h-14 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-center text-xl font-black tracking-widest text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+                  />
+                  <p className="mt-1.5 text-center text-[10px] text-muted">SMSに届いた6桁のコードを入力してください</p>
+                </div>
+                {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
+                <button type="submit" disabled={loading || otp.length < 6} className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60">
+                  {loading ? '...' : '認証する ✓'}
+                </button>
+                <button type="button" onClick={() => { setOtpSent(false); setOtp(''); setError(''); }} className="text-center text-xs font-bold text-muted">
+                  ← 電話番号を変更する
+                </button>
+              </form>
+            )}
+          </>
+        )}
+
         <button
-          onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setError(''); }}
-          className="mt-4 w-full text-center text-xs font-bold text-muted"
+          onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
+          className="mt-5 w-full text-center text-xs font-bold text-muted"
         >
           {mode === 'login' ? 'アカウントを作成する →' : '← ログインに戻る'}
         </button>
