@@ -939,10 +939,12 @@ function HomeScreen({
             ))}
           </div>
         </section>
+        {questions.length > 2 && (
         <section>
           <SectionHeader title={t('sec_collab', lang)} />
           <button onClick={() => go('create')} className="block w-full text-left"><QuestionCard question={questions[2]} /></button>
         </section>
+        )}
       </div>
     </>
   );
@@ -1135,8 +1137,9 @@ function CreateScreen({
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   // --- お題モード ---
+  const _fallbackQ = questions[0] ?? getQuestionsForLang('ja')[0];
   const [draft, setDraft] = useState<DraftAnswer>({
-    questionId: question?.id || questions[0].id,
+    questionId: question?.id || _fallbackQ.id,
     body: '',
     sticker: '🌸',
     visibility: 'public',
@@ -1152,14 +1155,14 @@ function CreateScreen({
   const selectedQuestion =
     question ||
     questions.find((q) => q.id === draft.questionId) ||
-    questions[0];
+    _fallbackQ;
 
   const canPost = draft.body.trim().length > 0;
 
   function submit() {
     if (!canPost) return;
     const id = onPost(draft);
-    setDraft({ questionId: question?.id || questions[0].id, body: '', sticker: '🎀', visibility: 'public' });
+    setDraft({ questionId: question?.id || _fallbackQ.id, body: '', sticker: '🎀', visibility: 'public' });
     go('detail', id);
   }
 
@@ -5274,7 +5277,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   const q =
     allQuestions.find((question) => question.id === draft.questionId) ||
-    questions[0];
+    localizedQuestions[0];
 
   const id = `a-${Date.now()}`;
 
@@ -5502,7 +5505,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       />;
     }
     if (screen === 'onboarding') return <OnboardingScreen onDone={completeOnboarding} />;
-    if (screen === 'detail') return (
+    if (screen === 'detail' && selectedAnswer) return (
       <DetailScreen
         go={go}
         answer={selectedAnswer}
