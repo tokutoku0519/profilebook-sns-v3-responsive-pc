@@ -4378,10 +4378,10 @@ const COIN_PACKAGES = [
 ];
 
 function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void; coins: number; onPurchaseCoins: (amount: number) => void }) {
-  const history: Array<{ amount: number; reason: string; date: string }> =
-    typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('miri_coin_history') || '[]')
-      : [];
+  const history: Array<{ amount: number; reason: string; date: string }> = (() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('miri_coin_history') || '[]'); } catch { return []; }
+  })();
 
   const earnMethods = [
     { icon: '🌅', label: 'デイリーログイン', reward: '+3', desc: '毎日ログインするだけ' },
@@ -4888,10 +4888,12 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   const [dailyRecord, setDailyRecord] = useState<{ date: string; body: string } | null>(() => {
     if (typeof window === 'undefined') return null;
-    const s = localStorage.getItem('miri_daily_answer');
-    if (!s) return null;
-    const r = JSON.parse(s) as { date: string; body: string };
-    return r.date === new Date().toISOString().slice(0, 10) ? r : null;
+    try {
+      const s = localStorage.getItem('miri_daily_answer');
+      if (!s) return null;
+      const r = JSON.parse(s) as { date: string; body: string };
+      return r.date === new Date().toISOString().slice(0, 10) ? r : null;
+    } catch { return null; }
   });
 
   function submitDailyAnswer(body: string) {
@@ -4995,9 +4997,11 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       const next = prev + amount;
       localStorage.setItem('miri_coins', String(next));
       if (reason) {
-        const history = JSON.parse(localStorage.getItem('miri_coin_history') || '[]');
-        history.unshift({ amount, reason, date: new Date().toISOString() });
-        localStorage.setItem('miri_coin_history', JSON.stringify(history.slice(0, 100)));
+        try {
+          const history = JSON.parse(localStorage.getItem('miri_coin_history') || '[]');
+          history.unshift({ amount, reason, date: new Date().toISOString() });
+          localStorage.setItem('miri_coin_history', JSON.stringify(history.slice(0, 100)));
+        } catch { /* ignore corrupted history */ }
       }
       return next;
     });
