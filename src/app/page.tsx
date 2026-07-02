@@ -1952,12 +1952,10 @@ function ProfileScreen({
 
       {showShare && (
         <ProfileShareModal
-          name={profileBookInfo.name}
           userId={me.id}
           avatar={me.avatar}
           avatarUrl={avatarUrl || undefined}
-          catchphrase={profileBookInfo.catchphrase}
-          best3={best3}
+          info={profileBookInfo}
           lang={lang}
           onClose={() => setShowShare(false)}
         />
@@ -2564,12 +2562,10 @@ function ProfileEditScreen({
 
       {showShare && (
         <ProfileShareModal
-          name={form.name}
           userId={me.id}
           avatar={me.avatar}
           avatarUrl={localAvatarUrl || undefined}
-          catchphrase={form.catchphrase}
-          best3={best3Form}
+          info={form}
           lang={lang}
           onClose={() => setShowShare(false)}
         />
@@ -2600,17 +2596,16 @@ function truncateStr(str: string, max: number) {
 
 // ── プロフィールシェアモーダル ───────────────────────────────
 function ProfileShareModal({
-  name, userId, avatar, avatarUrl, catchphrase, best3, lang = 'ja', onClose,
+  userId, avatar, avatarUrl, info, lang = 'ja', onClose,
 }: {
-  name: string;
   userId: string;
   avatar: string;
   avatarUrl?: string;
-  catchphrase: string;
-  best3: typeof defaultBest3;
+  info: typeof defaultProfileBookInfo;
   lang?: Lang;
   onClose: () => void;
 }) {
+  const name = info.name;
   const [tab, setTab] = useState<'qr' | 'image'>('qr');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [imageGenerated, setImageGenerated] = useState(false);
@@ -2696,7 +2691,7 @@ function ProfileShareModal({
       ctx.fillText(avatar, cx, cy);
     }
 
-    // ── アイコンの右：名前＋ID ──
+    // ── アイコンの右：名前＋ID＋口ぐせ ──
     ctx.fillStyle = '#1a1a2e';
     ctx.font = 'bold 56px sans-serif';
     ctx.textAlign = 'left';
@@ -2705,40 +2700,78 @@ function ProfileShareModal({
     ctx.fillStyle = '#aaa';
     ctx.font = '30px sans-serif';
     ctx.fillText(userId, 290, 205);
+    if (info.catchphrase) {
+      ctx.fillStyle = '#ff6b9d';
+      ctx.font = 'italic bold 32px serif';
+      ctx.fillText(truncateStr(info.catchphrase, 18), 290, 252);
+    }
 
-    // ── 左下：プロフの一部（チラ見せ） ──
+    // ── 左下：自己紹介シート風のプロフ抜粋（チラ見せ） ──
     const boxX = 64, boxY = 285, boxW = 560, boxH = 250;
-    ctx.fillStyle = 'rgba(255,179,209,0.12)';
+    ctx.fillStyle = 'rgba(255,179,209,0.10)';
     canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255,107,157,0.35)';
+    ctx.lineWidth = 3;
+    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
+    ctx.stroke();
 
-    const teaser: string[] = [];
-    if (catchphrase) teaser.push(truncateStr(catchphrase, 16));
-    if (best3.tv[0]) teaser.push(`📺 ${truncateStr(best3.tv[0], 14)}`);
-    if (best3.food[0]) teaser.push(`🍔 ${truncateStr(best3.food[0], 14)}`);
-    if (best3.places[0]) teaser.push(`📍 ${truncateStr(best3.places[0], 14)}`);
-    // 3行目が薄くフェードして「続きがある」チラ見せ感を出す
-    teaser.slice(0, 3).forEach((line, i) => {
-      if (i === 0 && catchphrase) {
-        ctx.fillStyle = '#ff6b9d';
-        ctx.font = 'italic bold 34px serif';
-      } else {
-        ctx.fillStyle = '#1a1a2e';
-        ctx.font = 'bold 32px sans-serif';
-      }
-      ctx.fillText(line, boxX + 36, boxY + 58 + i * 52);
+    // 「PROFILE」タグシール
+    ctx.fillStyle = '#ff6b9d';
+    canvasRoundRect(ctx, boxX + 26, boxY - 18, 168, 36, 18);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('♡ PROFILE', boxX + 26 + 84, boxY + 8);
+
+    // プロフィール帳の定番項目（空欄は飛ばして先頭6つ）
+    const sheetFields = ([
+      ['field_nickname', info.nickname],
+      ['field_birthday', info.birthday],
+      ['field_mbti', info.mbti],
+      ['field_favoriteFood', info.favoriteFood],
+      ['field_hobby', info.hobby],
+      ['field_favoriteMusic', info.favoriteMusic],
+      ['field_favoriteCharacter', info.favoriteCharacter],
+      ['field_dream', info.dream],
+    ] as [string, string][]).filter(([, v]) => v).slice(0, 6);
+
+    const cellW = 250, cellH = 74;
+    sheetFields.forEach(([key, val], i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = boxX + 36 + col * (cellW + 24);
+      const y = boxY + 52 + row * cellH;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ff6b9d';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText(truncateStr(t(key, lang), 9), x, y);
+      ctx.fillStyle = '#1a1a2e';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText(truncateStr(val, 8), x, y + 38);
+      // 記入欄っぽい点線
+      ctx.strokeStyle = 'rgba(255,107,157,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x, y + 50);
+      ctx.lineTo(x + cellW - 20, y + 50);
+      ctx.stroke();
+      ctx.setLineDash([]);
     });
 
-    // フェードアウトで「続きがある」感を出す
-    const fade = ctx.createLinearGradient(0, boxY + boxH - 110, 0, boxY + boxH);
+    // 最終行をフェードアウトして「続きがある」チラ見せ感を出す
+    const fade = ctx.createLinearGradient(0, boxY + boxH - 120, 0, boxY + boxH);
     fade.addColorStop(0, 'rgba(255,255,255,0)');
-    fade.addColorStop(1, 'rgba(255,255,255,0.96)');
+    fade.addColorStop(1, 'rgba(255,255,255,0.97)');
     ctx.fillStyle = fade;
-    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
+    canvasRoundRect(ctx, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 26);
     ctx.fill();
     ctx.fillStyle = '#ff6b9d';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.fillText(`… ${shareT('img_more', lang)} 👀`, boxX + 36, boxY + boxH - 26);
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`… ${shareT('img_more', lang)} 👀`, boxX + boxW, H - 42);
 
     // ── 右：大きなQRコード ──
     const qrPanelX = 660, qrPanelY = 64, qrPanelW = 476, qrPanelH = 502;
