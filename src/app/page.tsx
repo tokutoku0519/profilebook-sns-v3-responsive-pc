@@ -32,6 +32,7 @@ import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
+import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
@@ -1957,6 +1958,7 @@ function ProfileScreen({
           avatarUrl={avatarUrl || undefined}
           catchphrase={profileBookInfo.catchphrase}
           best3={best3}
+          lang={lang}
           onClose={() => setShowShare(false)}
         />
       )}
@@ -2568,6 +2570,7 @@ function ProfileEditScreen({
           avatarUrl={localAvatarUrl || undefined}
           catchphrase={form.catchphrase}
           best3={best3Form}
+          lang={lang}
           onClose={() => setShowShare(false)}
         />
       )}
@@ -2597,7 +2600,7 @@ function truncateStr(str: string, max: number) {
 
 // ── プロフィールシェアモーダル ───────────────────────────────
 function ProfileShareModal({
-  name, userId, avatar, avatarUrl, catchphrase, best3, onClose,
+  name, userId, avatar, avatarUrl, catchphrase, best3, lang = 'ja', onClose,
 }: {
   name: string;
   userId: string;
@@ -2605,14 +2608,19 @@ function ProfileShareModal({
   avatarUrl?: string;
   catchphrase: string;
   best3: typeof defaultBest3;
+  lang?: Lang;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<'qr' | 'image'>('qr');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [imageGenerated, setImageGenerated] = useState(false);
+  const [snsHint, setSnsHint] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrIncludedRef = useRef(false);
+  const pendingImageShareRef = useRef<SharePlatform | null>(null);
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://miri-delta.vercel.app';
+  const shareText = buildShareText(name, lang);
+  const snsTargets = getShareTargets(lang);
 
   // canvas は tab='image' になった後レンダリングされるので useEffect で生成する
   useEffect(() => {
@@ -2626,7 +2634,7 @@ function ProfileShareModal({
   useEffect(() => {
     import('qrcode').then(({ default: QRCode }) => {
       QRCode.toDataURL(shareUrl, {
-        width: 300,
+        width: 512,
         margin: 2,
         color: { dark: '#1a1a2e', light: '#ffffff' },
       }).then(setQrDataUrl);
@@ -2647,7 +2655,8 @@ function ProfileShareModal({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const W = 1080, H = 1350;
+    // 横型レイアウト：左上アイコン＋名前 / 左下プロフのチラ見せ / 右に大きなQR
+    const W = 1200, H = 630;
     canvas.width = W;
     canvas.height = H;
 
@@ -2659,22 +2668,18 @@ function ProfileShareModal({
     ctx.fillRect(0, 0, W, H);
 
     // ホワイトカード
-    ctx.fillStyle = 'rgba(255,255,255,0.90)';
-    canvasRoundRect(ctx, 60, 60, W - 120, H - 120, 64);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    canvasRoundRect(ctx, 28, 28, W - 56, H - 56, 44);
     ctx.fill();
 
-    // デコライン（上部）
-    ctx.fillStyle = '#ffb3d1';
-    ctx.fillRect(140, 140, W - 280, 6);
-
-    // アバター円
-    const cx = W / 2, cy = 320, r = 130;
-    const avatarBg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 16);
+    // ── 左上：アバター円 ──
+    const cx = 165, cy = 165, r = 85;
+    const avatarBg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 14);
     avatarBg.addColorStop(0, '#ffdcea');
     avatarBg.addColorStop(1, '#e8d0ff');
     ctx.fillStyle = avatarBg;
     ctx.beginPath();
-    ctx.arc(cx, cy, r + 16, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r + 14, 0, Math.PI * 2);
     ctx.fill();
 
     if (imgEl) {
@@ -2685,87 +2690,80 @@ function ProfileShareModal({
       ctx.drawImage(imgEl, cx - r, cy - r, r * 2, r * 2);
       ctx.restore();
     } else {
-      ctx.font = '112px serif';
+      ctx.font = '80px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(avatar, cx, cy);
     }
 
-    // 名前
+    // ── アイコンの右：名前＋ID ──
     ctx.fillStyle = '#1a1a2e';
-    ctx.font = 'bold 70px sans-serif';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 56px sans-serif';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(truncateStr(name, 12), W / 2, 510);
-
-    // ID
+    ctx.fillText(truncateStr(name, 10), 290, 155);
     ctx.fillStyle = '#aaa';
-    ctx.font = '36px sans-serif';
-    ctx.fillText(userId, W / 2, 570);
-
-    // キャッチフレーズ
-    if (catchphrase) {
-      ctx.fillStyle = '#ff6b9d';
-      ctx.font = 'italic bold 40px serif';
-      ctx.fillText(`"${truncateStr(catchphrase, 20)}"`, W / 2, 660);
-    }
-
-    // 区切り
-    ctx.fillStyle = '#ffb3d1';
-    ctx.fillRect(W / 2 - 50, 700, 100, 5);
-
-    // Best3 ラベル
-    ctx.fillStyle = '#bbb';
     ctx.font = '30px sans-serif';
-    ctx.fillText('MY BEST 3', W / 2, 750);
+    ctx.fillText(userId, 290, 205);
 
-    // Best3 アイテム
-    const best3Items: [string, string[]][] = [
-      ['テレビ・YouTube', best3.tv],
-      ['食べもの', best3.food],
-      ['場所', best3.places],
-    ];
-    best3Items.forEach(([label, vals], i) => {
-      const y = 790 + i * 130;
-      const val = vals[0] ?? '—';
+    // ── 左下：プロフの一部（チラ見せ） ──
+    const boxX = 64, boxY = 285, boxW = 560, boxH = 250;
+    ctx.fillStyle = 'rgba(255,179,209,0.12)';
+    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
+    ctx.fill();
 
-      ctx.fillStyle = 'rgba(255,179,209,0.12)';
-      canvasRoundRect(ctx, 140, y, W - 280, 100, 28);
-      ctx.fill();
-
-      ctx.font = '30px sans-serif';
-      ctx.fillStyle = '#bbb';
-      ctx.textAlign = 'left';
-      ctx.fillText(label, 180, y + 42);
-      ctx.font = 'bold 46px sans-serif';
-      ctx.fillStyle = '#1a1a2e';
-      ctx.fillText(truncateStr(val, 14), 180, y + 85);
+    const teaser: string[] = [];
+    if (catchphrase) teaser.push(truncateStr(catchphrase, 16));
+    if (best3.tv[0]) teaser.push(`📺 ${truncateStr(best3.tv[0], 14)}`);
+    if (best3.food[0]) teaser.push(`🍔 ${truncateStr(best3.food[0], 14)}`);
+    if (best3.places[0]) teaser.push(`📍 ${truncateStr(best3.places[0], 14)}`);
+    // 3行目が薄くフェードして「続きがある」チラ見せ感を出す
+    teaser.slice(0, 3).forEach((line, i) => {
+      if (i === 0 && catchphrase) {
+        ctx.fillStyle = '#ff6b9d';
+        ctx.font = 'italic bold 34px serif';
+      } else {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = 'bold 32px sans-serif';
+      }
+      ctx.fillText(line, boxX + 36, boxY + 58 + i * 52);
     });
 
-    // デコライン（下部）
-    ctx.fillStyle = '#ffb3d1';
-    ctx.fillRect(140, qrEl ? H - 270 : H - 210, W - 280, 5);
+    // フェードアウトで「続きがある」感を出す
+    const fade = ctx.createLinearGradient(0, boxY + boxH - 110, 0, boxY + boxH);
+    fade.addColorStop(0, 'rgba(255,255,255,0)');
+    fade.addColorStop(1, 'rgba(255,255,255,0.96)');
+    ctx.fillStyle = fade;
+    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
+    ctx.fill();
+    ctx.fillStyle = '#ff6b9d';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillText(`… ${shareT('img_more', lang)} 👀`, boxX + 36, boxY + boxH - 26);
 
-    // QRコード（右下）
+    // ── 右：大きなQRコード ──
+    const qrPanelX = 660, qrPanelY = 64, qrPanelW = 476, qrPanelH = 502;
+    ctx.fillStyle = '#ffffff';
+    canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,179,209,0.5)';
+    ctx.lineWidth = 4;
+    canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
+    ctx.stroke();
+
     if (qrEl) {
-      const qrSize = 160;
-      const qrX = W - 90 - qrSize;
-      const qrY = H - 258;
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      canvasRoundRect(ctx, qrX - 10, qrY - 10, qrSize + 20, qrSize + 38, 18);
-      ctx.fill();
-      ctx.drawImage(qrEl, qrX, qrY, qrSize, qrSize);
-      ctx.font = '28px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#aaa';
-      ctx.fillText('QRで開く', qrX + qrSize / 2, qrY + qrSize + 26);
+      const qrSize = 400;
+      ctx.drawImage(qrEl, qrPanelX + (qrPanelW - qrSize) / 2, qrPanelY + 30, qrSize, qrSize);
     }
+    ctx.font = 'bold 30px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(shareT('img_scan', lang), qrPanelX + qrPanelW / 2, qrPanelY + qrPanelH - 30);
 
     // ブランディング
-    ctx.font = 'bold 52px sans-serif';
-    ctx.textAlign = qrEl ? 'left' : 'center';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#ff6b9d';
-    ctx.fillText('✿ Miri', qrEl ? 140 : W / 2, H - 120);
+    ctx.fillText('✿ Miri', 64, H - 42);
 
     qrIncludedRef.current = !!qrEl;
     setImageGenerated(true);
@@ -2823,14 +2821,74 @@ function ProfileShareModal({
       canvasRef.current.toBlob((blob) => {
         if (!blob) return;
         const file = new File([blob], 'miri-profile.png', { type: 'image/png' });
-        navigator.share({ title: `${name}のMiriプロフィール`, files: [file] }).catch(() => {
-          navigator.share({ title: `${name}のMiriプロフィール`, url: shareUrl });
+        navigator.share({ title: shareText, files: [file] }).catch(() => {
+          navigator.share({ title: shareText, url: shareUrl });
         });
       });
     } else {
-      navigator.share({ title: `${name}のMiriプロフィール`, url: shareUrl });
+      navigator.share({ title: shareText, url: shareUrl });
     }
   }
+
+  // ── SNS別シェア（初期設定言語に合わせて出し分け） ──
+  function handleSnsClick(p: SharePlatform) {
+    setSnsHint('');
+    if (p.kind === 'url' && p.buildUrl) {
+      window.open(p.buildUrl(shareUrl, shareText), '_blank', 'noopener');
+    } else if (p.kind === 'copy') {
+      navigator.clipboard?.writeText(shareUrl).then(
+        () => setSnsHint(shareT(p.hintKey ?? 'hint_copied', lang)),
+        () => setSnsHint(shareUrl),
+      );
+    } else {
+      shareImageToSns(p);
+    }
+  }
+
+  function shareImageToSns(p: SharePlatform) {
+    // 画像がまだ生成されていなければ画像タブに切り替えて生成後に続行
+    if (tab !== 'image' || !imageGenerated || !canvasRef.current) {
+      pendingImageShareRef.current = p;
+      setTab('image');
+      return;
+    }
+    canvasRef.current.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], 'miri-profile.png', { type: 'image/png' });
+      const nav = navigator as Navigator & { canShare?: (d: object) => boolean };
+      if (navigator.share && nav.canShare?.({ files: [file] })) {
+        // モバイル：共有シートからストーリーズ等に直接渡せる
+        navigator.share({ files: [file], title: shareText }).catch((err) => {
+          if (err?.name !== 'AbortError') saveImageFallback(blob, p);
+        });
+      } else {
+        saveImageFallback(blob, p);
+      }
+    });
+  }
+
+  function saveImageFallback(blob: Blob, p: SharePlatform) {
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.download = `miri-profile-${userId}.png`;
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setSnsHint(shareT(p.hintKey ?? 'hint_image_saved', lang));
+    if (p.id === 'instagram' && /Android|iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      setTimeout(() => { window.location.href = 'instagram://story-camera'; }, 500);
+    }
+  }
+
+  // 画像生成待ちのSNSシェアがあれば生成完了後に実行
+  useEffect(() => {
+    if (imageGenerated && pendingImageShareRef.current) {
+      const p = pendingImageShareRef.current;
+      pendingImageShareRef.current = null;
+      shareImageToSns(p);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageGenerated]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -2894,11 +2952,11 @@ function ProfileShareModal({
         {/* ── シェア画像タブ ── */}
         {tab === 'image' && (
           <div className="flex flex-col items-center gap-4 px-5">
-            <div className="relative w-full max-w-[280px]">
+            <div className="relative w-full max-w-[400px]">
               <canvas
                 ref={canvasRef}
                 className="w-full rounded-2xl shadow-card"
-                style={{ aspectRatio: '1080/1350' }}
+                style={{ aspectRatio: '1200/630' }}
               />
               {!imageGenerated && (
                 <div className="absolute inset-0 grid place-items-center rounded-2xl bg-base">
@@ -2925,6 +2983,26 @@ function ProfileShareModal({
             </button>
           </div>
         )}
+
+        {/* ── SNSシェア（初期設定言語に合わせたSNSをワンタッチで） ── */}
+        <div className="mt-6 px-5">
+          <p className="mb-3 text-xs font-black text-muted">📲 {shareT('sns_row_label', lang)}</p>
+          <div className="flex flex-wrap gap-2">
+            {snsTargets.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => handleSnsClick(p)}
+                className="flex items-center gap-1.5 rounded-full px-5 py-3 text-sm font-black shadow-card transition active:scale-[0.97]"
+                style={{ background: p.color, color: p.textColor ?? '#fff' }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {snsHint && (
+            <p className="mt-3 rounded-2xl bg-pink/10 px-4 py-2.5 text-xs font-bold text-pink">💡 {snsHint}</p>
+          )}
+        </div>
       </div>
     </div>
   );
