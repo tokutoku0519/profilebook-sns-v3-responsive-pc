@@ -34,6 +34,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
+import { TERMS_VERSION } from '@/lib/terms';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -4608,6 +4609,7 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -4615,12 +4617,26 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (mode === 'signup' && !agreed) {
+      setError('利用規約とプライバシーポリシーへの同意が必要です');
+      return;
+    }
     setLoading(true);
     const { supabase } = await import('@/lib/supabase');
     if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
 
     if (mode === 'signup') {
-      const { data, error: err } = await supabase.auth.signUp({ email, password });
+      const { data, error: err } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // 同意の記録（いつ・どのバージョンの規約に同意したか）をユーザーメタデータに残す
+          data: {
+            terms_agreed_at: new Date().toISOString(),
+            terms_version: TERMS_VERSION,
+          },
+        },
+      });
       if (err) { setError(err.message); setLoading(false); return; }
       if (data.session) {
         // メール確認不要の場合はそのままアプリへ（onAuthStateChange が検知）
@@ -4673,10 +4689,31 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
             minLength={6}
             className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
           />
+          {mode === 'signup' && (
+            <div className="rounded-2xl bg-base px-4 py-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={e => { setAgreed(e.target.checked); setError(''); }}
+                  className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-pink"
+                />
+                <span className="text-xs font-bold leading-5 text-ink">
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-pink underline">利用規約</a>
+                  と
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-pink underline">プライバシーポリシー</a>
+                  に同意します
+                </span>
+              </label>
+              <p className="mt-2 pl-8 text-[10px] font-bold leading-4 text-muted">
+                本サービスには企業からのPR質問が含まれ、回答データは個人を特定できない統計データに加工したうえで、企業のリサーチ等に利用・提供されることがあります。
+              </p>
+            </div>
+          )}
           {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mode === 'signup' && !agreed)}
             className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
           >
             {loading ? '...' : mode === 'login' ? 'ログイン' : '登録する'}
@@ -4688,6 +4725,11 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
         >
           {mode === 'login' ? 'アカウントを作成する →' : '← ログインに戻る'}
         </button>
+        <p className="mt-3 text-center text-[10px] font-bold text-muted">
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">利用規約</a>
+          <span className="mx-1">·</span>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">プライバシーポリシー</a>
+        </p>
       </div>
     </div>
   );
