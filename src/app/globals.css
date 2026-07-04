@@ -224,3 +224,18 @@ button, input, textarea { font: inherit; }
   background: rgba(255,255,255,.28);
   transform: rotate(18deg);
 }
+
+/* ======== 世界観背景（ガチャ排出）の浮遊アニメーション ======== */
+@keyframes bg-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25%      { transform: translateY(-8px) rotate(4deg); }
+  50%      { transform: translateY(-14px) rotate(-3deg); }
+  75%      { transform: translateY(-6px) rotate(2deg); }
+}
+.bg-floater {
+  position: absolute;
+  animation: bg-float ease-in-out infinite;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.85;
+}

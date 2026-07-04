@@ -35,6 +35,7 @@ import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { TERMS_VERSION } from '@/lib/terms';
+import { BG_THEMES, BG_GACHA_COST, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -54,6 +55,12 @@ type Circle = {
   emoji: string;
   memberIds: string[];
   createdBy: string;
+  /** 公認サークル（著名なグループ・公式アカウントが運営） */
+  isOfficial?: boolean;
+  /** 公認サークルのみ：ファンの参加を許可するか */
+  allowFans?: boolean;
+  /** ファンとして参加中のユーザー */
+  fanIds?: string[];
 };
 
 type CirclePost = {
@@ -65,6 +72,12 @@ type CirclePost = {
   postedByAvatar: string;
   postedAt: string;
   replies: { userId: string; userName: string; userAvatar: string; body: string; postedAt: string }[];
+  /** 回答できる範囲。members = メンバーのみ / everyone = ファンも回答OK（未指定は members 扱い） */
+  audience?: 'members' | 'everyone';
+  /** お題の形式。vote = 「一番〜な人は誰？」のメンバー投票（未指定は talk 扱い） */
+  kind?: 'talk' | 'vote';
+  /** vote 形式の投票結果 */
+  votes?: { userId: string; targetId: string }[];
 };
 
 type DiaryEntry = {
@@ -548,7 +561,7 @@ const ACTIVITY_DEFS: ActivityDef[] = [
   },
 ];
 
-// プロフィールの共通点フィールド定義（マッチングに使用）
+// プロフィールの共通点フィールド定義（共通点さがし・なかよし度に使用）
 const MATCH_FIELDS: { key: keyof typeof defaultProfileBookInfo; label: string }[] = [
   { key: 'bloodType', label: '血液型' },
   { key: 'mbti', label: 'MBTI' },
@@ -601,6 +614,12 @@ const initialCircles: Circle[] = isDev ? [
   { id: 'circle-1', name: 'ダンスサークル', emoji: '🕺', memberIds: ['@koki', '@mayu_note', '@nana_7', '@akari_28'], createdBy: '@koki' },
   { id: 'circle-2', name: '写真好き集まれ', emoji: '📸', memberIds: ['@koki', '@rin_puri', '@haru_cafe'], createdBy: '@rin_puri' },
   { id: 'circle-3', name: '深夜散歩部', emoji: '🌙', memberIds: ['@koki', '@haru_cafe', '@yui_book', '@rin_puri'], createdBy: '@koki' },
+  // 公認サークルの例：著名グループが運営し、ファンも参加できる
+  {
+    id: 'circle-official-1', name: 'STARLIGHT公式', emoji: '⭐',
+    memberIds: ['@mayu_note', '@rin_puri', '@nana_7', '@haru_cafe'], createdBy: '@mayu_note',
+    isOfficial: true, allowFans: true, fanIds: ['@koki', '@yui_book', '@akari_28'],
+  },
 ] : [];
 
 const initialCirclePosts: CirclePost[] = isDev ? [
@@ -635,6 +654,29 @@ const initialCirclePosts: CirclePost[] = isDev ? [
       { userId: '@koki', userName: 'Koki', userAvatar: '📷', body: '川沿い→高架下→コンビニ、は鉄板です', postedAt: '2024-04-13T23:30:00Z' },
       { userId: '@yui_book', userName: 'ゆい', userAvatar: '📚', body: '住宅街をランダムに歩くのが好き、迷子になっても楽しい', postedAt: '2024-04-14T00:10:00Z' },
     ],
+  },
+  // 公認サークル：ファンも回答できる投票お題
+  {
+    id: 'cp-5', circleId: 'circle-official-1',
+    body: '一番朝が弱いメンバーは誰？',
+    postedBy: '@mayu_note', postedByName: 'まゆ', postedByAvatar: '🎀', postedAt: '2024-04-15T18:00:00Z',
+    replies: [],
+    audience: 'everyone', kind: 'vote',
+    votes: [
+      { userId: '@rin_puri', targetId: '@nana_7' },
+      { userId: '@haru_cafe', targetId: '@nana_7' },
+      { userId: '@yui_book', targetId: '@mayu_note' },
+    ],
+  },
+  // 公認サークル：メンバーだけの質問（ファンには内容が見えない）
+  {
+    id: 'cp-6', circleId: 'circle-official-1',
+    body: '次のライブのセトリ、最後の曲どっちにする？',
+    postedBy: '@rin_puri', postedByName: 'りん', postedByAvatar: '🌙', postedAt: '2024-04-16T12:00:00Z',
+    replies: [
+      { userId: '@nana_7', userName: 'なな', userAvatar: '🧸', body: '新曲で締めたい！', postedAt: '2024-04-16T13:00:00Z' },
+    ],
+    audience: 'members',
   },
 ] : [];
 
@@ -991,14 +1033,14 @@ function SearchScreen({ go, answers, myProfile }: {
         </div>
         <div className="mt-4 grid grid-cols-4 rounded-full bg-white p-1 text-center text-xs font-bold shadow-card">
           <button onClick={() => setMode('answer')} className={`rounded-full py-2 ${mode === 'answer' ? 'bg-pink text-white' : 'text-muted'}`}>回答</button>
-          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>人</button>
+          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>なかま</button>
           <button onClick={() => setMode('question')} className={`rounded-full py-2 ${mode === 'question' ? 'bg-pink text-white' : 'text-muted'}`}>お題</button>
           <button onClick={() => setMode('match')} className={`rounded-full py-2 ${mode === 'match' ? 'bg-pink text-white' : 'text-muted'}`}>共通点</button>
         </div>
 
         {mode === 'match' ? (
           <div className="mt-4 space-y-4 pb-8">
-            <p className="text-xs font-bold text-muted">あなたのプロフィールと共通点がある人を自動で探しています ✨</p>
+            <p className="text-xs font-bold text-muted">プロフ帳の共通点から、仲良くなれそうな人をさがしているよ 🍀</p>
             {matches.length === 0 ? (
               <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
                 共通点のある人が見つかりませんでした。<br />プロフィールを編集すると増えます！
@@ -1012,7 +1054,7 @@ function SearchScreen({ go, answers, myProfile }: {
                   <p className="text-xs font-bold text-muted">{profile.id}</p>
                   <p className="mt-1 text-xs font-bold text-pink">✨ {field}が一緒：{value}</p>
                 </div>
-                <span className="rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink">見る</span>
+                <span className="rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink">プロフ帳</span>
               </button>
             ))}
             <div className="rounded-[24px] bg-cream/60 px-4 py-3 text-xs font-bold text-muted">
@@ -1022,12 +1064,12 @@ function SearchScreen({ go, answers, myProfile }: {
         ) : (
           <>
             <div className="mt-4 flex flex-wrap gap-2">
-              {['平成', '給食', '夜型', 'インドア', '推し活', '恋愛観'].map((tag) => (
+              {['平成', '給食', '夜型', 'インドア', '推し活', '放課後'].map((tag) => (
                 <button key={tag} onClick={() => setQuery(tag)} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-muted shadow-card">#{tag}</button>
               ))}
             </div>
             <section className="mt-6 space-y-3">
-              <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? '人を探す' : 'お題を探す'} />
+              <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
               {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile.id)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create')} className="block w-full text-left"><QuestionCard question={question} /></button>)}
@@ -1473,6 +1515,29 @@ function ProfSectionHeader({ icon, title, theme }: { icon: string; title: string
   );
 }
 
+// ── 世界観背景（ガチャ排出）：絵文字がふわふわ浮かぶシーン ──
+function SceneBackground({ theme }: { theme: BgTheme }) {
+  return (
+    <div className={`absolute inset-0 overflow-hidden bg-gradient-to-br ${theme.gradient}`} aria-hidden>
+      {theme.floaters.map((f, i) => (
+        <span
+          key={i}
+          className="bg-floater"
+          style={{
+            left: `${f.left}%`,
+            top: `${f.top}%`,
+            fontSize: `${f.size}rem`,
+            animationDelay: `${f.delay}s`,
+            animationDuration: `${f.duration}s`,
+          }}
+        >
+          {f.emoji}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ProfileBookContent({
   info,
   best3,
@@ -1482,6 +1547,7 @@ function ProfileBookContent({
   avatarUrl,
   userId,
   themeColor = 'pink',
+  bgTheme = null,
   favoritePhotos,
   customFields = {},
   onGoDetail,
@@ -1495,6 +1561,7 @@ function ProfileBookContent({
   avatarUrl?: string;
   userId: string;
   themeColor?: string;
+  bgTheme?: BgTheme | null;
   favoritePhotos?: string[];
   customFields?: Record<string, string>;
   onGoDetail?: (id: string) => void;
@@ -1551,11 +1618,12 @@ function ProfileBookContent({
     <div className="space-y-4 px-4 pt-3 pb-32">
 
       {/* ── 表紙カード ── */}
-      <section className={`relative overflow-hidden rounded-[32px] border border-purple/10 bg-gradient-to-br ${grad} p-5 shadow-card`}>
+      <section className={`relative overflow-hidden rounded-[32px] border border-purple/10 ${bgTheme ? '' : `bg-gradient-to-br ${grad}`} p-5 shadow-card`}>
+        {bgTheme && <SceneBackground theme={bgTheme} />}
         <div className="absolute right-4 top-4 rotate-6 rounded-xl bg-white/80 px-3 py-1 text-[10px] font-black text-pink shadow-sm tracking-widest">
           ✿ PROFILE ✿
         </div>
-        <div className="flex items-center gap-4">
+        <div className="relative flex items-center gap-4">
           <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-5xl shadow-inner ring-2 ring-white">
             {avatarUrl
               ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
@@ -1570,9 +1638,14 @@ function ProfileBookContent({
           </div>
         </div>
         {/* ひとこと帯 */}
-        <div className="mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
+        <div className="relative mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
           ✉ {translatedInfo.message ?? info.message}
         </div>
+        {bgTheme && (
+          <div className="relative mt-2 text-right">
+            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.emoji} {bgTheme.name}</span>
+          </div>
+        )}
       </section>
 
       {/* ── きほんじょうほう ── */}
@@ -1723,6 +1796,7 @@ function OtherProfileScreen({
   answers,
   subscribedOfficials,
   onToggleSubscription,
+  myProfile,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -1730,6 +1804,7 @@ function OtherProfileScreen({
   answers: Answer[];
   subscribedOfficials: string[];
   onToggleSubscription: (userId: string) => void;
+  myProfile?: typeof defaultProfileBookInfo;
   lang?: Lang;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
@@ -1754,6 +1829,20 @@ function OtherProfileScreen({
   const premium = book?.premium;
   const isSubscribed = subscribedOfficials.includes(profile.id) || (me.isOfficial && book?.isOfficial === true);
 
+  // ── なかよし度：プロフ帳の共通点＋なかよし登録から算出 ──
+  const commonPoints = useMemo(() => {
+    if (!myProfile || !book?.info) return [] as { label: string; value: string }[];
+    const result: { label: string; value: string }[] = [];
+    for (const { key, label } of MATCH_FIELDS) {
+      const mine = myProfile[key]?.trim();
+      const theirs = book.info[key]?.trim();
+      if (mine && theirs && mine === theirs) result.push({ label, value: mine });
+    }
+    return result;
+  }, [myProfile, book]);
+  const friendLevel = Math.min(5, commonPoints.length + (isFollowing ? 1 : 0));
+  const FRIEND_LEVEL_LABELS = ['はじめまして', 'かおみしり', 'ともだち', 'なかよし', 'だいのなかよし', 'しんゆう'];
+
   return (
     <>
       <AppHeader title={`${profile.name}のプロフ帳`} back onBack={() => go('home')} onBell={() => go('notifications')} />
@@ -1766,8 +1855,34 @@ function OtherProfileScreen({
               : 'bg-pink text-white'
           }`}
         >
-          {isFollowing ? '✓ フォロー中' : 'フォローする ＋'}
+          {isFollowing ? '🎀 なかよし登録中' : '🎀 なかよくなる'}
         </button>
+      </div>
+
+      {/* なかよし度 */}
+      <div className="px-4 pt-3">
+        <section className="rounded-[24px] bg-white p-4 shadow-card">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-black text-ink">🍀 なかよし度</p>
+            <p className="text-xs font-black text-pink">{FRIEND_LEVEL_LABELS[friendLevel]}</p>
+          </div>
+          <div className="mt-2 flex gap-1">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <span key={i} className={`text-xl transition ${i < friendLevel ? '' : 'opacity-20 grayscale'}`}>💗</span>
+            ))}
+          </div>
+          {commonPoints.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {commonPoints.map((c) => (
+                <span key={c.label} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">
+                  ✨ {c.label}が一緒：{c.value}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-[10px] font-bold text-muted">お題に答えたりプロフ帳を交換すると、共通点が見つかってなかよし度が上がるよ</p>
+          )}
+        </section>
       </div>
 
       {/* 称号バッジ */}
@@ -1888,6 +2003,7 @@ function ProfileScreen({
   avatarUrl,
   favoritePhotos,
   customFields,
+  equippedBg = null,
   lang = 'ja',
 }: {
   go: (s: Screen, answerId?: string) => void;
@@ -1897,6 +2013,7 @@ function ProfileScreen({
   avatarUrl: string;
   favoritePhotos: string[];
   customFields?: Record<string, string>;
+  equippedBg?: BgTheme | null;
   lang?: Lang;
 }) {
   const [showShare, setShowShare] = useState(false);
@@ -1946,6 +2063,7 @@ function ProfileScreen({
         avatarUrl={avatarUrl || undefined}
         userId="@koki"
         themeColor="pink"
+        bgTheme={equippedBg}
         favoritePhotos={favoritePhotos}
         customFields={customFields}
         lang={lang}
@@ -3976,18 +4094,30 @@ function CirclesScreen({
         ) : circles.map((c) => {
           const posts = circlePosts.filter((p) => p.circleId === c.id);
           const members = followers.filter((f) => c.memberIds.includes(f.id));
+          const iAmMember = c.memberIds.includes(me.id);
+          const memberCount = members.length + (iAmMember ? 1 : 0);
+          const fanCount = c.fanIds?.length ?? 0;
           return (
             <button key={c.id} onClick={() => go('circle-detail', c.id)}
               className="flex w-full items-start gap-4 rounded-[28px] bg-white p-4 text-left shadow-card active:scale-[0.98]">
-              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-purple/10 text-3xl">{c.emoji}</div>
+              <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-3xl ${c.isOfficial ? 'bg-amber-100' : 'bg-purple/10'}`}>{c.emoji}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="font-black text-ink">{c.name}</p>
-                  <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🔒</span>
+                  {c.isOfficial ? (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">⭐ 公認</span>
+                  ) : (
+                    <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🔒</span>
+                  )}
+                  {c.isOfficial && !iAmMember && c.fanIds?.includes(me.id) && (
+                    <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 ファン参加中</span>
+                  )}
                 </div>
-                <p className="mt-0.5 text-xs text-muted">{members.length + 1}人・{posts.length}件のお題</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  メンバー{memberCount}人{c.isOfficial && c.allowFans ? `・ファン${fanCount}人` : ''}・{posts.length}件のお題
+                </p>
                 <div className="mt-2 flex gap-1">
-                  {[{ avatar: me.avatar }, ...members].slice(0, 5).map((m, i) => (
+                  {(iAmMember ? [{ avatar: me.avatar }, ...members] : members).slice(0, 5).map((m, i) => (
                     <span key={i} className="text-base">{m.avatar}</span>
                   ))}
                 </div>
@@ -4002,91 +4132,210 @@ function CirclesScreen({
 }
 
 function CircleDetailScreen({
-  go, circle, posts, onPost,
+  go, circle, posts, onPost, onReply, onVote,
 }: {
   go: (s: Screen, payload?: any) => void;
   circle: Circle;
   posts: CirclePost[];
-  onPost: (circleId: string, body: string) => void;
+  onPost: (circleId: string, body: string, opts?: { audience?: 'members' | 'everyone'; kind?: 'talk' | 'vote' }) => void;
+  onReply: (postId: string, body: string) => void;
+  onVote: (postId: string, targetId: string) => void;
 }) {
   const [newQ, setNewQ] = useState('');
+  const [newKind, setNewKind] = useState<'talk' | 'vote'>('talk');
+  const [newAudience, setNewAudience] = useState<'members' | 'everyone'>('members');
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const newQRef = useRef<HTMLTextAreaElement>(null);
   const members = followers.filter((f) => circle.memberIds.includes(f.id));
+  const iAmMember = circle.memberIds.includes(me.id);
+  const iAmFan = !iAmMember && (circle.fanIds?.includes(me.id) ?? false);
+  const fanJoinable = circle.isOfficial && circle.allowFans;
+  // 投票の候補（サークルメンバー全員）
+  const voteCandidates = [
+    ...(iAmMember ? [{ id: me.id, name: me.name, avatar: me.avatar }] : []),
+    ...members,
+  ];
 
   return (
     <>
       <AppHeader title={`${circle.emoji} ${circle.name}`} back onBack={() => go('circles')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[24px] bg-white p-4 shadow-card">
-          <p className="mb-3 text-xs font-black text-muted">メンバー {members.length + 1}人</p>
+          <div className="mb-3 flex items-center gap-2">
+            <p className="text-xs font-black text-muted">メンバー {members.length + (iAmMember ? 1 : 0)}人</p>
+            {circle.isOfficial && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">⭐ 公認サークル</span>
+            )}
+            {fanJoinable && (
+              <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 ファン {circle.fanIds?.length ?? 0}人</span>
+            )}
+          </div>
           <div className="flex flex-wrap gap-3">
-            {[{ id: me.id, name: me.name, avatar: me.avatar }, ...members].map((m) => (
+            {(iAmMember ? [{ id: me.id, name: me.name, avatar: me.avatar }, ...members] : members).map((m) => (
               <div key={m.id} className="flex flex-col items-center gap-1">
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-pink/10 text-xl">{m.avatar}</div>
                 <p className="text-[10px] font-bold text-muted">{m.name}</p>
               </div>
             ))}
           </div>
+          {iAmFan && (
+            <p className="mt-3 rounded-2xl bg-pink/5 px-3 py-2 text-[10px] font-bold text-muted">
+              🎫 ファンとして参加中。「ファンもOK」のお題に回答・投票できます
+            </p>
+          )}
         </section>
 
-        <section className="rounded-[24px] bg-white p-4 shadow-card">
-          <p className="mb-2 text-sm font-black text-ink">🔒 お題を書く</p>
-          <RetroEmojiPicker onInsert={(code) => insertRetroCode(newQRef, code, setNewQ)} />
-          <textarea ref={newQRef} value={newQ} onChange={(e) => setNewQ(e.target.value)} maxLength={100} rows={2}
-            placeholder="サークル内だけのお題を書いてね（100文字以内）"
-            className="mt-2 w-full resize-none rounded-2xl border border-purple/15 bg-base px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink" />
-          {newQ && (
-            <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
-              <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
-              <p className="min-h-[1.5rem] text-sm font-bold leading-7 text-ink"><RetroText text={newQ} /></p>
+        {iAmMember ? (
+          <section className="rounded-[24px] bg-white p-4 shadow-card">
+            <p className="mb-2 text-sm font-black text-ink">🔒 お題を書く</p>
+            {/* お題の形式 */}
+            <div className="mb-2 grid grid-cols-2 gap-2 rounded-full bg-base p-1 text-center text-xs font-black">
+              <button type="button" onClick={() => setNewKind('talk')}
+                className={`rounded-full py-2 ${newKind === 'talk' ? 'bg-pink text-white' : 'text-muted'}`}>💬 フリー回答</button>
+              <button type="button" onClick={() => setNewKind('vote')}
+                className={`rounded-full py-2 ${newKind === 'vote' ? 'bg-pink text-white' : 'text-muted'}`}>🗳 メンバー投票</button>
             </div>
-          )}
-          <button disabled={!newQ.trim()} onClick={() => { onPost(circle.id, newQ.trim()); setNewQ(''); }}
-            className="mt-3 h-11 w-full rounded-full bg-pink text-sm font-black text-white shadow-card disabled:opacity-40 active:scale-[0.98]">
-            投稿する
-          </button>
-        </section>
+            {newKind === 'talk' && <RetroEmojiPicker onInsert={(code) => insertRetroCode(newQRef, code, setNewQ)} />}
+            <textarea ref={newQRef} value={newQ} onChange={(e) => setNewQ(e.target.value)} maxLength={100} rows={2}
+              placeholder={newKind === 'vote' ? '例：一番朝が弱い人は誰？／一番歌がうまい人は誰？' : 'サークル内だけのお題を書いてね（100文字以内）'}
+              className="mt-2 w-full resize-none rounded-2xl border border-purple/15 bg-base px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink" />
+            {newQ && newKind === 'talk' && (
+              <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
+                <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
+                <p className="min-h-[1.5rem] text-sm font-bold leading-7 text-ink"><RetroText text={newQ} /></p>
+              </div>
+            )}
+            {/* ファンの回答可否（公認サークル×ファン許可のみ） */}
+            {fanJoinable && (
+              <div className="mt-3 rounded-2xl bg-base p-3">
+                <p className="mb-2 text-[10px] font-black text-muted">だれが回答できる？</p>
+                <div className="grid grid-cols-2 gap-2 text-center text-xs font-black">
+                  <button type="button" onClick={() => setNewAudience('members')}
+                    className={`rounded-full py-2 ${newAudience === 'members' ? 'bg-purple text-white' : 'bg-white text-muted'}`}>🔒 メンバーのみ</button>
+                  <button type="button" onClick={() => setNewAudience('everyone')}
+                    className={`rounded-full py-2 ${newAudience === 'everyone' ? 'bg-pink text-white' : 'bg-white text-muted'}`}>🎫 ファンもOK</button>
+                </div>
+              </div>
+            )}
+            <button disabled={!newQ.trim()}
+              onClick={() => { onPost(circle.id, newQ.trim(), { kind: newKind, audience: fanJoinable ? newAudience : 'members' }); setNewQ(''); setNewKind('talk'); setNewAudience('members'); }}
+              className="mt-3 h-11 w-full rounded-full bg-pink text-sm font-black text-white shadow-card disabled:opacity-40 active:scale-[0.98]">
+              投稿する
+            </button>
+          </section>
+        ) : (
+          <div className="rounded-2xl bg-purple/5 px-4 py-3 text-xs font-bold leading-5 text-muted">
+            お題を作れるのはメンバーだけです。ファンは「🎫 ファンもOK」のお題に参加できます
+          </div>
+        )}
 
         {posts.length === 0 ? (
           <EmptyState text="まだお題がありません。最初のお題を書いてみよう！" />
-        ) : posts.map((p) => (
-          <div key={p.id} className="rounded-[24px] bg-white p-4 shadow-card">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="text-lg">{p.postedByAvatar}</span>
-              <span className="text-xs font-black text-ink">{p.postedByName}</span>
-              <span className="ml-auto rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🔒 サークル限定</span>
-            </div>
-            <p className="mb-3 text-sm font-black text-ink"><RetroText text={p.body} /></p>
-            {p.replies.length > 0 && (
-              <div className="space-y-2 border-t border-dashed border-purple/15 pt-3">
-                {p.replies.map((r, i) => (
-                  <div key={i} className="flex gap-2">
-                    <span className="text-base">{r.userAvatar}</span>
-                    <div className="flex-1 rounded-2xl bg-base px-3 py-2 text-xs font-bold text-ink">
-                      <span className="font-black text-pink">{r.userName}</span>: {r.body}
+        ) : posts.map((p) => {
+          const forEveryone = p.audience === 'everyone';
+          const canSee = iAmMember || (iAmFan && forEveryone);
+          const canAnswer = iAmMember || (iAmFan && forEveryone);
+          // ファンにはメンバー限定のお題を見せない（存在だけ表示）
+          if (!canSee) {
+            return (
+              <div key={p.id} className="rounded-[24px] bg-white p-4 shadow-card opacity-70">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🔒</span>
+                  <p className="text-xs font-bold text-muted">メンバー限定のお題です</p>
+                </div>
+              </div>
+            );
+          }
+          const isVote = p.kind === 'vote';
+          const votes = p.votes ?? [];
+          const myVote = votes.find((v) => v.userId === me.id);
+          return (
+            <div key={p.id} className="rounded-[24px] bg-white p-4 shadow-card">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-lg">{p.postedByAvatar}</span>
+                <span className="text-xs font-black text-ink">{p.postedByName}</span>
+                {isVote && <span className="rounded-full bg-purple/10 px-2 py-0.5 text-[10px] font-black text-purple">🗳 投票</span>}
+                <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-black ${forEveryone ? 'bg-amber-100 text-amber-600' : 'bg-pink/10 text-pink'}`}>
+                  {forEveryone ? '🎫 ファンもOK' : '🔒 メンバー限定'}
+                </span>
+              </div>
+              <p className="mb-3 text-sm font-black text-ink"><RetroText text={p.body} /></p>
+
+              {isVote ? (
+                /* ── メンバー投票（一番〜な人は誰？） ── */
+                <div className="space-y-2">
+                  {voteCandidates.length === 0 ? null : myVote || !canAnswer ? (
+                    /* 投票済み or 閲覧のみ → 結果表示 */
+                    voteCandidates.map((c) => {
+                      const count = votes.filter((v) => v.targetId === c.id).length;
+                      const pct = votes.length === 0 ? 0 : Math.round((count / votes.length) * 100);
+                      const isMine = myVote?.targetId === c.id;
+                      return (
+                        <div key={c.id} className="relative overflow-hidden rounded-2xl bg-base px-3 py-2">
+                          <div className="absolute inset-y-0 left-0 bg-pink/15 transition-all" style={{ width: `${pct}%` }} />
+                          <div className="relative flex items-center gap-2 text-xs font-bold text-ink">
+                            <span className="text-base">{c.avatar}</span>
+                            <span className="flex-1">{c.name}{isMine && <span className="ml-1 text-pink">✓ 投票した</span>}</span>
+                            <span className="font-black text-pink">{count}票</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    /* 未投票 → 候補から選ぶ */
+                    <>
+                      <p className="text-[10px] font-bold text-muted">だれか1人を選んでね（結果は投票後に見えるよ）</p>
+                      <div className="flex flex-wrap gap-2">
+                        {voteCandidates.map((c) => (
+                          <button key={c.id} onClick={() => onVote(p.id, c.id)}
+                            className="flex items-center gap-2 rounded-full bg-base px-3 py-2 text-xs font-black text-ink transition hover:bg-pink/10 active:scale-95">
+                            <span className="text-base">{c.avatar}</span>{c.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <p className="text-right text-[10px] font-bold text-muted">合計 {votes.length}票</p>
+                </div>
+              ) : (
+                /* ── フリー回答 ── */
+                <>
+                  {p.replies.length > 0 && (
+                    <div className="space-y-2 border-t border-dashed border-purple/15 pt-3">
+                      {p.replies.map((r, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-base">{r.userAvatar}</span>
+                          <div className="flex-1 rounded-2xl bg-base px-3 py-2 text-xs font-bold text-ink">
+                            <span className="font-black text-pink">{r.userName}</span>: {r.body}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {replyTargetId === p.id ? (
-              <div className="mt-3 flex gap-2">
-                <input value={replyText} onChange={(e) => setReplyText(e.target.value)} maxLength={80}
-                  placeholder="返信を書く…"
-                  className="flex-1 rounded-full border border-purple/15 bg-base px-4 py-2 text-xs font-bold outline-none focus:border-pink" />
-                <button onClick={() => { setReplyTargetId(null); setReplyText(''); }}
-                  className="rounded-full bg-pink px-4 py-2 text-xs font-black text-white">送る</button>
-              </div>
-            ) : (
-              <button onClick={() => setReplyTargetId(p.id)}
-                className="mt-2 text-xs font-black text-pink">
-                ↩ 返信する
-              </button>
-            )}
-          </div>
-        ))}
+                  )}
+                  {canAnswer && (replyTargetId === p.id ? (
+                    <div className="mt-3 flex gap-2">
+                      <input value={replyText} onChange={(e) => setReplyText(e.target.value)} maxLength={80}
+                        placeholder="返信を書く…"
+                        className="flex-1 rounded-full border border-purple/15 bg-base px-4 py-2 text-xs font-bold outline-none focus:border-pink" />
+                      <button
+                        onClick={() => {
+                          if (replyText.trim()) onReply(p.id, replyText.trim());
+                          setReplyTargetId(null); setReplyText('');
+                        }}
+                        className="rounded-full bg-pink px-4 py-2 text-xs font-black text-white">送る</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setReplyTargetId(p.id)}
+                      className="mt-2 text-xs font-black text-pink">
+                      ↩ 返信する
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -4096,11 +4345,13 @@ function CircleCreateScreen({
   go, onCreate,
 }: {
   go: (s: Screen, payload?: any) => void;
-  onCreate: (name: string, emoji: string, memberIds: string[]) => string;
+  onCreate: (name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean }) => string;
 }) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('🔒');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [isOfficial, setIsOfficial] = useState(false);
+  const [allowFans, setAllowFans] = useState(false);
 
   return (
     <>
@@ -4144,12 +4395,40 @@ function CircleCreateScreen({
           </div>
         </section>
 
+        {/* 公認ユーザーのみ：公認サークル＋ファン参加設定 */}
+        {me.isOfficial && (
+          <section className="rounded-[32px] bg-white p-5 shadow-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-black text-ink">⭐ 公認サークルにする</p>
+                <p className="mt-0.5 text-[10px] font-bold text-muted">公認ユーザー（著名なグループ）だけが使えます</p>
+              </div>
+              <button type="button" onClick={() => { setIsOfficial((v) => !v); if (isOfficial) setAllowFans(false); }}
+                className={`h-7 w-12 rounded-full p-0.5 transition ${isOfficial ? 'bg-amber-400' : 'bg-purple/15'}`}>
+                <span className={`block h-6 w-6 rounded-full bg-white shadow transition ${isOfficial ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+            {isOfficial && (
+              <div className="mt-4 flex items-center justify-between border-t border-dashed border-purple/15 pt-4">
+                <div>
+                  <p className="font-black text-ink">🎫 ファンの参加を許可</p>
+                  <p className="mt-0.5 text-[10px] font-bold text-muted">ファンは「ファンもOK」のお題にだけ回答できます</p>
+                </div>
+                <button type="button" onClick={() => setAllowFans((v) => !v)}
+                  className={`h-7 w-12 rounded-full p-0.5 transition ${allowFans ? 'bg-pink' : 'bg-purple/15'}`}>
+                  <span className={`block h-6 w-6 rounded-full bg-white shadow transition ${allowFans ? 'translate-x-5' : ''}`} />
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="rounded-2xl bg-purple/5 px-4 py-3 text-xs font-bold leading-5 text-muted">
           🔒 サークル内のお題はメンバーだけに表示されます
         </div>
 
         <button disabled={!name.trim()}
-          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers); go('circle-detail', id); }}
+          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers, { isOfficial, allowFans }); go('circle-detail', id); }}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
           {emoji} サークルを作る ({selectedMembers.length + 1}人)
         </button>
@@ -4206,6 +4485,10 @@ function ShopScreen({
   onPurchasePack,
   onAddGachaStickers,
   onSpendCoins,
+  ownedBgIds,
+  equippedBgId,
+  onAddBg,
+  onEquipBg,
   lang = 'ja',
 }: {
   go: (s: Screen) => void;
@@ -4215,11 +4498,16 @@ function ShopScreen({
   onPurchasePack: (packId: string) => void;
   onAddGachaStickers: (ids: string[]) => void;
   onSpendCoins: (amount: number) => void;
+  ownedBgIds: string[];
+  equippedBgId: string | null;
+  onAddBg: (id: string) => void;
+  onEquipBg: (id: string | null) => void;
   lang?: Lang;
 }) {
   const [tab, setTab] = useState<ShopCategory>('stamp');
   const [gachaResult, setGachaResult] = useState<GachaResult | null>(null);
   const [detailPack, setDetailPack] = useState<StickerPack | null>(null);
+  const [bgResult, setBgResult] = useState<{ theme: BgTheme; isNew: boolean } | null>(null);
 
   function handleDraw(pack: StickerPack, count: 1 | 10) {
     if (pack.acquisition.type !== 'gacha') return;
@@ -4232,6 +4520,14 @@ function ShopScreen({
     const newIds = results.filter((r) => r.isNew).map((r) => r.sticker.id);
     if (newIds.length > 0) onAddGachaStickers(newIds);
     setGachaResult(results);
+  }
+
+  function handleDrawBg() {
+    if (coins < BG_GACHA_COST) return;
+    onSpendCoins(BG_GACHA_COST);
+    const result = drawBgGacha(ownedBgIds);
+    if (result.isNew) onAddBg(result.theme.id);
+    setBgResult(result);
   }
 
   const freePacks     = STICKER_PACKS.filter((p) => p.acquisition.type === 'free');
@@ -4356,6 +4652,75 @@ function ShopScreen({
         </div>
       )}
 
+      {/* ── 世界観背景ガチャ（テーマタブ） ── */}
+      {tab === 'theme' && (
+        <div className="space-y-4 px-4 pt-3">
+          {/* ガチャバナー */}
+          <section className="overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 p-5 shadow-card">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-2xl">🎠</span>
+              <p className="text-base font-black text-ink">世界観背景ガチャ</p>
+              <span className="rounded-full bg-pink px-2 py-0.5 text-[9px] font-black text-white">NEW</span>
+            </div>
+            <p className="text-xs font-bold text-muted">
+              うみのなか、おかしのいえ、まてんろう…。絵文字がふわふわ動く世界観背景がプロフ帳の表紙になるよ！
+            </p>
+            <p className="mt-1 text-[10px] font-bold text-muted">
+              所持: {ownedBgIds.length}/{BG_THEMES.length} · SR 5% · R 20% · N 75%
+            </p>
+            {/* 排出ラインナップ */}
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {BG_THEMES.map((t) => (
+                <div key={t.id}
+                  className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${t.gradient} ${ownedBgIds.includes(t.id) ? '' : 'opacity-40 grayscale-[0.4]'}`}>
+                  <span className="absolute left-1.5 top-1 text-lg">{t.emoji}</span>
+                  <span className={`absolute right-1 top-1 rounded-full px-1.5 py-0.5 text-[8px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
+                  <span className="absolute bottom-1 left-1.5 right-1 truncate text-[8px] font-black text-ink/70">
+                    {ownedBgIds.includes(t.id) ? t.name : '？？？'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={handleDrawBg}
+              disabled={coins < BG_GACHA_COST}
+              className={`mt-3 w-full rounded-full py-3 text-sm font-black transition ${coins >= BG_GACHA_COST ? 'bg-zinc-900 text-amber-400 active:scale-[0.98]' : 'bg-white/70 text-muted'}`}>
+              🪙 {BG_GACHA_COST} で1回引く
+            </button>
+          </section>
+
+          {/* 所持している背景（つけかえ） */}
+          {ownedBgIds.length > 0 && (
+            <section className="rounded-[28px] bg-white p-5 shadow-card">
+              <p className="mb-3 text-sm font-black text-ink">🎨 もっている世界観背景</p>
+              <div className="grid grid-cols-2 gap-3">
+                {BG_THEMES.filter((t) => ownedBgIds.includes(t.id)).map((t) => {
+                  const equipped = equippedBgId === t.id;
+                  return (
+                    <div key={t.id} className={`overflow-hidden rounded-[20px] shadow-card ${equipped ? 'ring-2 ring-pink' : ''}`}>
+                      <div className={`relative h-20 bg-gradient-to-br ${t.gradient}`}>
+                        {t.floaters.slice(0, 4).map((f, i) => (
+                          <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, fontSize: `${f.size * 0.7}rem`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}>{f.emoji}</span>
+                        ))}
+                        <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-xs font-black text-ink">{t.emoji} {t.name}</p>
+                        <button
+                          onClick={() => onEquipBg(equipped ? null : t.id)}
+                          className={`mt-2 w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${equipped ? 'bg-base text-pink ring-1 ring-pink' : 'bg-pink text-white'}`}>
+                          {equipped ? '✓ 使用中（外す）' : 'プロフ帳につける'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
       {/* ── 通常タブ（theme/deco/font） ── */}
       {tab !== 'stamp' && (
         <>
@@ -4431,6 +4796,39 @@ function ShopScreen({
               className="mt-5 w-full rounded-full bg-pink py-3 text-base font-black text-white shadow-card active:scale-[0.98]">
               閉じる
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 背景ガチャ結果モーダル ── */}
+      {bgResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl">
+            <div className={`relative h-40 bg-gradient-to-br ${bgResult.theme.gradient}`}>
+              {bgResult.theme.floaters.map((f, i) => (
+                <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, fontSize: `${f.size}rem`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}>{f.emoji}</span>
+              ))}
+              <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-black ${RARITY_COLOR[bgResult.theme.rarity]}`}>{bgResult.theme.rarity}</span>
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-base font-black text-ink">
+                {bgResult.theme.emoji} {bgResult.theme.name}
+                {bgResult.isNew
+                  ? <span className="ml-2 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">NEW!</span>
+                  : <span className="ml-2 text-[10px] font-bold text-muted">（もってる）</span>}
+              </p>
+              <p className="mt-1 text-xs font-bold text-muted">{bgResult.theme.description}</p>
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => { onEquipBg(bgResult.theme.id); setBgResult(null); }}
+                  className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white shadow-card active:scale-[0.98]">
+                  プロフ帳につける
+                </button>
+                <button onClick={() => setBgResult(null)}
+                  className="flex-1 rounded-full bg-base py-3 text-sm font-black text-muted active:scale-[0.98]">
+                  閉じる
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -4740,7 +5138,7 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const steps = [
     { emoji: '📖', title: 'お題に答えよう', desc: '毎日届くお題に、プロフィール帳みたいに答えてね。' },
     { emoji: '🎀', title: 'プロフ帳を作ろう', desc: '自分だけのプロフィール帳をデコって、個性を見せよう。' },
-    { emoji: '✨', title: 'つながろう', desc: '共通点のある人をみつけて、日記を一緒に書こう。' },
+    { emoji: '🍀', title: 'なかよくなろう', desc: '共通点をみつけたら、プロフ帳を交換したり日記をいっしょに書いたり。すこしずつ仲良くなろう。' },
   ];
   const [step, setStep] = useState(0);
   const isLast = step === steps.length - 1;
@@ -5128,6 +5526,30 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     try { const s = localStorage.getItem('miri_gacha_stickers'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
 
+  // ── 世界観背景ガチャ ──────────────────────────────────────
+  const [ownedBgIds, setOwnedBgIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { const s = localStorage.getItem('miri_owned_bgs'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  const [equippedBgId, setEquippedBgId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('miri_equipped_bg');
+  });
+
+  function addOwnedBg(id: string) {
+    setOwnedBgIds((prev) => {
+      const next = [...new Set([...prev, id])];
+      localStorage.setItem('miri_owned_bgs', JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function equipBg(id: string | null) {
+    setEquippedBgId(id);
+    if (id) localStorage.setItem('miri_equipped_bg', id);
+    else localStorage.removeItem('miri_equipped_bg');
+  }
+
   function purchasePack(packId: string) {
     setOwnedPackIds((prev) => {
       const next = [...prev, packId];
@@ -5265,22 +5687,49 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     localStorage.setItem('miri_premium_content', JSON.stringify(next));
   }
 
-function createCircle(name: string, emoji: string, memberIds: string[]): string {
+function createCircle(name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean }): string {
   const id = `circle-${Date.now()}`;
-  const newCircle: Circle = { id, name, emoji, memberIds: [me.id, ...memberIds], createdBy: me.id };
+  const newCircle: Circle = {
+    id, name, emoji, memberIds: [me.id, ...memberIds], createdBy: me.id,
+    isOfficial: opts?.isOfficial ?? false,
+    allowFans: opts?.isOfficial ? (opts?.allowFans ?? false) : false,
+    fanIds: [],
+  };
   const next = [newCircle, ...circles];
   setCircles(next);
   localStorage.setItem('circles', JSON.stringify(next));
   return id;
 }
 
-function postToCircle(circleId: string, body: string) {
+function postToCircle(circleId: string, body: string, opts?: { audience?: 'members' | 'everyone'; kind?: 'talk' | 'vote' }) {
   const newPost: CirclePost = {
     id: `cp-${Date.now()}`, circleId, body,
     postedBy: me.id, postedByName: me.name, postedByAvatar: me.avatar,
     postedAt: new Date().toISOString(), replies: [],
+    audience: opts?.audience ?? 'members',
+    kind: opts?.kind ?? 'talk',
+    votes: [],
   };
   const next = [newPost, ...circlePosts];
+  setCirclePosts(next);
+  localStorage.setItem('circlePosts', JSON.stringify(next));
+}
+
+function replyToCirclePost(postId: string, body: string) {
+  const next = circlePosts.map((p) => p.id === postId
+    ? { ...p, replies: [...p.replies, { userId: me.id, userName: me.name, userAvatar: me.avatar, body, postedAt: new Date().toISOString() }] }
+    : p);
+  setCirclePosts(next);
+  localStorage.setItem('circlePosts', JSON.stringify(next));
+}
+
+function voteInCirclePost(postId: string, targetId: string) {
+  const next = circlePosts.map((p) => {
+    if (p.id !== postId) return p;
+    const votes = p.votes ?? [];
+    if (votes.some((v) => v.userId === me.id)) return p; // 1人1票
+    return { ...p, votes: [...votes, { userId: me.id, targetId }] };
+  });
   setCirclePosts(next);
   localStorage.setItem('circlePosts', JSON.stringify(next));
 }
@@ -5587,7 +6036,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
       const circle = circles.find((c) => c.id === selectedCircleId);
-      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} />;
+      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} onReply={replyToCirclePost} onVote={voteInCirclePost} />;
     }
 
    if (screen === 'daily-question')
@@ -5649,7 +6098,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'profile') {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} lang={lang} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} lang={lang} />;
       }
       return <ProfileScreen
         go={go}
@@ -5659,6 +6108,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         avatarUrl={avatarUrl}
         favoritePhotos={favoritePhotos}
         customFields={profileCustomFields}
+        equippedBg={getBgTheme(equippedBgId)}
         lang={lang}
       />;
     }
@@ -5688,6 +6138,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         onPurchasePack={purchasePack}
         onAddGachaStickers={addGachaStickers}
         onSpendCoins={spendCoins}
+        ownedBgIds={ownedBgIds}
+        equippedBgId={equippedBgId}
+        onAddBg={addOwnedBg}
+        onEquipBg={equipBg}
         lang={lang}
       />
     );
@@ -5699,6 +6153,7 @@ return <ProfileScreen
   profileQuestions={profileQuestions}
   avatarUrl={avatarUrl}
   favoritePhotos={favoritePhotos}
+  equippedBg={getBgTheme(equippedBgId)}
 />;
  }, [
   screen,
@@ -5722,6 +6177,8 @@ return <ProfileScreen
   lang,
   coins,
   hasAnsweredPR,
+  ownedBgIds,
+  equippedBgId,
 ]);
 
   const active = tabFromScreen(screen);
