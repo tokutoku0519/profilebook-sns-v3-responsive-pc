@@ -61,6 +61,8 @@ type Circle = {
   allowFans?: boolean;
   /** ファンとして参加中のユーザー */
   fanIds?: string[];
+  /** ファン参加の承認待ちユーザー（承認制） */
+  pendingFanIds?: string[];
 };
 
 type CirclePost = {
@@ -618,7 +620,19 @@ const initialCircles: Circle[] = isDev ? [
   {
     id: 'circle-official-1', name: 'STARLIGHT公式', emoji: '⭐',
     memberIds: ['@mayu_note', '@rin_puri', '@nana_7', '@haru_cafe'], createdBy: '@mayu_note',
-    isOfficial: true, allowFans: true, fanIds: ['@koki', '@yui_book', '@akari_28'],
+    isOfficial: true, allowFans: true, fanIds: ['@koki', '@yui_book', '@akari_28'], pendingFanIds: [],
+  },
+  // 自分がオーナーの公認サークル（ファン申請の承認デモ）
+  {
+    id: 'circle-official-2', name: 'Koki写真部 公式', emoji: '📷',
+    memberIds: ['@koki', '@rin_puri'], createdBy: '@koki',
+    isOfficial: true, allowFans: true, fanIds: ['@mayu_note'], pendingFanIds: ['@yui_book', '@akari_28'],
+  },
+  // 自分が部外者の公認サークル（ファン申請デモ）
+  {
+    id: 'circle-official-3', name: 'BLUE ROSE公式', emoji: '🌹',
+    memberIds: ['@yui_book', '@akari_28'], createdBy: '@yui_book',
+    isOfficial: true, allowFans: true, fanIds: ['@haru_cafe'], pendingFanIds: [],
   },
 ] : [];
 
@@ -677,6 +691,23 @@ const initialCirclePosts: CirclePost[] = isDev ? [
       { userId: '@nana_7', userName: 'なな', userAvatar: '🧸', body: '新曲で締めたい！', postedAt: '2024-04-16T13:00:00Z' },
     ],
     audience: 'members',
+  },
+  // 自分がオーナーの公認サークルのお題
+  {
+    id: 'cp-7', circleId: 'circle-official-2',
+    body: '一番シャッターチャンスに強い人は誰？',
+    postedBy: '@koki', postedByName: 'Koki', postedByAvatar: '📷', postedAt: '2024-04-17T10:00:00Z',
+    replies: [],
+    audience: 'everyone', kind: 'vote',
+    votes: [{ userId: '@mayu_note', targetId: '@rin_puri' }],
+  },
+  // 部外者視点デモ用（申請前は内容が見えない）
+  {
+    id: 'cp-8', circleId: 'circle-official-3',
+    body: '新衣装のカラー、どっちが好き？',
+    postedBy: '@yui_book', postedByName: 'ゆい', postedByAvatar: '📚', postedAt: '2024-04-18T09:00:00Z',
+    replies: [],
+    audience: 'everyone',
   },
 ] : [];
 
@@ -1797,6 +1828,10 @@ function OtherProfileScreen({
   subscribedOfficials,
   onToggleSubscription,
   myProfile,
+  diaryPages = [],
+  circles = [],
+  exchanged = false,
+  onExchange,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -1805,6 +1840,10 @@ function OtherProfileScreen({
   subscribedOfficials: string[];
   onToggleSubscription: (userId: string) => void;
   myProfile?: typeof defaultProfileBookInfo;
+  diaryPages?: DiaryPage[];
+  circles?: Circle[];
+  exchanged?: boolean;
+  onExchange?: (userId: string) => void;
   lang?: Lang;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
@@ -1829,7 +1868,7 @@ function OtherProfileScreen({
   const premium = book?.premium;
   const isSubscribed = subscribedOfficials.includes(profile.id) || (me.isOfficial && book?.isOfficial === true);
 
-  // ── なかよし度：プロフ帳の共通点＋なかよし登録から算出 ──
+  // ── なかよし度：プロフ帳の共通点＋いっしょの行動から算出 ──
   const commonPoints = useMemo(() => {
     if (!myProfile || !book?.info) return [] as { label: string; value: string }[];
     const result: { label: string; value: string }[] = [];
@@ -1840,22 +1879,50 @@ function OtherProfileScreen({
     }
     return result;
   }, [myProfile, book]);
-  const friendLevel = Math.min(5, commonPoints.length + (isFollowing ? 1 : 0));
+  // いっしょに日記を書いたことがあるか
+  const wroteDiaryTogether = useMemo(() =>
+    diaryPages.some((page) => {
+      const authors = new Set([page.createdBy, ...page.entries.map((e) => e.authorId)]);
+      return authors.has(me.id) && authors.has(profile.id);
+    }), [diaryPages, profile.id]);
+  // おなじサークルに入っているか
+  const inSameCircle = useMemo(() =>
+    circles.some((c) => c.memberIds.includes(me.id) && c.memberIds.includes(profile.id)),
+    [circles, profile.id]);
+  // なかよしアクション（各1ポイント）
+  const friendActions: { label: string; done: boolean }[] = [
+    { label: '🎀 なかよし登録', done: isFollowing },
+    { label: '📖 プロフ帳を交換した', done: exchanged },
+    { label: '📔 いっしょに日記を書いた', done: wroteDiaryTogether },
+    { label: '🔒 おなじサークル', done: inSameCircle },
+  ];
+  const friendLevel = Math.min(5, commonPoints.length + friendActions.filter((a) => a.done).length);
   const FRIEND_LEVEL_LABELS = ['はじめまして', 'かおみしり', 'ともだち', 'なかよし', 'だいのなかよし', 'しんゆう'];
 
   return (
     <>
       <AppHeader title={`${profile.name}のプロフ帳`} back onBack={() => go('home')} onBell={() => go('notifications')} />
-      <div className="px-4 pt-2">
+      <div className="flex gap-2 px-4 pt-2">
         <button
           onClick={() => setIsFollowing((v) => !v)}
-          className={`h-11 w-full rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
+          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
             isFollowing
               ? 'bg-base text-pink ring-2 ring-pink'
               : 'bg-pink text-white'
           }`}
         >
           {isFollowing ? '🎀 なかよし登録中' : '🎀 なかよくなる'}
+        </button>
+        <button
+          onClick={() => { if (!exchanged) onExchange?.(profile.id); }}
+          disabled={exchanged}
+          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
+            exchanged
+              ? 'bg-base text-purple ring-2 ring-purple/40'
+              : 'bg-purple text-white'
+          }`}
+        >
+          {exchanged ? '📖 交換ずみ' : '📖 プロフ帳を交換'}
         </button>
       </div>
 
@@ -1871,16 +1938,24 @@ function OtherProfileScreen({
               <span key={i} className={`text-xl transition ${i < friendLevel ? '' : 'opacity-20 grayscale'}`}>💗</span>
             ))}
           </div>
-          {commonPoints.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {commonPoints.map((c) => (
-                <span key={c.label} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">
-                  ✨ {c.label}が一緒：{c.value}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 text-[10px] font-bold text-muted">お題に答えたりプロフ帳を交換すると、共通点が見つかってなかよし度が上がるよ</p>
+          {/* なかよしアクションの内訳 */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {commonPoints.map((c) => (
+              <span key={c.label} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">
+                ✨ {c.label}が一緒：{c.value}
+              </span>
+            ))}
+            {friendActions.map((a) => (
+              <span key={a.label}
+                className={`rounded-full px-3 py-1 text-[10px] font-black ${a.done ? 'bg-purple/10 text-purple' : 'bg-base text-muted opacity-60'}`}>
+                {a.done ? '✓ ' : ''}{a.label}
+              </span>
+            ))}
+          </div>
+          {friendLevel < 5 && (
+            <p className="mt-2 text-[10px] font-bold text-muted">
+              プロフ帳を交換したり、いっしょに日記を書いたりするとなかよし度が上がるよ
+            </p>
           )}
         </section>
       </div>
@@ -4112,6 +4187,9 @@ function CirclesScreen({
                   {c.isOfficial && !iAmMember && c.fanIds?.includes(me.id) && (
                     <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 ファン参加中</span>
                   )}
+                  {c.createdBy === me.id && (c.pendingFanIds?.length ?? 0) > 0 && (
+                    <span className="rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">🔔 申請{c.pendingFanIds?.length}</span>
+                  )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
                   メンバー{memberCount}人{c.isOfficial && c.allowFans ? `・ファン${fanCount}人` : ''}・{posts.length}件のお題
@@ -4132,7 +4210,7 @@ function CirclesScreen({
 }
 
 function CircleDetailScreen({
-  go, circle, posts, onPost, onReply, onVote,
+  go, circle, posts, onPost, onReply, onVote, onApplyFan, onApproveFan, onRejectFan,
 }: {
   go: (s: Screen, payload?: any) => void;
   circle: Circle;
@@ -4140,6 +4218,9 @@ function CircleDetailScreen({
   onPost: (circleId: string, body: string, opts?: { audience?: 'members' | 'everyone'; kind?: 'talk' | 'vote' }) => void;
   onReply: (postId: string, body: string) => void;
   onVote: (postId: string, targetId: string) => void;
+  onApplyFan: (circleId: string) => void;
+  onApproveFan: (circleId: string, userId: string) => void;
+  onRejectFan: (circleId: string, userId: string) => void;
 }) {
   const [newQ, setNewQ] = useState('');
   const [newKind, setNewKind] = useState<'talk' | 'vote'>('talk');
@@ -4151,6 +4232,9 @@ function CircleDetailScreen({
   const iAmMember = circle.memberIds.includes(me.id);
   const iAmFan = !iAmMember && (circle.fanIds?.includes(me.id) ?? false);
   const fanJoinable = circle.isOfficial && circle.allowFans;
+  const iAmOwner = circle.createdBy === me.id;
+  const iAmPending = !iAmMember && !iAmFan && (circle.pendingFanIds?.includes(me.id) ?? false);
+  const pendingFans = followers.filter((f) => circle.pendingFanIds?.includes(f.id));
   // 投票の候補（サークルメンバー全員）
   const voteCandidates = [
     ...(iAmMember ? [{ id: me.id, name: me.name, avatar: me.avatar }] : []),
@@ -4185,6 +4269,52 @@ function CircleDetailScreen({
             </p>
           )}
         </section>
+
+        {/* ── ファン申請（部外者向け・承認制） ── */}
+        {fanJoinable && !iAmMember && !iAmFan && (
+          <section className="rounded-[24px] bg-gradient-to-br from-amber-50 to-pink-50 p-4 shadow-card">
+            <p className="text-sm font-black text-ink">🎫 ファンになる</p>
+            <p className="mt-1 text-[10px] font-bold leading-4 text-muted">
+              ファンになると「🎫 ファンもOK」のお題に回答・投票できます。参加はサークルの承認制です。
+            </p>
+            {iAmPending ? (
+              <div className="mt-3 rounded-full bg-white px-4 py-2.5 text-center text-xs font-black text-amber-600 ring-1 ring-amber-300">
+                ⏳ 申請中です。承認をまってね
+              </div>
+            ) : (
+              <button onClick={() => onApplyFan(circle.id)}
+                className="mt-3 h-11 w-full rounded-full bg-pink text-sm font-black text-white shadow-card active:scale-[0.98]">
+                🎫 ファン参加を申請する
+              </button>
+            )}
+          </section>
+        )}
+
+        {/* ── ファン申請の承認（オーナー向け） ── */}
+        {iAmOwner && fanJoinable && pendingFans.length > 0 && (
+          <section className="rounded-[24px] bg-white p-4 shadow-card">
+            <p className="mb-3 text-sm font-black text-ink">🔔 ファン申請の承認まち <span className="ml-1 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">{pendingFans.length}</span></p>
+            <div className="space-y-2">
+              {pendingFans.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 rounded-2xl bg-base p-3">
+                  <span className="text-xl">{f.avatar}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-ink">{f.name}</p>
+                    <p className="text-[10px] font-bold text-muted">{f.id}</p>
+                  </div>
+                  <button onClick={() => onApproveFan(circle.id, f.id)}
+                    className="rounded-full bg-pink px-3 py-1.5 text-[11px] font-black text-white shadow-card active:scale-95">
+                    承認
+                  </button>
+                  <button onClick={() => onRejectFan(circle.id, f.id)}
+                    className="rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-muted ring-1 ring-purple/20 active:scale-95">
+                    見送り
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {iAmMember ? (
           <section className="rounded-[24px] bg-white p-4 shadow-card">
@@ -5550,6 +5680,22 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     else localStorage.removeItem('miri_equipped_bg');
   }
 
+  // ── プロフ帳交換（なかよし度アクション） ─────────────────
+  const [exchangedProfiles, setExchangedProfiles] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { const s = localStorage.getItem('miri_exchanged_profiles'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+
+  function exchangeProfileBook(userId: string) {
+    setExchangedProfiles((prev) => {
+      if (prev.includes(userId)) return prev;
+      const next = [...prev, userId];
+      localStorage.setItem('miri_exchanged_profiles', JSON.stringify(next));
+      return next;
+    });
+    showToast('📖 プロフ帳を交換しました！なかよし度アップ 💗');
+  }
+
   function purchasePack(packId: string) {
     setOwnedPackIds((prev) => {
       const next = [...prev, packId];
@@ -5732,6 +5878,42 @@ function voteInCirclePost(postId: string, targetId: string) {
   });
   setCirclePosts(next);
   localStorage.setItem('circlePosts', JSON.stringify(next));
+}
+
+// ── 公認サークルのファン申請フロー（承認制） ────────────────
+function updateCircles(next: Circle[]) {
+  setCircles(next);
+  localStorage.setItem('circles', JSON.stringify(next));
+}
+
+function applyAsFan(circleId: string) {
+  updateCircles(circles.map((c) => {
+    if (c.id !== circleId) return c;
+    const pending = c.pendingFanIds ?? [];
+    if (pending.includes(me.id) || c.fanIds?.includes(me.id)) return c;
+    return { ...c, pendingFanIds: [...pending, me.id] };
+  }));
+  showToast('🎫 ファン参加を申請しました！承認をまってね');
+}
+
+function approveFan(circleId: string, userId: string) {
+  updateCircles(circles.map((c) => {
+    if (c.id !== circleId) return c;
+    return {
+      ...c,
+      pendingFanIds: (c.pendingFanIds ?? []).filter((id) => id !== userId),
+      fanIds: [...new Set([...(c.fanIds ?? []), userId])],
+    };
+  }));
+  showToast('✅ ファン参加を承認しました');
+}
+
+function rejectFan(circleId: string, userId: string) {
+  updateCircles(circles.map((c) => {
+    if (c.id !== circleId) return c;
+    return { ...c, pendingFanIds: (c.pendingFanIds ?? []).filter((id) => id !== userId) };
+  }));
+  showToast('申請を見送りました');
 }
 
 const [favoritePhotos, setFavoritePhotos] = useState<string[]>(() => {
@@ -6036,7 +6218,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
       const circle = circles.find((c) => c.id === selectedCircleId);
-      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} onReply={replyToCirclePost} onVote={voteInCirclePost} />;
+      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} onReply={replyToCirclePost} onVote={voteInCirclePost} onApplyFan={applyAsFan} onApproveFan={approveFan} onRejectFan={rejectFan} />;
     }
 
    if (screen === 'daily-question')
@@ -6098,7 +6280,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'profile') {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} lang={lang} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} lang={lang} />;
       }
       return <ProfileScreen
         go={go}
@@ -6179,6 +6361,7 @@ return <ProfileScreen
   hasAnsweredPR,
   ownedBgIds,
   equippedBgId,
+  exchangedProfiles,
 ]);
 
   const active = tabFromScreen(screen);
