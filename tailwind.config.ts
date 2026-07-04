@@ -4,6 +4,18 @@ const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
+      fontFamily: {
+        // Arialに日本語グリフは無いため、英数字のみArial・日本語は游ゴシック
+        // （無い環境ではNoto Sans JP / Noto Sans）で描画される
+        sans: [
+          'Arial',
+          '"Yu Gothic"',
+          'YuGothic',
+          '"Noto Sans JP"',
+          '"Noto Sans"',
+          'sans-serif',
+        ],
+      },
       colors: {
         base:      'rgb(var(--color-base)      / <alpha-value>)',
         ink:       'rgb(var(--color-ink)       / <alpha-value>)',
