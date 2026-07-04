@@ -2018,6 +2018,14 @@ function ProfileEditScreen({
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
   const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
   const [showShare, setShowShare] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  async function handleLogout() {
+    const { supabase } = await import('@/lib/supabase');
+    if (supabase) await supabase.auth.signOut().catch(() => {});
+    // isDev（モック環境）ではセッションが無いのでリロードのみ
+    window.location.href = '/';
+  }
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2544,6 +2552,37 @@ function ProfileEditScreen({
           </button>
         </section>
 
+        {/* ── アカウント ── */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">👤 アカウント</p>
+          <p className="mb-4 text-xs font-bold text-muted">お困りのことがあればお気軽にお問い合わせください</p>
+          <div className="space-y-2">
+            <a
+              href="/contact"
+              className="flex w-full items-center justify-between rounded-2xl bg-base px-4 py-3.5 transition hover:bg-pink/5"
+            >
+              <span className="text-sm font-black text-ink">💬 お問い合わせ</span>
+              <span className="text-xs font-bold text-muted">›</span>
+            </a>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center justify-between rounded-2xl bg-base px-4 py-3.5 transition hover:bg-pink/5"
+            >
+              <span className="text-sm font-black text-ink">🚪 ログアウト</span>
+              <span className="text-xs font-bold text-muted">›</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="flex w-full items-center justify-between rounded-2xl bg-red-50 px-4 py-3.5 transition hover:bg-red-100"
+            >
+              <span className="text-sm font-black text-red-500">👋 退会する（アカウント削除）</span>
+              <span className="text-xs font-bold text-red-300">›</span>
+            </button>
+          </div>
+        </section>
+
         <button
           onClick={() => {
             onSave(form);
@@ -2571,9 +2610,155 @@ function ProfileEditScreen({
           onClose={() => setShowShare(false)}
         />
       )}
+
+      {showDeleteModal && <AccountDeleteModal onClose={() => setShowDeleteModal(false)} />}
     </>
   );
 }
+
+// ── 退会（アカウント削除）モーダル ──────────────────────────────
+const DELETION_REASONS = [
+  '使わなくなった',
+  '別のサービスを使う',
+  '通知が多い・わずらわしい',
+  '嫌な思いをした・トラブルがあった',
+  'その他',
+];
+
+function AccountDeleteModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [reason, setReason] = useState('');
+  const [detail, setDetail] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleDelete() {
+    setError('');
+    setDeleting(true);
+    try {
+      const { supabase } = await import('@/lib/supabase');
+      if (supabase) {
+        // 退会理由アンケート（任意・匿名）。失敗しても退会処理は続行する
+        if (reason) {
+          await supabase
+            .from('account_deletion_feedback')
+            .insert({ reason, detail: detail.trim() || null })
+            .then(() => {}, () => {});
+        }
+        const { error: err } = await supabase.rpc('delete_account');
+        if (err) throw err;
+        await supabase.auth.signOut().catch(() => {});
+      }
+      // 端末に残ったプロフィール等のローカルデータも全消去
+      localStorage.clear();
+      window.location.href = '/';
+    } catch {
+      setError('退会処理に失敗しました。時間をおいて再度お試しいただくか、お問い合わせください。');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-[32px] bg-white p-6 shadow-floating"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {step === 1 ? (
+          <>
+            <p className="text-center text-3xl">😢</p>
+            <p className="mt-2 text-center text-lg font-black text-ink">本当に退会しますか？</p>
+            <div className="mt-4 rounded-2xl bg-red-50 p-4">
+              <p className="text-xs font-black text-red-500">退会すると元に戻せません</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs font-bold leading-5 text-red-400">
+                <li>プロフィール帳・回答・日記・コメントなどすべてのデータが削除されます</li>
+                <li>コイン・購入済みアイテムは失効し、払い戻しはできません</li>
+                <li>フォロー・フォロワーの関係もすべて解除されます</li>
+              </ul>
+            </div>
+
+            <p className="mt-5 text-sm font-black text-ink">よろしければ退会理由を教えてください（任意）</p>
+            <div className="mt-2 space-y-1.5">
+              {DELETION_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setReason(reason === r ? '' : r)}
+                  className={`w-full rounded-2xl px-4 py-2.5 text-left text-xs font-black transition ${
+                    reason === r ? 'bg-pink/10 text-pink ring-2 ring-pink' : 'bg-base text-muted'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder="詳しく教えていただけると今後の改善に役立ちます（任意）"
+              className="mt-2 w-full resize-none rounded-2xl border-2 border-purple/20 bg-base p-3 text-xs font-bold leading-5 text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+            />
+
+            <div className="mt-5 space-y-2">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="h-12 w-full rounded-full bg-red-500 text-sm font-black text-white shadow-card active:scale-[0.98]"
+              >
+                退会手続きへ進む
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-12 w-full rounded-full bg-base text-sm font-black text-muted active:scale-[0.98]"
+              >
+                キャンセル
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-center text-3xl">⚠️</p>
+            <p className="mt-2 text-center text-lg font-black text-ink">最終確認</p>
+            <p className="mt-2 text-center text-xs font-bold leading-5 text-muted">
+              アカウントとすべてのデータが完全に削除されます。<br />
+              続行するには「退会」と入力してください。
+            </p>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="退会"
+              className="mt-4 h-12 w-full rounded-full border-2 border-red-200 bg-red-50/50 px-5 text-center text-sm font-black text-ink placeholder:text-red-200 focus:border-red-400 focus:outline-none"
+            />
+            {error && <p className="mt-3 text-center text-xs font-bold text-red-500">{error}</p>}
+            <div className="mt-5 space-y-2">
+              <button
+                type="button"
+                disabled={confirmText.trim() !== '退会' || deleting}
+                onClick={handleDelete}
+                className="h-12 w-full rounded-full bg-red-500 text-sm font-black text-white shadow-card transition active:scale-[0.98] disabled:opacity-40"
+              >
+                {deleting ? '削除しています...' : 'アカウントを完全に削除する'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="h-12 w-full rounded-full bg-base text-sm font-black text-muted active:scale-[0.98]"
+              >
+                ← 戻る
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Canvas roundRect ポリフィル ──────────────────────────────
 function canvasRoundRect(
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number,
@@ -4729,6 +4914,8 @@ function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
           <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">利用規約</a>
           <span className="mx-1">·</span>
           <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">プライバシーポリシー</a>
+          <span className="mx-1">·</span>
+          <a href="/contact" target="_blank" rel="noopener noreferrer" className="underline">お問い合わせ</a>
         </p>
       </div>
     </div>

@@ -88,3 +88,72 @@ create policy "users can remove own reactions" on public.reactions for delete us
 
 create policy "comments are readable" on public.comments for select using (true);
 create policy "users can comment" on public.comments for insert with check (auth.uid() = user_id);
+
+-- ============================================================
+-- ▼ 追加分: お問い合わせ & 退会（アカウント削除）
+--   既にschema.sqlを実行済みのプロジェクトは、この行から下だけを
+--   SQL Editorで実行すればOKです。
+-- ============================================================
+
+-- ── お問い合わせ ──────────────────────────────────────────────
+-- user_id はログイン中なら自動で紐付け。退会後も対応できるよう
+-- ユーザー削除時は null にして問い合わせ自体は残す。
+create table if not exists public.inquiries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  email text not null,
+  category text not null default 'other'
+    check (category in ('bug','account','deletion','feature','report','other')),
+  body text not null check (char_length(body) between 1 and 2000),
+  status text not null default 'open'
+    check (status in ('open','in_progress','resolved','closed')),
+  admin_reply text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.inquiries enable row level security;
+
+-- ログイン前のユーザーも問い合わせできるよう、user_id無しの投稿も許可
+create policy "users can create inquiries" on public.inquiries
+  for insert with check (user_id is null or auth.uid() = user_id);
+-- 自分の問い合わせ（と運営からの返信）だけ閲覧可能
+create policy "users can read own inquiries" on public.inquiries
+  for select using (auth.uid() = user_id);
+
+-- ── 退会時のアンケート（任意・匿名） ─────────────────────────
+create table if not exists public.account_deletion_feedback (
+  id uuid primary key default gen_random_uuid(),
+  reason text,
+  detail text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.account_deletion_feedback enable row level security;
+
+create policy "authenticated can leave deletion feedback"
+  on public.account_deletion_feedback
+  for insert to authenticated with check (true);
+
+-- ── 退会（アカウント削除）RPC ─────────────────────────────────
+-- クライアント(anonキー)からは auth.users を直接削除できないため、
+-- security definer 関数経由で「自分自身のみ」を削除する。
+-- auth.users の削除により profiles → answers / follows / reactions /
+-- comments が外部キーのcascadeで連鎖削除され、inquiries.user_id は
+-- null になる（問い合わせ対応履歴として本文は残る）。
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_account() from public;
+grant execute on function public.delete_account() to authenticated;
