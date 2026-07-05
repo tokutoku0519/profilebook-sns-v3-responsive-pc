@@ -137,6 +137,23 @@ export const BG_THEMES: BgTheme[] = [
   },
 ];
 
+// ============================================================
+//  カラーテーマ（コイン購入・買い切り）
+//  ガチャの世界観背景とちがい、確実にコインで買えるテーマ。
+//  同じ「プロフ帳表紙」スロットに装備する（floaters なしの静かな背景）。
+// ============================================================
+
+export type PurchasableTheme = BgTheme & { price: number };
+
+export const COLOR_THEMES: PurchasableTheme[] = [
+  { id: 'ct-sakura',  name: 'さくら夜',           emoji: '🌸', description: '夜桜みたいなピンクのグラデーション。', rarity: 'N', gradient: 'from-pink-200 via-rose-100 to-purple-100',    floaters: [], price: 120 },
+  { id: 'ct-ocean',   name: 'ディープオーシャン', emoji: '🌊', description: '深い海の色。すっきりクールに。',       rarity: 'N', gradient: 'from-blue-200 via-cyan-100 to-sky-100',       floaters: [], price: 150 },
+  { id: 'ct-galaxy',  name: 'ギャラクシー',       emoji: '🌌', description: '銀河のむらさき。ちょっとミステリアス。', rarity: 'N', gradient: 'from-indigo-300 via-purple-200 to-pink-200',  floaters: [], price: 200 },
+  { id: 'ct-autumn',  name: 'もみじ',             emoji: '🍂', description: '秋のあたたかいオレンジ。',             rarity: 'N', gradient: 'from-orange-200 via-amber-100 to-yellow-100', floaters: [], price: 120 },
+  { id: 'ct-rainbow', name: 'レインボー',         emoji: '🌈', description: 'にじ色でいちばん目立つ！',             rarity: 'N', gradient: 'from-pink-200 via-yellow-100 to-green-100',   floaters: [], price: 180 },
+  { id: 'ct-mist',    name: 'ミスティパープル',   emoji: '🌙', description: '霧のかかった夜のむらさき。',           rarity: 'N', gradient: 'from-violet-300 via-purple-200 to-fuchsia-100', floaters: [], price: 150 },
+];
+
 // ── ガチャ排出ロジック（スタンプガチャと同じ重み） ──────────
 const BG_RARITY_WEIGHT: Record<BgRarity, number> = { N: 75, R: 20, SR: 5 };
 
@@ -146,7 +163,8 @@ export function drawBgGacha(ownedIds: string[]): { theme: BgTheme; isNew: boolea
   return { theme: drawn, isNew: !ownedIds.includes(drawn.id) };
 }
 
+/** 装備中IDからテーマを引く（世界観背景・カラーテーマ共通） */
 export function getBgTheme(id: string | null | undefined): BgTheme | null {
   if (!id) return null;
-  return BG_THEMES.find((t) => t.id === id) ?? null;
+  return BG_THEMES.find((t) => t.id === id) ?? COLOR_THEMES.find((t) => t.id === id) ?? null;
 }
