@@ -35,7 +35,7 @@ import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { TERMS_VERSION } from '@/lib/terms';
-import { BG_THEMES, BG_GACHA_COST, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
+import { BG_THEMES, BG_GACHA_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -4573,15 +4573,8 @@ function CircleCreateScreen({
 
 type ShopCategory = 'theme' | 'stamp' | 'deco' | 'font';
 
-const SHOP_ITEMS: Record<Exclude<ShopCategory, 'stamp'>, { id: string; name: string; preview: string; price: number; owned: boolean }[]> = {
-  theme: [
-    { id: 'sakura', name: '🌸 さくら夜', preview: 'from-pink-200 via-rose-100 to-purple-100', price: 120, owned: false },
-    { id: 'ocean', name: '🌊 ディープオーシャン', preview: 'from-blue-200 via-cyan-100 to-sky-100', price: 150, owned: false },
-    { id: 'galaxy', name: '🌌 ギャラクシー', preview: 'from-indigo-300 via-purple-200 to-pink-200', price: 200, owned: false },
-    { id: 'autumn', name: '🍂 もみじ', preview: 'from-orange-200 via-amber-100 to-yellow-100', price: 120, owned: false },
-    { id: 'rainbow', name: '🌈 レインボー', preview: 'from-pink-200 via-yellow-100 to-green-100', price: 180, owned: false },
-    { id: 'mist', name: '🌙 ミスティパープル', preview: 'from-violet-300 via-purple-200 to-fuchsia-100', price: 150, owned: false },
-  ],
+// カラーテーマはコイン購入制になったため COLOR_THEMES (@/lib/bgThemes) に移動
+const SHOP_ITEMS: Record<'deco' | 'font', { id: string; name: string; preview: string; price: number; owned: boolean }[]> = {
   deco: [
     { id: 'gold-frame', name: '🖼 ゴールドフレーム', preview: '✦ ── ✦ ── ✦', price: 200, owned: false },
     { id: 'glitter-bg', name: '✨ キラキラ背景', preview: '✦✧✦✧✦✧✦✧', price: 150, owned: false },
@@ -4619,6 +4612,8 @@ function ShopScreen({
   equippedBgId,
   onAddBg,
   onEquipBg,
+  ownedThemeIds,
+  onBuyTheme,
   lang = 'ja',
 }: {
   go: (s: Screen) => void;
@@ -4632,6 +4627,8 @@ function ShopScreen({
   equippedBgId: string | null;
   onAddBg: (id: string) => void;
   onEquipBg: (id: string | null) => void;
+  ownedThemeIds: string[];
+  onBuyTheme: (id: string) => void;
   lang?: Lang;
 }) {
   const [tab, setTab] = useState<ShopCategory>('stamp');
@@ -4851,16 +4848,51 @@ function ShopScreen({
         </div>
       )}
 
-      {/* ── 通常タブ（theme/deco/font） ── */}
-      {tab !== 'stamp' && (
+      {/* ── カラーテーマ（コイン購入）── */}
+      {tab === 'theme' && (
+        <div className="px-4 pb-8 pt-4">
+          <p className="mb-3 text-sm font-black text-ink">🎨 カラーテーマ <span className="ml-1 text-[10px] font-bold text-muted">コインで買い切り・プロフ帳の表紙になるよ</span></p>
+          <div className="grid grid-cols-2 gap-3">
+            {COLOR_THEMES.map((item) => {
+              const owned = ownedThemeIds.includes(item.id);
+              const equipped = equippedBgId === item.id;
+              return (
+                <div key={item.id} className={`rounded-[24px] bg-white p-4 shadow-card ${equipped ? 'ring-2 ring-pink' : ''}`}>
+                  <div className={`mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${item.gradient} text-center text-3xl`}>
+                    {item.emoji}
+                  </div>
+                  <p className="text-sm font-black text-ink">{item.emoji} {item.name}</p>
+                  <div className="mt-2">
+                    {owned ? (
+                      <button
+                        onClick={() => onEquipBg(equipped ? null : item.id)}
+                        className={`w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${equipped ? 'bg-base text-pink ring-1 ring-pink' : 'bg-pink text-white'}`}>
+                        {equipped ? '✓ 使用中（外す）' : 'プロフ帳につける'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onBuyTheme(item.id)}
+                        disabled={coins < item.price}
+                        className={`w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${coins >= item.price ? 'bg-zinc-900 text-amber-400' : 'bg-base text-muted'}`}>
+                        🪙 {item.price} で購入
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── 通常タブ（deco/font：準備中） ── */}
+      {(tab === 'deco' || tab === 'font') && (
         <>
           <div className="grid grid-cols-2 gap-3 px-4 pb-8 pt-3">
-            {(SHOP_ITEMS[tab as Exclude<ShopCategory, 'stamp'>] ?? []).map((item) => (
+            {SHOP_ITEMS[tab].map((item) => (
               <div key={item.id} className="rounded-[24px] bg-white p-4 shadow-card">
-                <div className={`mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${
-                  tab === 'theme' ? item.preview : 'from-pink/10 to-purple/10'
-                } text-center text-2xl font-black leading-snug`}>
-                  {tab !== 'theme' ? item.preview : <span className="text-xs font-black text-ink/60">プレビュー</span>}
+                <div className="mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br from-pink/10 to-purple/10 text-center text-2xl font-black leading-snug">
+                  {item.preview}
                 </div>
                 <p className="text-sm font-black text-ink">{item.name}</p>
                 <div className="mt-2 flex items-center justify-between">
@@ -5680,6 +5712,24 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     else localStorage.removeItem('miri_equipped_bg');
   }
 
+  // ── カラーテーマ（コイン購入・買い切り） ──────────────────
+  const [ownedThemeIds, setOwnedThemeIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { const s = localStorage.getItem('miri_owned_themes'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+
+  function buyTheme(id: string) {
+    const item = COLOR_THEMES.find((t) => t.id === id);
+    if (!item || ownedThemeIds.includes(id)) return;
+    if (!spendCoins(item.price)) { showToast('🪙 コインがたりないよ'); return; }
+    setOwnedThemeIds((prev) => {
+      const next = [...prev, id];
+      localStorage.setItem('miri_owned_themes', JSON.stringify(next));
+      return next;
+    });
+    showToast(`${item.emoji} 「${item.name}」を購入しました！`);
+  }
+
   // ── プロフ帳交換（なかよし度アクション） ─────────────────
   const [exchangedProfiles, setExchangedProfiles] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -6324,6 +6374,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         equippedBgId={equippedBgId}
         onAddBg={addOwnedBg}
         onEquipBg={equipBg}
+        ownedThemeIds={ownedThemeIds}
+        onBuyTheme={buyTheme}
         lang={lang}
       />
     );
@@ -6362,6 +6414,7 @@ return <ProfileScreen
   ownedBgIds,
   equippedBgId,
   exchangedProfiles,
+  ownedThemeIds,
 ]);
 
   const active = tabFromScreen(screen);
