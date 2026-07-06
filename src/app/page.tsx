@@ -791,7 +791,7 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
         <SectionHeader title={t('feed_popular', lang)} />
-        <div className="space-y-3">{answers.slice(0,3).map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left text-xs font-bold leading-5 hover:bg-pink/10"><span className="text-pinkStrong">{answer.question.category}</span><br />{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,42)}...</button>)}</div>
+        <div className="space-y-3">{answers.slice(0,3).map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left text-xs font-bold leading-5 hover:bg-pink/10"><span className="text-pinkStrong">{answer.question?.category}</span><br />{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,42)}...</button>)}</div>
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
         <SectionHeader title={t('feed_suggested', lang)} />
@@ -6040,7 +6040,14 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('profilebook_answers_v2');
-      if (saved) setAnswers(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // questionがないor壊れているデータを除外
+        const valid = Array.isArray(parsed)
+          ? parsed.filter((a: any) => a && a.question && a.question.category)
+          : [];
+        setAnswers(valid);
+      }
     } catch { /* corrupted data — ignore */ }
   }, []);
 

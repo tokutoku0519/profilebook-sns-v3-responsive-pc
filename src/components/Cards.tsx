@@ -35,6 +35,7 @@ export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
 }
 
 export function QuestionCard({ question, hero = false }: { question: Question; hero?: boolean }) {
+  if (!question) return null;
   return (
     <article className={`${hero ? 'min-h-36' : 'min-h-24'} sticker-shine rounded-[28px] border border-pink/20 bg-gradient-to-br from-white via-pink-50 to-purple-50 p-4 shadow-card`}>
       <div className="mb-3 flex items-center gap-2">
@@ -48,14 +49,15 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
 }
 
 export function AnswerCard({ answer, detail = false, translatedBody }: { answer: Answer; detail?: boolean; translatedBody?: string }) {
+  if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   return (
     <article className={`rounded-[28px] border border-purple-100 bg-white p-4 shadow-card ${detail ? 'min-h-56' : ''}`}>
       <div className="mb-3 flex items-center justify-between">
-        <span className="rounded-full bg-purple/15 px-3 py-1 text-[11px] font-bold text-purple">{answer.question.category}</span>
+        <span className="rounded-full bg-purple/15 px-3 py-1 text-[11px] font-bold text-purple">{answer.question?.category}</span>
         <Sparkles size={18} className="text-pink" />
       </div>
-      <p className="mb-2 text-xs font-bold text-muted">{answer.question.title}</p>
+      <p className="mb-2 text-xs font-bold text-muted">{answer.question?.title}</p>
       <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
