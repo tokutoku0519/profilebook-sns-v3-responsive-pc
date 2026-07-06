@@ -5314,7 +5314,7 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
           <p className="mt-1 text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
         </div>
 
-        <div className="mt-4 w-full rounded-[32px] bg-white p-8 shadow-card">
+        <div key={step} className="onboarding-card-enter mt-4 w-full rounded-[32px] bg-white p-8 shadow-card">
           <p className="mb-3 text-4xl">{steps[step].emoji}</p>
           <p className="text-lg font-black text-ink">{steps[step].title}</p>
           <p className="mt-2 text-sm font-bold leading-6 text-muted">{steps[step].desc}</p>
@@ -5332,11 +5332,11 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
           onClick={() => isLast ? onDone() : setStep(s => s + 1)}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating active:scale-[0.98] transition"
         >
-          {isLast ? 'はじめる ✨' : 'つぎへ →'}
+          {isLast ? 'はじめる ✨' : `つぎへ →（${step + 1}/${steps.length}）`}
         </button>
         {!isLast && (
-          <button onClick={onDone} className="w-full py-2 text-sm font-black text-muted">
-            スキップ
+          <button onClick={onDone} className="w-full py-2 text-sm font-black text-muted underline underline-offset-4">
+            スキップしてはじめる
           </button>
         )}
       </div>

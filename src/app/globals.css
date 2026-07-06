@@ -178,6 +178,15 @@
   to   { transform: translateY(-4px); }
 }
 
+/* オンボーディングのカード切り替え */
+.onboarding-card-enter {
+  animation: onboarding-slide-in 0.35s ease-out;
+}
+@keyframes onboarding-slide-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 .retro-wiggle {
   display: inline-block;
   animation: retro-wiggle 1.3s ease-in-out infinite;
