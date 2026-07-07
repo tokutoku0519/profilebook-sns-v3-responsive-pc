@@ -337,3 +337,46 @@ export function ThemeArt({ art, size = 32 }: { art: string; size?: number }) {
     </svg>
   );
 }
+
+// ── Miriコイン（🪙の代わりに使うオリジナルアイコン） ─────────
+// テキスト中に置けるよう inline-block + ベースライン調整済み。
+export function CoinIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      width={size}
+      height={size}
+      aria-hidden
+      style={{ display: 'inline-block', verticalAlign: '-0.15em' }}
+    >
+      <circle cx={24} cy={24} r={21} fill="#f2b64c" />
+      <circle cx={24} cy={24} r={21} fill="none" stroke="#d9992e" strokeWidth={2.5} />
+      <circle cx={24} cy={24} r={15} fill="#ffd97a" stroke="#e8ae45" strokeWidth={2} />
+      <path
+        d="M24 31.5 C17.5 27 15.5 22.8 18 20.2 C20 18.2 23 19.6 24 21.8 C25 19.6 28 18.2 30 20.2 C32.5 22.8 30.5 27 24 31.5 Z"
+        fill="#e8963c"
+      />
+      <path d="M12 13 A16 16 0 0 1 20 8.5" stroke="#fff3d1" strokeWidth={3} fill="none" strokeLinecap="round" opacity={0.9} />
+    </svg>
+  );
+}
+
+// ── かけら（ガチャ被りでもらえるキラキラの結晶） ─────────────
+export function ShardIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      viewBox="0 0 48 48"
+      width={size}
+      height={size}
+      aria-hidden
+      style={{ display: 'inline-block', verticalAlign: '-0.15em' }}
+    >
+      <path d="M24 4 L37 16 L31 42 L17 42 L11 16 Z" fill="#b8a5f2" />
+      <path d="M24 4 L31 42 L17 42 Z" fill="#cfc2f7" />
+      <path d="M24 4 L37 16 L31 42" fill="none" stroke="#9d86e8" strokeWidth={1.6} />
+      <path d="M24 4 L11 16 L17 42" fill="none" stroke="#9d86e8" strokeWidth={1.6} />
+      <circle cx={20} cy={14} r={2.2} fill="#ffffff" opacity={0.85} />
+      <path d="M40 6 L41 9 L44 10 L41 11 L40 14 L39 11 L36 10 L39 9 Z" fill="#ffe08a" />
+    </svg>
+  );
+}

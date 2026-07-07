@@ -35,13 +35,16 @@ import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { TERMS_VERSION } from '@/lib/terms';
-import { BG_THEMES, BG_GACHA_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
-import { ThemeArt } from '@/components/ThemeArt';
+import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
+import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
+
+// アプリ内アクティビティの通知（localStorage 永続化）
+type AppNotification = { id: number; icon: string; text: string; at: number };
 
 type DraftAnswer = {
   questionId: string;
@@ -728,7 +731,7 @@ function Phone({ children, active, go, lang, bgTheme = null }: { children: React
       {/* 装備中テーマをアプリ全体の背景に敷く（上に薄い白で読みやすさを確保） */}
       {bgTheme && (
         <div className="pointer-events-none absolute inset-0" aria-hidden>
-          <SceneBackground theme={bgTheme} />
+          <SceneBackground theme={bgTheme} subtle />
           <div className="absolute inset-0 bg-white/40" />
         </div>
       )}
@@ -943,7 +946,7 @@ function HomeScreen({
                 <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-amber-600">PR</span>
               </div>
               <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-black text-white">
-                🪙 +{prQuestion.reward}
+                <CoinIcon size={13} /> +{prQuestion.reward}
               </span>
             </div>
             <p className="text-sm font-black text-ink leading-relaxed">{prQuestion.question}</p>
@@ -1555,7 +1558,8 @@ function ProfSectionHeader({ icon, title, theme }: { icon: string; title: string
 }
 
 // ── 世界観背景：オリジナルSVGイラストがふわふわ浮かぶシーン ──
-function SceneBackground({ theme, scale = 1 }: { theme: BgTheme; scale?: number }) {
+// subtle=true でアプリ全体の背景用に薄く表示（本文と混ざらないように）
+function SceneBackground({ theme, scale = 1, subtle = false }: { theme: BgTheme; scale?: number; subtle?: boolean }) {
   return (
     <div className={`absolute inset-0 overflow-hidden bg-gradient-to-br ${theme.gradient}`} aria-hidden>
       {theme.floaters.map((f, i) => (
@@ -1567,11 +1571,43 @@ function SceneBackground({ theme, scale = 1 }: { theme: BgTheme; scale?: number 
             top: `${f.top}%`,
             animationDelay: `${f.delay}s`,
             animationDuration: `${f.duration}s`,
+            ...(subtle ? { opacity: 0.35 } : {}),
           }}
         >
           <ThemeArt art={f.art} size={f.size * 32 * scale} />
         </span>
       ))}
+    </div>
+  );
+}
+
+// ── ガチャ回転演出：カプセルがドキドキ揺れて弾ける ──────────
+function GachaSpinOverlay({ burst }: { burst: boolean }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
+      <div className="relative">
+        {/* キラキラ */}
+        {[
+          { left: -44, top: -10, delay: 0 },
+          { left: 96, top: -22, delay: 0.35 },
+          { left: -20, top: 90, delay: 0.6 },
+          { left: 110, top: 70, delay: 0.9 },
+        ].map((s, i) => (
+          <span key={i} className="gacha-spark" style={{ left: s.left, top: s.top, animationDelay: `${s.delay}s` }}>
+            <ThemeArt art="sparkle" size={26} />
+          </span>
+        ))}
+        {/* カプセル */}
+        <div className={burst ? 'gacha-capsule-burst' : 'gacha-capsule'}>
+          <svg viewBox="0 0 96 96" width={120} height={120} aria-hidden>
+            <path d="M10 48 A38 38 0 0 1 86 48 Z" fill="#fffbfc" stroke="#e8d5dc" strokeWidth={2} />
+            <path d="M10 48 A38 38 0 0 0 86 48 Z" fill="#ff8fb0" stroke="#e87a9c" strokeWidth={2} />
+            <rect x={8} y={45.5} width={80} height={5} rx={2.5} fill="#f7dce5" />
+            <circle cx={34} cy={30} r={6} fill="#ffffff" opacity={0.8} />
+          </svg>
+        </div>
+      </div>
+      <p className="mt-6 text-sm font-black text-white/90 tracking-widest">ドキドキ…</p>
     </div>
   );
 }
@@ -2017,7 +2053,7 @@ function OtherProfileScreen({
               </div>
               <p className="text-xs font-bold text-white/80">{premium.description}</p>
               {!isSubscribed && (
-                <p className="mt-1 text-[10px] font-bold text-white/60">🪙 200コイン · 一度解除すればずっと読めます</p>
+                <p className="mt-1 text-[10px] font-bold text-white/60"><CoinIcon size={12} /> 200コイン · 一度解除すればずっと読めます</p>
               )}
             </div>
 
@@ -2037,13 +2073,13 @@ function OtherProfileScreen({
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[3px]">
                   <span className="mb-2 text-4xl">🔒</span>
-                  <p className="mb-1 text-base font-black text-ink">🪙 200コインで解除</p>
+                  <p className="mb-1 text-base font-black text-ink"><CoinIcon size={15} /> 200コインで解除</p>
                   <p className="mb-5 text-xs font-bold text-muted">一度解除すればずっと読めます</p>
                   <button
                     onClick={() => onToggleSubscription(profile.id)}
                     className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-8 py-3 text-sm font-black text-white shadow-floating active:scale-[0.98] transition"
                   >
-                    🪙 コインで解除する
+                    <CoinIcon size={14} /> コインで解除する
                   </button>
                 </div>
               </div>
@@ -3649,7 +3685,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
         >
           <div className="text-left">
             <p className="text-[10px] font-black text-white/80">{t('coins_wallet', lang)}</p>
-            <p className="text-2xl font-black text-white">🪙 {coins.toLocaleString()}</p>
+            <p className="text-2xl font-black text-white"><CoinIcon size={22} /> {coins.toLocaleString()}</p>
           </div>
           <div className="text-right">
             <p className="text-xs font-black text-white/90">{t('coins_earn', lang)} →</p>
@@ -4683,6 +4719,9 @@ function ShopScreen({
   onEquipBg,
   ownedThemeIds,
   onBuyTheme,
+  bgShards = 0,
+  onAddBgShards,
+  onExchangeBg,
   lang = 'ja',
 }: {
   go: (s: Screen) => void;
@@ -4698,12 +4737,34 @@ function ShopScreen({
   onEquipBg: (id: string | null) => void;
   ownedThemeIds: string[];
   onBuyTheme: (id: string) => void;
+  bgShards?: number;
+  onAddBgShards?: (n: number) => void;
+  onExchangeBg?: (id: string) => void;
   lang?: Lang;
 }) {
   const [tab, setTab] = useState<ShopCategory>('stamp');
   const [gachaResult, setGachaResult] = useState<GachaResult | null>(null);
   const [detailPack, setDetailPack] = useState<StickerPack | null>(null);
-  const [bgResult, setBgResult] = useState<{ theme: BgTheme; isNew: boolean } | null>(null);
+  const [bgResult, setBgResult] = useState<{ theme: BgTheme; isNew: boolean; shards: number } | null>(null);
+  const [gachaResultShards, setGachaResultShards] = useState(0);
+  // ガチャ演出：'spin'（カプセルが揺れる）→ 'burst'（弾ける）→ 結果表示
+  const [spinPhase, setSpinPhase] = useState<'spin' | 'burst' | null>(null);
+  const pendingRevealRef = useRef<(() => void) | null>(null);
+
+  // 被り1個あたりのかけら（レアいほど多い）
+  const SHARD_BY_RARITY: Record<string, number> = { N: 1, R: 2, SR: 3 };
+
+  /** カプセル演出を挟んでから結果を表示する */
+  function playGacha(reveal: () => void) {
+    pendingRevealRef.current = reveal;
+    setSpinPhase('spin');
+    setTimeout(() => setSpinPhase('burst'), 1500);
+    setTimeout(() => {
+      setSpinPhase(null);
+      pendingRevealRef.current?.();
+      pendingRevealRef.current = null;
+    }, 1850);
+  }
 
   function handleDraw(pack: StickerPack, count: 1 | 10) {
     if (pack.acquisition.type !== 'gacha') return;
@@ -4715,7 +4776,10 @@ function ShopScreen({
       : draw10Gacha(pack, ownedGachaStickers);
     const newIds = results.filter((r) => r.isNew).map((r) => r.sticker.id);
     if (newIds.length > 0) onAddGachaStickers(newIds);
-    setGachaResult(results);
+    // 被り分はかけらに変換
+    const shards = results.filter((r) => !r.isNew).reduce((sum, r) => sum + (SHARD_BY_RARITY[r.sticker.rarity ?? 'N'] ?? 1), 0);
+    if (shards > 0) onAddBgShards?.(shards);
+    playGacha(() => { setGachaResultShards(shards); setGachaResult(results); });
   }
 
   function handleDrawBg() {
@@ -4723,7 +4787,9 @@ function ShopScreen({
     onSpendCoins(BG_GACHA_COST);
     const result = drawBgGacha(ownedBgIds);
     if (result.isNew) onAddBg(result.theme.id);
-    setBgResult(result);
+    const shards = result.isNew ? 0 : SHARD_BY_RARITY[result.theme.rarity] ?? 1;
+    if (shards > 0) onAddBgShards?.(shards);
+    playGacha(() => setBgResult({ ...result, shards }));
   }
 
   const freePacks     = STICKER_PACKS.filter((p) => p.acquisition.type === 'free');
@@ -4738,7 +4804,7 @@ function ShopScreen({
       <div className="mx-4 mt-3 flex items-center justify-between rounded-[24px] bg-zinc-900 px-5 py-3">
         <div>
           <p className="text-[10px] font-black text-zinc-500">{t('label_coin_balance', lang)}</p>
-          <p className="text-xl font-black text-amber-400">🪙 {coins.toLocaleString()}</p>
+          <p className="text-xl font-black text-amber-400"><CoinIcon size={18} /> {coins.toLocaleString()}</p>
         </div>
         <button className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-zinc-900 shadow-card active:scale-[0.98]">
           {t('btn_buy_coins', lang)}
@@ -4831,13 +4897,13 @@ function ShopScreen({
                         onClick={() => handleDraw(pack, 1)}
                         disabled={coins < cost}
                         className={`flex-1 rounded-full py-2.5 text-sm font-black transition ${coins >= cost ? 'bg-zinc-900 text-amber-400 active:scale-[0.98]' : 'bg-base text-muted'}`}>
-                        🪙 {cost} で1回引く
+                        <CoinIcon size={14} /> {cost} で1回引く
                       </button>
                       <button
                         onClick={() => handleDraw(pack, 10)}
                         disabled={coins < cost * 10}
                         className={`flex-1 rounded-full py-2.5 text-sm font-black transition ${coins >= cost * 10 ? 'bg-amber-400 text-zinc-900 active:scale-[0.98]' : 'bg-base text-muted'}`}>
-                        🪙 {cost * 10} で10連
+                        <CoinIcon size={14} /> {cost * 10} で10連
                       </button>
                     </div>
                   </div>
@@ -4859,17 +4925,17 @@ function ShopScreen({
               <span className="rounded-full bg-pink px-2 py-0.5 text-[9px] font-black text-white">NEW</span>
             </div>
             <p className="text-xs font-bold text-muted">
-              うみのなか、おかしのいえ、まてんろう…。絵文字がふわふわ動く世界観背景がプロフ帳の表紙になるよ！
+              うみのなか、おかしのいえ、まてんろう…。イラストがふわふわ動く世界観背景がアプリ全体の背景になるよ！
             </p>
             <p className="mt-1 text-[10px] font-bold text-muted">
-              所持: {ownedBgIds.length}/{BG_THEMES.length} · SR 5% · R 20% · N 75%
+              所持: {ownedBgIds.length}/{BG_THEMES.length} · SR 5% · R 20% · N 75% · 被りはかけらに変わるよ
             </p>
             {/* 排出ラインナップ */}
             <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {BG_THEMES.map((t) => (
                 <div key={t.id}
                   className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${t.gradient} ${ownedBgIds.includes(t.id) ? '' : 'opacity-40 grayscale-[0.4]'}`}>
-                  <span className="absolute left-1.5 top-1 text-lg">{t.emoji}</span>
+                  <span className="absolute left-1.5 top-1">{t.floaters[0] && <ThemeArt art={t.floaters[0].art} size={20} />}</span>
                   <span className={`absolute right-1 top-1 rounded-full px-1.5 py-0.5 text-[8px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
                   <span className="absolute bottom-1 left-1.5 right-1 truncate text-[8px] font-black text-ink/70">
                     {ownedBgIds.includes(t.id) ? t.name : '？？？'}
@@ -4881,8 +4947,41 @@ function ShopScreen({
               onClick={handleDrawBg}
               disabled={coins < BG_GACHA_COST}
               className={`mt-3 w-full rounded-full py-3 text-sm font-black transition ${coins >= BG_GACHA_COST ? 'bg-zinc-900 text-amber-400 active:scale-[0.98]' : 'bg-white/70 text-muted'}`}>
-              🪙 {BG_GACHA_COST} で1回引く
+              <CoinIcon size={14} /> {BG_GACHA_COST} で1回引く
             </button>
+          </section>
+
+          {/* かけら交換所：被りで貯まったかけらを好きな背景と交換 */}
+          <section className="rounded-[28px] bg-white p-5 shadow-card">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-sm font-black text-ink"><ShardIcon size={16} /> かけら交換所</p>
+              <span className="rounded-full bg-purple/10 px-2.5 py-1 text-[11px] font-black text-purple"><ShardIcon size={13} /> {bgShards}</span>
+            </div>
+            <p className="mb-3 text-[11px] font-bold text-muted">
+              ガチャの被りでかけらGET（N=1・R=2・SR=3）。{SHARD_EXCHANGE_COST}個で好きな世界観背景と交換できるよ！
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {BG_THEMES.filter((t) => !ownedBgIds.includes(t.id)).map((t) => (
+                <div key={t.id} className="overflow-hidden rounded-[20px] shadow-card">
+                  <div className={`relative h-16 bg-gradient-to-br ${t.gradient}`}>
+                    <span className="absolute left-2 top-2">{t.floaters[0] && <ThemeArt art={t.floaters[0].art} size={26} />}</span>
+                    <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
+                  </div>
+                  <div className="p-3">
+                    <p className="truncate text-xs font-black text-ink">{t.name}</p>
+                    <button
+                      onClick={() => onExchangeBg?.(t.id)}
+                      disabled={bgShards < SHARD_EXCHANGE_COST}
+                      className={`mt-2 w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${bgShards >= SHARD_EXCHANGE_COST ? 'bg-purple text-white' : 'bg-base text-muted'}`}>
+                      <ShardIcon size={12} /> {SHARD_EXCHANGE_COST} で交換
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {BG_THEMES.every((t) => ownedBgIds.includes(t.id)) && (
+                <p className="col-span-2 rounded-2xl bg-base p-4 text-center text-xs font-bold text-muted">🎉 全部の世界観背景をコンプリートしたよ！</p>
+              )}
+            </div>
           </section>
 
           {/* 所持している背景（つけかえ） */}
@@ -4941,7 +5040,7 @@ function ShopScreen({
                         onClick={() => onBuyTheme(item.id)}
                         disabled={coins < item.price}
                         className={`w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${coins >= item.price ? 'bg-zinc-900 text-amber-400' : 'bg-base text-muted'}`}>
-                        🪙 {item.price} で購入
+                        <CoinIcon size={13} /> {item.price} で購入
                       </button>
                     )}
                   </div>
@@ -5005,7 +5104,7 @@ function ShopScreen({
       {/* ── ガチャ結果モーダル ── */}
       {gachaResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm rounded-[32px] bg-white p-6 shadow-2xl">
+          <div className="gacha-pop mx-4 w-full max-w-sm rounded-[32px] bg-white p-6 shadow-2xl">
             <p className="mb-4 text-center text-base font-black text-ink">
               {gachaResult.length === 1 ? 'ガチャ結果' : '10連ガチャ結果 🎉'}
             </p>
@@ -5021,6 +5120,11 @@ function ShopScreen({
                 </div>
               ))}
             </div>
+            {gachaResultShards > 0 && (
+              <p className="mx-auto mt-4 w-fit rounded-full bg-purple/10 px-3 py-1.5 text-xs font-black text-purple">
+                重複分は <ShardIcon size={14} /> かけら +{gachaResultShards} に変わったよ！
+              </p>
+            )}
             <button onClick={() => setGachaResult(null)}
               className="mt-5 w-full rounded-full bg-pink py-3 text-base font-black text-white shadow-card active:scale-[0.98]">
               閉じる
@@ -5029,10 +5133,13 @@ function ShopScreen({
         </div>
       )}
 
+      {/* ── ガチャ回転演出 ── */}
+      {spinPhase && <GachaSpinOverlay burst={spinPhase === 'burst'} />}
+
       {/* ── 背景ガチャ結果モーダル ── */}
       {bgResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl">
+          <div className="gacha-pop mx-4 w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className={`relative h-40 bg-gradient-to-br ${bgResult.theme.gradient}`}>
               {bgResult.theme.floaters.map((f, i) => (
                 <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}><ThemeArt art={f.art} size={f.size * 32} /></span>
@@ -5042,11 +5149,14 @@ function ShopScreen({
             <div className="p-6 text-center">
               <p className="text-base font-black text-ink">
                 {bgResult.theme.name}
-                {bgResult.isNew
-                  ? <span className="ml-2 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">NEW!</span>
-                  : <span className="ml-2 text-[10px] font-bold text-muted">（もってる）</span>}
+                {bgResult.isNew && <span className="ml-2 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">NEW!</span>}
               </p>
               <p className="mt-1 text-xs font-bold text-muted">{bgResult.theme.description}</p>
+              {!bgResult.isNew && (
+                <p className="mx-auto mt-3 w-fit rounded-full bg-purple/10 px-3 py-1.5 text-xs font-black text-purple">
+                  もってたから <ShardIcon size={14} /> かけら +{bgResult.shards} GET！
+                </p>
+              )}
               <div className="mt-4 flex gap-2">
                 <button onClick={() => { onEquipBg(bgResult.theme.id); setBgResult(null); }}
                   className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white shadow-card active:scale-[0.98]">
@@ -5092,12 +5202,36 @@ function PackRow({ pack, owned, onDetail, action }: {
 
 // ===================== /ショップ画面 =====================
 
-function NotificationsScreen({ go }: { go: (s: Screen) => void }) {
+function notificationTimeAgo(at: number): string {
+  const diff = Date.now() - at;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'たった今';
+  if (min < 60) return `${min}分前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}時間前`;
+  return `${Math.floor(hour / 24)}日前`;
+}
+
+function NotificationsScreen({ go, notifications = [] }: { go: (s: Screen) => void; notifications?: AppNotification[] }) {
   return (
     <>
       <AppHeader title="通知" />
       <div className="space-y-3 px-4 pt-3">
-        {[['🎀','まゆさんがあなたの回答に「わかる」しました'],['💬','りんさんがコメントしました'],['⭐️','新しいコラボお題が追加されました']].map(([icon, text]) => <div key={text} className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card"><span className="grid h-10 w-10 place-items-center rounded-full bg-pink/15">{icon}</span><p className="text-sm font-bold leading-6">{text}</p></div>)}
+        {notifications.length === 0 && (
+          <div className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15">🎀</span>
+            <p className="text-sm font-bold leading-6">Miriへようこそ！お題に答えたりガチャを引くと、ここにお知らせが届くよ</p>
+          </div>
+        )}
+        {notifications.map((n) => (
+          <div key={n.id} className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15">{n.icon}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold leading-6">{n.text}</p>
+              <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at)}</p>
+            </div>
+          </div>
+        ))}
         <button onClick={() => go('home')} className="mt-4 h-12 w-full rounded-full bg-pink text-sm font-black text-white">ホームに戻る</button>
       </div>
     </>
@@ -5132,12 +5266,12 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
 
   return (
     <>
-      <AppHeader title="🪙 コインウォレット" back onBack={() => go('mypage')} />
+      <AppHeader title="コインウォレット" back onBack={() => go('mypage')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         {/* 残高 */}
         <section className="rounded-[32px] bg-gradient-to-br from-amber-400 to-orange-400 p-6 shadow-card text-white text-center">
           <p className="text-sm font-black opacity-80">コイン残高</p>
-          <p className="mt-1 text-5xl font-black">🪙 {coins.toLocaleString()}</p>
+          <p className="mt-1 text-5xl font-black"><CoinIcon size={42} /> {coins.toLocaleString()}</p>
           <p className="mt-2 text-xs font-bold opacity-70">コインを使ってプレミアムコンテンツやシールをゲット！</p>
         </section>
 
@@ -5153,7 +5287,7 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
                 className={`flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition active:scale-[0.98] ${pkg.popular ? 'bg-gradient-to-r from-amber-400 to-orange-400 shadow-card' : 'bg-base hover:bg-amber-50'}`}
               >
                 <div className="flex items-center gap-2 text-left">
-                  <span className="text-xl">🪙</span>
+                  <CoinIcon size={22} />
                   <div>
                     <p className={`text-sm font-black ${pkg.popular ? 'text-white' : 'text-ink'}`}>
                       {pkg.coins.toLocaleString()}コイン
@@ -5182,7 +5316,7 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
                   <span>{item.icon}</span>
                   <span className="text-sm font-bold text-ink">{item.label}</span>
                 </div>
-                <span className="text-sm font-black text-amber-500">🪙 {item.cost}</span>
+                <span className="text-sm font-black text-amber-500"><CoinIcon size={14} /> {item.cost}</span>
               </div>
             ))}
           </div>
@@ -5190,7 +5324,7 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
 
         {/* 稼ぎ方 */}
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <p className="mb-3 text-sm font-black text-ink">🪙 コインの稼ぎ方</p>
+          <p className="mb-3 text-sm font-black text-ink"><CoinIcon size={15} /> コインの稼ぎ方</p>
           <div className="space-y-2">
             {earnMethods.map((m) => (
               <div key={m.label} className="flex items-center justify-between rounded-2xl bg-base px-4 py-3">
@@ -5777,6 +5911,35 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       localStorage.setItem('miri_owned_bgs', JSON.stringify(next));
       return next;
     });
+    const theme = getBgTheme(id);
+    if (theme) addNotification('🎠', `新しい背景「${theme.name}」をゲットしました！`);
+  }
+
+  // ── かけら（ガチャ被り補償） ──────────────────────────────
+  const [bgShards, setBgShards] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    const s = localStorage.getItem('miri_bg_shards');
+    return s ? parseInt(s, 10) || 0 : 0;
+  });
+
+  function addBgShards(n: number) {
+    setBgShards((prev) => {
+      const next = prev + n;
+      localStorage.setItem('miri_bg_shards', String(next));
+      return next;
+    });
+  }
+
+  function exchangeBgTheme(id: string) {
+    const theme = BG_THEMES.find((t) => t.id === id);
+    if (!theme || ownedBgIds.includes(id) || bgShards < SHARD_EXCHANGE_COST) return;
+    setBgShards((prev) => {
+      const next = prev - SHARD_EXCHANGE_COST;
+      localStorage.setItem('miri_bg_shards', String(next));
+      return next;
+    });
+    addOwnedBg(id);
+    showToast(`✨ かけらで「${theme.name}」と交換しました！`);
   }
 
   function equipBg(id: string | null) {
@@ -5794,13 +5957,14 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   function buyTheme(id: string) {
     const item = COLOR_THEMES.find((t) => t.id === id);
     if (!item || ownedThemeIds.includes(id)) return;
-    if (!spendCoins(item.price)) { showToast('🪙 コインがたりないよ'); return; }
+    if (!spendCoins(item.price)) { showToast('コインがたりないよ 🥲'); return; }
     setOwnedThemeIds((prev) => {
       const next = [...prev, id];
       localStorage.setItem('miri_owned_themes', JSON.stringify(next));
       return next;
     });
-    showToast(`${item.emoji} 「${item.name}」を購入しました！`);
+    showToast(`「${item.name}」を購入しました！`);
+    addNotification('🎨', `カラーテーマ「${item.name}」を購入しました`);
   }
 
   // ── プロフ帳交換（なかよし度アクション） ─────────────────
@@ -5910,7 +6074,8 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     const total = 3 + bonus;
     addCoins(total, streak >= 7 ? `7日連続ログイン（${streak}日目）` : 'デイリーログイン');
     setTimeout(() => {
-      showToast(`🪙 +${total} デイリーログインボーナス！${streak >= 7 ? `（${streak}日連続！）` : ''}`);
+      showToast(`🎁 +${total}コイン デイリーログインボーナス！${streak >= 7 ? `（${streak}日連続！）` : ''}`);
+      addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${streak >= 7 ? `（${streak}日連続！）` : ''}`);
     }, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5933,7 +6098,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     if (subscribedOfficials.includes(userId)) return; // 解除不可
     const ok = spendCoins(200);
     if (!ok) {
-      showToast('🪙 コインが足りません（200枚必要）');
+      showToast('コインが足りません（200枚必要）');
       return;
     }
     setSubscribedOfficials((prev) => {
@@ -6138,6 +6303,20 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }
 
+  // ── 通知（実際のアクティビティを記録して通知欄に表示） ────────
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('miri_notifications') || '[]'); } catch { return []; }
+  });
+
+  function addNotification(icon: string, text: string) {
+    setNotifications((prev) => {
+      const next = [{ id: Date.now() + Math.random(), icon, text, at: Date.now() }, ...prev].slice(0, 50);
+      localStorage.setItem('miri_notifications', JSON.stringify(next));
+      return next;
+    });
+  }
+
   // ── ブックマーク ──────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -6216,10 +6395,12 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
     markPRAnswered();
     setHasAnsweredPR(true);
-    showToast(`🪙 +${reward} PR案件ボーナス獲得！`);
+    showToast(`🎁 +${reward}コイン PR案件ボーナス獲得！`);
+    addNotification('💼', `PR案件に回答して ${reward} コインもらいました`);
   } else {
     addCoins(5, 'お題に回答');
-    showToast('🪙 +5 回答ボーナス！');
+    showToast('🎁 +5コイン 回答ボーナス！');
+    addNotification('✍️', 'お題に回答して 5 コインもらいました');
   }
 
   return id;
@@ -6347,7 +6528,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     />
   );
     
-    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} onPurchaseCoins={(amount) => addCoins(amount, 'コイン購入')} />;
+    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} onPurchaseCoins={(amount) => { addCoins(amount, 'コイン購入'); addNotification('💳', `コインを ${amount} 枚購入しました`); }} />;
     if (screen === 'circles') return <CirclesScreen go={go} circles={circles} circlePosts={circlePosts} />;
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
@@ -6442,7 +6623,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'bookmarks') return (
       <BookmarksScreen go={go} answers={answers} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} />
     );
-    if (screen === 'notifications') return <NotificationsScreen go={go} />;
+    if (screen === 'notifications') return <NotificationsScreen go={go} notifications={notifications} />;
     if (screen === 'followers') return <FollowersScreen go={go} lang={lang} />;
     if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} />;
     if (screen === 'shop') return (
@@ -6460,6 +6641,9 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         onEquipBg={equipBg}
         ownedThemeIds={ownedThemeIds}
         onBuyTheme={buyTheme}
+        bgShards={bgShards}
+        onAddBgShards={addBgShards}
+        onExchangeBg={exchangeBgTheme}
         lang={lang}
       />
     );
@@ -6499,6 +6683,8 @@ return <ProfileScreen
   equippedBgId,
   exchangedProfiles,
   ownedThemeIds,
+  bgShards,
+  notifications,
 ]);
 
   const active = tabFromScreen(screen);
