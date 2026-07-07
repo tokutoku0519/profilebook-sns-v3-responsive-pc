@@ -36,6 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { TERMS_VERSION } from '@/lib/terms';
 import { BG_THEMES, BG_GACHA_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
+import { ThemeArt } from '@/components/ThemeArt';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -721,11 +722,18 @@ function tabFromScreen(screen: Screen): TabKey {
   return 'home';
 }
 
-function Phone({ children, active, go, lang }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang }) {
+function Phone({ children, active, go, lang, bgTheme = null }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang; bgTheme?: BgTheme | null }) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-h-none lg:max-w-none lg:rounded-[32px]">
-      <div className="h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
-      <div className="lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} /></div>
+      {/* 装備中テーマをアプリ全体の背景に敷く（上に薄い白で読みやすさを確保） */}
+      {bgTheme && (
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          <SceneBackground theme={bgTheme} />
+          <div className="absolute inset-0 bg-white/40" />
+        </div>
+      )}
+      <div className="relative z-10 h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
+      <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} /></div>
     </main>
   );
 }
@@ -801,12 +809,12 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; translatedAnswerBodies?: Record<string, string> }) {
+function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string> }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} lang={lang} />
-        <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang}>{children}</Phone></div>
+        <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme}>{children}</Phone></div>
         <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} />
       </div>
     </div>
@@ -1546,8 +1554,8 @@ function ProfSectionHeader({ icon, title, theme }: { icon: string; title: string
   );
 }
 
-// ── 世界観背景（ガチャ排出）：絵文字がふわふわ浮かぶシーン ──
-function SceneBackground({ theme }: { theme: BgTheme }) {
+// ── 世界観背景：オリジナルSVGイラストがふわふわ浮かぶシーン ──
+function SceneBackground({ theme, scale = 1 }: { theme: BgTheme; scale?: number }) {
   return (
     <div className={`absolute inset-0 overflow-hidden bg-gradient-to-br ${theme.gradient}`} aria-hidden>
       {theme.floaters.map((f, i) => (
@@ -1557,12 +1565,11 @@ function SceneBackground({ theme }: { theme: BgTheme }) {
           style={{
             left: `${f.left}%`,
             top: `${f.top}%`,
-            fontSize: `${f.size}rem`,
             animationDelay: `${f.delay}s`,
             animationDuration: `${f.duration}s`,
           }}
         >
-          {f.emoji}
+          <ThemeArt art={f.art} size={f.size * 32 * scale} />
         </span>
       ))}
     </div>
@@ -1673,8 +1680,8 @@ function ProfileBookContent({
           ✉ {translatedInfo.message ?? info.message}
         </div>
         {bgTheme && (
-          <div className="relative mt-2 text-right">
-            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.emoji} {bgTheme.name}</span>
+          <div className="relative mt-2 flex justify-end">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.floaters[0] && <ThemeArt art={bgTheme.floaters[0].art} size={12} />}{bgTheme.name}</span>
           </div>
         )}
       </section>
@@ -2180,6 +2187,10 @@ function ProfileEditScreen({
   onChangeLang,
   notifyOdai,
   onToggleNotifyOdai,
+  ownedBgIds = [],
+  ownedThemeIds = [],
+  equippedBgId = null,
+  onEquipBg = () => {},
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -2202,6 +2213,10 @@ function ProfileEditScreen({
   onChangeLang: (l: Lang) => void;
   notifyOdai: boolean;
   onToggleNotifyOdai: (val: boolean) => void;
+  ownedBgIds?: string[];
+  ownedThemeIds?: string[];
+  equippedBgId?: string | null;
+  onEquipBg?: (id: string | null) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
@@ -2301,6 +2316,60 @@ function ProfileEditScreen({
                 </button>
               );
             })}
+          </div>
+
+          {/* ── 手に入れた背景テーマ（ガチャ・ショップ購入分） ── */}
+          <div className="mt-6 border-t border-dashed border-pink/20 pt-5">
+            <p className="mb-1 text-sm font-black text-ink">🖼 手に入れた背景テーマ</p>
+            <p className="mb-3 text-[11px] font-bold text-muted">ガチャ・ショップでゲットしたテーマ。アプリ全体の背景に反映されます</p>
+            {(() => {
+              const ownedThemes = [
+                ...BG_THEMES.filter((t) => ownedBgIds.includes(t.id)),
+                ...COLOR_THEMES.filter((t) => ownedThemeIds.includes(t.id)),
+              ];
+              if (ownedThemes.length === 0) {
+                return (
+                  <button
+                    type="button"
+                    onClick={() => go('shop')}
+                    className="w-full rounded-2xl border-2 border-dashed border-pink/30 py-4 text-xs font-black text-pink hover:bg-pink/5"
+                  >
+                    まだ持っていないよ。ショップでゲットしよう！ →
+                  </button>
+                );
+              }
+              return (
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onEquipBg(null)}
+                    className={`overflow-hidden rounded-2xl text-left transition ${!equippedBgId ? 'ring-2 ring-pink' : 'opacity-80 hover:opacity-100'}`}
+                  >
+                    <div className="grid h-16 place-items-center bg-base text-[10px] font-black text-muted">なし</div>
+                    <p className="bg-white px-2 py-1.5 text-[10px] font-black text-ink">ノーマル</p>
+                  </button>
+                  {ownedThemes.map((t) => {
+                    const equipped = equippedBgId === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => onEquipBg(equipped ? null : t.id)}
+                        className={`overflow-hidden rounded-2xl text-left transition ${equipped ? 'ring-2 ring-pink' : 'opacity-80 hover:opacity-100'}`}
+                      >
+                        <div className="relative h-16 overflow-hidden">
+                          <SceneBackground theme={t} scale={0.55} />
+                          {equipped && (
+                            <span className="absolute right-1 top-1 rounded-full bg-pink px-1.5 py-0.5 text-[8px] font-black text-white">使用中</span>
+                          )}
+                        </div>
+                        <p className="truncate bg-white px-2 py-1.5 text-[10px] font-black text-ink">{t.name}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </section>
 
@@ -4827,12 +4896,12 @@ function ShopScreen({
                     <div key={t.id} className={`overflow-hidden rounded-[20px] shadow-card ${equipped ? 'ring-2 ring-pink' : ''}`}>
                       <div className={`relative h-20 bg-gradient-to-br ${t.gradient}`}>
                         {t.floaters.slice(0, 4).map((f, i) => (
-                          <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, fontSize: `${f.size * 0.7}rem`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}>{f.emoji}</span>
+                          <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}><ThemeArt art={f.art} size={f.size * 22} /></span>
                         ))}
                         <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
                       </div>
                       <div className="p-3">
-                        <p className="text-xs font-black text-ink">{t.emoji} {t.name}</p>
+                        <p className="flex items-center gap-1 text-xs font-black text-ink">{t.floaters[0] && <ThemeArt art={t.floaters[0].art} size={14} />}{t.name}</p>
                         <button
                           onClick={() => onEquipBg(equipped ? null : t.id)}
                           className={`mt-2 w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${equipped ? 'bg-base text-pink ring-1 ring-pink' : 'bg-pink text-white'}`}>
@@ -4858,10 +4927,8 @@ function ShopScreen({
               const equipped = equippedBgId === item.id;
               return (
                 <div key={item.id} className={`rounded-[24px] bg-white p-4 shadow-card ${equipped ? 'ring-2 ring-pink' : ''}`}>
-                  <div className={`mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br ${item.gradient} text-center text-3xl`}>
-                    {item.emoji}
-                  </div>
-                  <p className="text-sm font-black text-ink">{item.emoji} {item.name}</p>
+                  <div className={`mb-3 h-20 rounded-2xl bg-gradient-to-br ${item.gradient}`} />
+                  <p className="text-sm font-black text-ink">{item.name}</p>
                   <div className="mt-2">
                     {owned ? (
                       <button
@@ -4968,13 +5035,13 @@ function ShopScreen({
           <div className="mx-4 w-full max-w-sm overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className={`relative h-40 bg-gradient-to-br ${bgResult.theme.gradient}`}>
               {bgResult.theme.floaters.map((f, i) => (
-                <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, fontSize: `${f.size}rem`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}>{f.emoji}</span>
+                <span key={i} className="bg-floater" style={{ left: `${f.left}%`, top: `${f.top}%`, animationDelay: `${f.delay}s`, animationDuration: `${f.duration}s` }}><ThemeArt art={f.art} size={f.size * 32} /></span>
               ))}
               <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-black ${RARITY_COLOR[bgResult.theme.rarity]}`}>{bgResult.theme.rarity}</span>
             </div>
             <div className="p-6 text-center">
               <p className="text-base font-black text-ink">
-                {bgResult.theme.emoji} {bgResult.theme.name}
+                {bgResult.theme.name}
                 {bgResult.isNew
                   ? <span className="ml-2 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">NEW!</span>
                   : <span className="ml-2 text-[10px] font-bold text-muted">（もってる）</span>}
@@ -6265,6 +6332,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onChangeLang={changeLang}
       notifyOdai={notifyOdai}
       onToggleNotifyOdai={toggleNotifyOdai}
+      ownedBgIds={ownedBgIds}
+      ownedThemeIds={ownedThemeIds}
+      equippedBgId={equippedBgId}
+      onEquipBg={equipBg}
     />
   );
 
@@ -6434,7 +6505,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
+      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );
