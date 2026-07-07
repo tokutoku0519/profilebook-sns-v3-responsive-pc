@@ -919,7 +919,7 @@ function HomeScreen({
                 <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{dailyQuestion?.category}</span>
                 <span className="rounded-full bg-base px-2 py-0.5 text-[10px] font-black text-muted">📅 毎日更新</span>
               </div>
-              <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion.title}</p>
+              <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion?.title}</p>
               <div className="mt-3 flex items-center gap-2">
                 {hasAnsweredToday ? (
                   <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">🔓 みんなの回答を見る</span>
@@ -1043,7 +1043,7 @@ function SearchScreen({ go, answers, myProfile }: {
 }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'answer' | 'person' | 'question' | 'match'>('answer');
-  const filteredAnswers = answers.filter((a) => `${a.body} ${a.question.title} ${a.user.name}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredAnswers = answers.filter((a) => `${a.body} ${a.question?.title ?? ''} ${a.user.name}`.toLowerCase().includes(query.toLowerCase()));
   const filteredProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
   const filteredQuestions = questions.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -1851,7 +1851,7 @@ function ProfileBookContent({
                 className={`w-full rounded-2xl ${bg} p-3 text-left active:scale-[0.99]`}
               >
                 <p className={`text-[11px] font-black ${accent}`}>
-                  {typeof answer.question === 'string' ? answer.question : answer.question.title}
+                  {typeof answer.question === 'string' ? answer.question : answer.question?.title}
                 </p>
                 <p className="mt-1 text-sm font-bold text-ink leading-relaxed">{answer.body}</p>
               </button>
@@ -3581,7 +3581,7 @@ function DetailScreen({
         {/* シェア・ブックマーク */}
         <div className="flex gap-3">
           <button
-            onClick={() => onShare(`「${answer.question.title}」\n\n${answer.body}\n\n— ${answer.user.name} on Miri`)}
+            onClick={() => onShare(`「${answer.question?.title ?? ''}」\n\n${answer.body}\n\n— ${answer.user.name} on Miri`)}
             className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-black text-muted shadow-card transition active:scale-[0.98]"
           >
             <Share2 size={16} />シェア
@@ -5820,7 +5820,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     const record = { date: new Date().toISOString().slice(0, 10), body };
     setDailyRecord(record);
     localStorage.setItem('miri_daily_answer', JSON.stringify(record));
-    postAnswer({ questionId: dailyQuestion.id, body, sticker: '✍️', visibility: 'public' });
+    postAnswer({ questionId: dailyQuestion?.id ?? '', body, sticker: '✍️', visibility: 'public' });
   }
 
 
@@ -6057,7 +6057,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     if (Notification.permission !== 'granted') return;
     const today = new Date().toDateString();
     if (localStorage.getItem('miri_last_notified_odai') === today) return;
-    new Notification('✿ Miri — 今日のお題', { body: dailyQuestion.title, tag: 'miri-daily' });
+    new Notification('✿ Miri — 今日のお題', { body: dailyQuestion?.title ?? '', tag: 'miri-daily' });
     localStorage.setItem('miri_last_notified_odai', today);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifyOdai, dailyQuestion]);
