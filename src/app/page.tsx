@@ -5738,7 +5738,7 @@ export default function Page() {
   // 未ログイン → /login へリダイレクト
   useEffect(() => {
     if (authChecked && !authed) {
-      router.replace('/login');
+      router.replace('/auth');
     }
   }, [authChecked, authed, router]);
 
