@@ -1,6 +1,7 @@
 'use client';
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: any) { super(props); this.state = { error: null }; }
@@ -5699,6 +5700,7 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
+  const router = useRouter();
   // production のみ Supabase 認証を要求
   const [authed, setAuthed] = useState<boolean>(() => isDev);
   const [authChecked, setAuthChecked] = useState(isDev);
@@ -5721,7 +5723,7 @@ export default function Page() {
       return;
     }
     import('@/lib/supabase').then(({ supabase }) => {
-      if (!supabase) { setAuthed(false); setAuthChecked(true); return; }
+      if (!supabase) { setAuthChecked(true); return; }
       supabase.auth.getSession().then(({ data }) => {
         setAuthed(!!data.session);
         setAuthChecked(true);
@@ -5733,11 +5735,15 @@ export default function Page() {
     });
   }, []);
 
-  if (!authChecked) {
-    return <div className="flex h-full items-center justify-center bg-base"><span className="text-3xl">🎀</span></div>;
-  }
-  if (!authed) {
-    return <AuthScreen onAuthed={() => setAuthed(true)} />;
+  // 未ログイン → /login へリダイレクト
+  useEffect(() => {
+    if (authChecked && !authed) {
+      router.replace('/login');
+    }
+  }, [authChecked, authed, router]);
+
+  if (!authChecked || !authed) {
+    return <div className="flex h-full items-center justify-center bg-base"><span className="text-3xl animate-pulse">🎀</span></div>;
   }
 
   if (fatalError) return (
