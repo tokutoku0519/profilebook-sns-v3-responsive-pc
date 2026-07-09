@@ -1,7 +1,6 @@
 'use client';
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: any) { super(props); this.state = { error: null }; }
@@ -5700,7 +5699,6 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
-  const router = useRouter();
   // production のみ Supabase 認証を要求
   const [authed, setAuthed] = useState<boolean>(() => isDev);
   const [authChecked, setAuthChecked] = useState(isDev);
@@ -5735,15 +5733,21 @@ export default function Page() {
     });
   }, []);
 
-  // 未ログイン → /login へリダイレクト
+  // 認証状態に応じて URL を変える（新しいルートファイル不要）
   useEffect(() => {
-    if (authChecked && !authed) {
-      router.replace('/auth');
+    if (!authChecked) return;
+    if (!authed) {
+      history.replaceState({}, '', '/?view=login');
+    } else {
+      history.replaceState({}, '', '/');
     }
-  }, [authChecked, authed, router]);
+  }, [authChecked, authed]);
 
-  if (!authChecked || !authed) {
+  if (!authChecked) {
     return <div className="flex h-full items-center justify-center bg-base"><span className="text-3xl animate-pulse">🎀</span></div>;
+  }
+  if (!authed) {
+    return <AuthScreen onAuthed={() => setAuthed(true)} />;
   }
 
   if (fatalError) return (
