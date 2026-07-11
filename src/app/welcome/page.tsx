@@ -62,18 +62,13 @@ export default function WelcomePage() {
         </div>
       </div>
 
-      <div className="w-full max-w-xs mx-auto space-y-3">
+      <div className="w-full max-w-xs mx-auto">
         <button
           onClick={() => isLast ? done() : setStep(s => s + 1)}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating active:scale-[0.98] transition"
         >
           {isLast ? 'はじめる ✨' : 'つぎへ →'}
         </button>
-        {!isLast && (
-          <button onClick={done} className="w-full py-2 text-sm font-black text-muted">
-            スキップ
-          </button>
-        )}
       </div>
     </div>
   );
