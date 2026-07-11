@@ -14,7 +14,6 @@ const questionsJa: LocaleQuestion[] = [
   { id: 'q6',  category: '平成',  title: 'ハマっていたゲームやおもちゃは？', sponsor: null },
   { id: 'q7',  category: '平成',  title: '集めていたシールやカードは？', sponsor: null },
   { id: 'q9',  category: '平成',  title: '初めて買ったCDや好きだったアーティストは？', sponsor: null },
-  { id: 'q10', category: '平成',  title: 'プリクラで必ずやっていたポーズは？', sponsor: null },
   { id: 'q2',  category: '価値観', title: '休日は家でだらだら派？外に出たい派？', sponsor: null },
   { id: 'q11', category: '価値観', title: '友達が多い派？少ない方が深い派？', sponsor: null },
   { id: 'q12', category: '価値観', title: '貯金派？使い切り派？', sponsor: null },

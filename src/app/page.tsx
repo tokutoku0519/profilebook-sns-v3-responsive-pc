@@ -616,6 +616,26 @@ const initialDiaryPages: DiaryPage[] = [
   },
 ];
 
+// 企業・法人アカウントがアプリ内で投稿したお題（PR案件）のシード。
+// 作成者バッジ（企業）を表示し、タップで作成者アカウントへ遷移できる。
+const initialCommunityQuestions = isDev ? [
+  {
+    id: 'brand-q-mellow-1',
+    category: '企業',
+    title: '最近ホッとひと息つけた瞬間は？',
+    description: 'mellow milk からの質問です。あなたの「ごほうびタイム」の過ごし方を教えて！',
+    sponsor: 'mellow milk',
+    createdBy: '@mellow_milk',
+    createdByName: 'mellow milk',
+    createdByAvatar: '☕',
+    isOfficialQuestion: true,
+    isBrandQuestion: true,
+    createdAt: '2024-05-01T09:00:00Z',
+    answerType: 'free' as const,
+    answerOptions: [] as string[],
+  },
+] : [];
+
 const initialCircles: Circle[] = isDev ? [
   { id: 'circle-1', name: 'ダンスサークル', emoji: '🕺', memberIds: ['@koki', '@mayu_note', '@nana_7', '@akari_28'], createdBy: '@koki' },
   { id: 'circle-2', name: '写真好き集まれ', emoji: '📸', memberIds: ['@koki', '@rin_puri', '@haru_cafe'], createdBy: '@rin_puri' },
@@ -873,7 +893,7 @@ function HomeScreen({
   <section className="space-y-3">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-black text-ink">
-        公認ユーザーのお題
+        公認・企業アカウントのお題
       </h2>
 
       <button onClick={() => go('search')} className="text-xs font-black text-pink">
@@ -881,28 +901,47 @@ function HomeScreen({
       </button>
     </div>
 
-    {communityQuestions.map((q) => (
-      <button
-        key={q.id}
-        onClick={() => go('create', q)}
-        className="w-full rounded-[24px] bg-white p-4 text-left shadow-card active:scale-[0.99]"
-      >
-        <div className="mb-2 flex items-center gap-2">
-          <OfficialBadge />
-          <span className="text-xs font-black text-muted">
-            {q.createdByName} が作成
-          </span>
+    {communityQuestions.map((q) => {
+      const creatorTitles = getUserTitles(q.createdBy);
+      return (
+        <div
+          key={q.id}
+          className="w-full rounded-[24px] bg-white p-4 text-left shadow-card"
+        >
+          {/* 作成者（質問者）— タップでアカウントへ遷移 */}
+          <button
+            onClick={() => go('profile', q.createdBy)}
+            className="mb-2 flex items-center gap-1.5 active:opacity-70"
+          >
+            {q.createdByAvatar && (
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-base text-sm">
+                {q.createdByAvatar}
+              </span>
+            )}
+            {creatorTitles.length > 0
+              ? creatorTitles.map((tt) => <TitleBadge key={tt} type={tt} userId={q.createdBy} />)
+              : <OfficialBadge />}
+            <span className="text-xs font-black text-muted underline decoration-dotted underline-offset-2">
+              {q.createdByName} が作成
+            </span>
+          </button>
+
+          {/* お題本体 — タップで回答画面へ */}
+          <button
+            onClick={() => go('create', q)}
+            className="block w-full text-left active:scale-[0.99]"
+          >
+            <p className="text-base font-black text-ink">
+              {q.title}
+            </p>
+
+            <p className="mt-1 text-xs font-bold text-muted">
+              {q.description}
+            </p>
+          </button>
         </div>
-
-        <p className="text-base font-black text-ink">
-          {q.title}
-        </p>
-
-        <p className="mt-1 text-xs font-bold text-muted">
-          {q.description}
-        </p>
-      </button>
-    ))}
+      );
+    })}
   </section>
 )}
 
@@ -930,31 +969,24 @@ function HomeScreen({
             </div>
           </button>
         </section>
-        {/* ── PR案件 ── */}
-        <section>
-          <div className="flex items-center mb-3">
-            <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
-          </div>
-          <button
-            onClick={() => !hasAnsweredPR && go('create', { ...prQuestion, id: prQuestion.id, category: 'PR', title: prQuestion.question })}
-            className={`w-full text-left rounded-[24px] bg-gradient-to-br ${prQuestion.brandBg} p-4 shadow-card transition ${hasAnsweredPR ? 'opacity-60' : 'active:scale-[0.99]'}`}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{prQuestion.brandEmoji}</span>
-                <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-ink">{prQuestion.brand}</span>
-                <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-amber-600">PR</span>
-              </div>
-              <span className="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-black text-white">
-                <CoinIcon size={13} /> +{prQuestion.reward}
-              </span>
+        {/* ── PR案件 ──
+            従来のブランド固定PR質問カードは一旦非表示。
+            PR案件は企業・法人アカウントが「公認ユーザーのお題」として投稿する形に移行。
+            再表示する場合はこのブロックを復活させる。
+        {!hasAnsweredPR && (
+          <section>
+            <div className="flex items-center mb-3">
+              <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
             </div>
-            <p className="text-sm font-black text-ink leading-relaxed">{prQuestion.question}</p>
-            <p className="mt-2 text-[10px] font-bold text-ink/60">
-              {hasAnsweredPR ? '✅ 本日分回答済み' : '答えるとコインがもらえます'}
-            </p>
-          </button>
-        </section>
+            <button
+              onClick={() => !hasAnsweredPR && go('create', { ...prQuestion, id: prQuestion.id, category: 'PR', title: prQuestion.question })}
+              className={`w-full text-left rounded-[24px] bg-gradient-to-br ${prQuestion.brandBg} p-4 shadow-card transition ${hasAnsweredPR ? 'opacity-60' : 'active:scale-[0.99]'}`}
+            >
+              ...
+            </button>
+          </section>
+        )}
+        */}
 
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
@@ -5837,11 +5869,11 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 });
 
 const [communityQuestions, setCommunityQuestions] = useState(() => {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return initialCommunityQuestions;
   try {
     const saved = localStorage.getItem('communityQuestions');
-    return saved ? JSON.parse(saved) : [];
-  } catch { return []; }
+    return saved ? JSON.parse(saved) : initialCommunityQuestions;
+  } catch { return initialCommunityQuestions; }
 });
 
 const [avatarUrl, setAvatarUrl] = useState<string>(() => {
@@ -6230,6 +6262,7 @@ function createCommunityQuestion(title: string, description: string, answerType:
     sponsor: null,
     createdBy: me.id,
     createdByName: me.name,
+    createdByAvatar: me.avatar,
     isOfficialQuestion: true,
     createdAt: new Date().toISOString(),
     answerType,

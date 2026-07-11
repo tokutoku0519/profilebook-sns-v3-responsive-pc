@@ -27,6 +27,14 @@ export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
     );
   }
 
+  if (type === 'brand') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-black text-amber-600 ring-1 ring-amber-200">
+        {def.emoji} {def.label}
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 text-[10px] font-black text-sky-600 ring-1 ring-sky-200">
       {def.emoji} {def.label}

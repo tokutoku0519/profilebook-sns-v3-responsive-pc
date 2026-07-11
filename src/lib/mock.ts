@@ -6,7 +6,6 @@ export const questions = [
   { id: 'q7',  category: '平成', title: '集めていたシールやカードは？', sponsor: null },
   { id: 'q8',  category: '平成', title: '小学校のとき、好きだった先生は？どんな先生だった？', sponsor: null },
   { id: 'q9',  category: '平成', title: '初めて買ったCDや好きだったアーティストは？', sponsor: null },
-  { id: 'q10', category: '平成', title: 'プリクラで必ずやっていたポーズは？', sponsor: null },
 
   // 価値観
   { id: 'q2',  category: '価値観', title: '休日は家でだらだら派？外に出たい派？', sponsor: null },
@@ -47,14 +46,14 @@ export const answers = [
   },
   {
     id: 'a2',
-    question: questions[7],
+    question: questions[6],
     body: '午前中だけ外に出て、午後は家で映画見るのがいちばん勝ち。',
     user: { name: 'Koki', id: '@koki', avatar: '📷' },
     reactions: { like: 15, same: 7, wakaru: 29, natsukashii: 3 }
   },
   {
     id: 'a3',
-    question: questions[17],
+    question: questions[16],
     body: '昔のプロフィール帳っぽいSNSを作ること。シール帳感をどう入れるか悩み中。',
     user: { name: 'りん', id: '@rin_puri', avatar: '🌙' },
     reactions: { like: 41, same: 4, wakaru: 9, natsukashii: 12 }
@@ -68,7 +67,7 @@ export const answers = [
   },
   {
     id: 'a5',
-    question: questions[14],
+    question: questions[13],
     body: '絶対待つ。好きになった人にこそ、ちゃんと来てほしい。',
     user: { name: 'まゆ', id: '@mayu_note', avatar: '🎀' },
     reactions: { like: 33, same: 21, wakaru: 8, natsukashii: 2 }
@@ -78,5 +77,6 @@ export const answers = [
 export const profiles = [
   { name: 'まゆ', id: '@mayu_note', avatar: '🎀', bio: '平成女児の残党。甘いものと夜散歩。', common: '揚げパン派' },
   { name: 'りん', id: '@rin_puri', avatar: '🌙', bio: '懐かしいものを集めています。', common: '夜型' },
-  { name: 'なな', id: '@nana_7', avatar: '🧸', bio: 'シールと喫茶店が好き。', common: 'インドア派' }
+  { name: 'なな', id: '@nana_7', avatar: '🧸', bio: 'シールと喫茶店が好き。', common: 'インドア派' },
+  { name: 'mellow milk', id: '@mellow_milk', avatar: '☕', bio: 'ほっとひと息のミルクティー。みんなの「ごほうびタイム」を応援中。', common: '企業アカウント' }
 ];
