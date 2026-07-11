@@ -24,7 +24,15 @@ export async function GET(request: NextRequest) {
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}/welcome`);
+      // middleware は miri_auth クッキーで認証を判定するため、ここで必ず付与する。
+      // これが無いと確認メールから来たユーザーが /welcome でログイン画面へ弾かれる。
+      const res = NextResponse.redirect(`${origin}/welcome`);
+      res.cookies.set('miri_auth', '1', {
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60,
+        sameSite: 'lax',
+      });
+      return res;
     }
   }
 

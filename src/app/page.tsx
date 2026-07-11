@@ -15,6 +15,25 @@ function getStoredUsername(): string {
   try { return localStorage.getItem('miri_username') || 'me'; } catch { return 'me'; }
 }
 
+// Supabase のログインエラーを、原因が分かる日本語メッセージに変換する。
+// 「メールアドレスかパスワードが違います」で全部を丸めると、実際はメール未確認や
+// プロジェクト休止だった場合に原因が分からなくなるため、主要なケースを切り分ける。
+function loginErrorMessage(err: { message?: string; code?: string; status?: number }): string {
+  const msg = (err?.message || '').toLowerCase();
+  const code = err?.code || '';
+  if (code === 'email_not_confirmed' || msg.includes('not confirmed')) {
+    return 'メールアドレスが未確認です。登録時に届いた確認メールのリンクを開いてから、もう一度ログインしてください。';
+  }
+  if (code === 'invalid_credentials' || msg.includes('invalid login')) {
+    return 'メールアドレスかパスワードが違います';
+  }
+  if (err?.status === 0 || msg.includes('failed to fetch') || msg.includes('network')) {
+    return 'サーバーに接続できませんでした。時間をおいて再度お試しください。';
+  }
+  // 想定外のエラーは握りつぶさず、原因が追えるよう内容をそのまま表示する。
+  return err?.message || 'ログインに失敗しました';
+}
+
 export default function Page() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -74,7 +93,7 @@ export default function Page() {
       }
     } else {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+      if (err) { setError(loginErrorMessage(err)); setLoading(false); return; }
       const username = data.user?.email?.split('@')[0] || 'me';
       try { localStorage.setItem('miri_username', username); } catch {}
       setAuthCookie();
