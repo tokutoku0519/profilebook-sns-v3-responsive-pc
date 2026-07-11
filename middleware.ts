@@ -8,13 +8,20 @@ export function middleware(request: NextRequest) {
   if (host.includes('miri-test')) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
-  if (pathname.startsWith('/login') || pathname.startsWith('/auth')) {
+  // 認証不要のルート
+  if (
+    pathname === '/' ||
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/terms') ||
+    pathname.startsWith('/privacy')
+  ) {
     return NextResponse.next();
   }
 
   // miri_auth クッキーで認証確認
   if (!request.cookies.has('miri_auth')) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   return NextResponse.next();

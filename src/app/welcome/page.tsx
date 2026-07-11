@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+function getStoredUsername(): string {
+  try { return localStorage.getItem('miri_username') || 'me'; } catch { return 'me'; }
+}
+
 const steps = [
   { emoji: '📖', title: 'お題に答えよう', desc: '毎日届くお題に、プロフィール帳みたいに答えてね。' },
   { emoji: '🎀', title: 'プロフ帳を作ろう', desc: '自分だけのプロフィール帳をデコって、個性を見せよう。' },
@@ -28,7 +32,7 @@ export default function WelcomePage() {
     } catch {
       localStorage.removeItem('profilebook_answers_v2');
     }
-    router.push('/');
+    router.push(`/${getStoredUsername()}`);
   }
 
   return (
