@@ -44,7 +44,7 @@ export default function LoginPage() {
       if (err) { setError(err.message); setLoading(false); return; }
       if (data.session) {
         setAuthCookie();
-        router.push('/');
+        router.push('/welcome');
       } else {
         setEmailSent(true);
       }
@@ -52,7 +52,7 @@ export default function LoginPage() {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
       setAuthCookie();
-      router.push('/');
+      router.push('/welcome');
     }
     setLoading(false);
   }
