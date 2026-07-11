@@ -740,7 +740,9 @@ function Phone({ children, active, go, lang, bgTheme = null }: { children: React
   );
 }
 
-function DesktopNav({ active, go, lang = 'ja' }: { active: TabKey; go: (s: Screen) => void; lang?: Lang }) {
+function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey; go: (s: Screen) => void; lang?: Lang; currentScreen?: Screen }) {
+  const secondaryScreens: Screen[] = ['followers', 'settings', 'shop', 'circles', 'wallet'];
+  const inSecondary = currentScreen ? secondaryScreens.includes(currentScreen) : false;
   const items: { key: TabKey; labelKey: string; icon: any; screen: Screen }[] = [
     { key: 'home', labelKey: 'tab_home', icon: Home, screen: 'home' },
     { key: 'search', labelKey: 'tab_search', icon: Search, screen: 'search' },
@@ -752,23 +754,23 @@ function DesktopNav({ active, go, lang = 'ja' }: { active: TabKey; go: (s: Scree
     <aside className="hidden h-[calc(100vh-48px)] w-[260px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur lg:block">
       <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card overflow-hidden"><img src="/icon.png" alt="Miri" className="h-full w-full object-cover" /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
       <nav className="space-y-2">
-        {items.map((item) => { const Icon = item.icon; const isActive = active === item.key; return (
+        {items.map((item) => { const Icon = item.icon; const isActive = !inSecondary && active === item.key; return (
           <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
             <Icon size={20} />{t(item.labelKey, lang)}
           </button>
         ); })}
       </nav>
       <div className="mt-4 space-y-2">
-        <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+        <button onClick={() => go('shop')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'shop' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <ShoppingBag size={20} />{t('nav_shop', lang)}
         </button>
-        <button onClick={() => go('circles')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+        <button onClick={() => go('circles')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'circles' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <span className="text-base">🔒</span>{t('nav_circles', lang)}
         </button>
-        <button onClick={() => go('followers')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+        <button onClick={() => go('followers')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'followers' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <UserRound size={20} />{t('nav_following', lang)}
         </button>
-        <button onClick={() => go('settings')} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black text-muted transition hover:bg-pink/10 hover:text-ink">
+        <button onClick={() => go('settings')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'settings' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <Settings size={20} />{t('nav_settings', lang)}
         </button>
       </div>
@@ -811,11 +813,11 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
   );
 }
 
-function DesktopShell({ children, active, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string> }) {
+function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; currentScreen?: Screen; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string> }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
-        <DesktopNav active={active} go={go} lang={lang} />
+        <DesktopNav active={active} go={go} lang={lang} currentScreen={currentScreen} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme}>{children}</Phone></div>
         <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} />
       </div>
@@ -6534,7 +6536,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
+      <DesktopShell active={active} currentScreen={screen} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );

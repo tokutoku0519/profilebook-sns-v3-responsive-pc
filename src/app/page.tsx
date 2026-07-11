@@ -7,7 +7,7 @@ import { isDev } from '@/lib/env';
 import { TERMS_VERSION } from '@/lib/terms';
 
 function setAuthCookie() {
-  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
   document.cookie = `miri_auth=1; path=/; expires=${expires}; SameSite=Strict`;
 }
 
@@ -65,18 +65,23 @@ export default function Page() {
       });
       if (err) { setError(err.message); setLoading(false); return; }
       if (data.session) {
-        const username = email.split('@')[0];
-        try { localStorage.setItem('miri_username', username); } catch {}
+        // 初回は /setup でID・名前を設定してもらう
+        const fallbackId = data.user?.id?.split('-')[0] || 'me';
+        try { if (!localStorage.getItem('miri_username')) localStorage.setItem('miri_username', fallbackId); } catch {}
         setAuthCookie();
-        router.push('/welcome');
+        router.push('/setup');
       } else {
         setEmailSent(true);
       }
     } else {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
-      const username = data.user?.email?.split('@')[0] || 'me';
-      try { localStorage.setItem('miri_username', username); } catch {}
+      // 既存ユーザー: localStorage になければ UUID 先頭を仮IDとして使う
+      const stored = (() => { try { return localStorage.getItem('miri_username'); } catch { return null; } })();
+      if (!stored) {
+        const fallbackId = data.user?.id?.split('-')[0] || 'me';
+        try { localStorage.setItem('miri_username', fallbackId); } catch {}
+      }
       setAuthCookie();
       router.push('/welcome');
     }

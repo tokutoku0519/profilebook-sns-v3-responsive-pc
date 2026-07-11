@@ -19,7 +19,7 @@ export default function WelcomePage() {
   const isLast = step === steps.length - 1;
 
   function done() {
-    // メインアプリに入る前に壊れた localStorage データを除去する
+    // 壊れた localStorage データを除去する
     try {
       const saved = localStorage.getItem('profilebook_answers_v2');
       if (saved) {
@@ -32,6 +32,8 @@ export default function WelcomePage() {
     } catch {
       localStorage.removeItem('profilebook_answers_v2');
     }
+    // アプリ内オンボーディング画面をスキップするためのフラグ
+    localStorage.setItem('miri_onboarded', '1');
     router.push(`/${getStoredUsername()}`);
   }
 
@@ -60,7 +62,7 @@ export default function WelcomePage() {
         </div>
       </div>
 
-      <div className="w-full space-y-3">
+      <div className="w-full max-w-xs mx-auto space-y-3">
         <button
           onClick={() => isLast ? done() : setStep(s => s + 1)}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating active:scale-[0.98] transition"
