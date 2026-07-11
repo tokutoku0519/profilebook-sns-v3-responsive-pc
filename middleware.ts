@@ -1,52 +1,23 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  // development 環境と miri-test (*.vercel.app) は認証不要
-  if (process.env.NEXT_PUBLIC_APP_ENV === 'development') return supabaseResponse;
+export function middleware(request: NextRequest) {
+  // development 環境は認証不要
+  if (process.env.NEXT_PUBLIC_APP_ENV === 'development') return NextResponse.next();
+  // miri-test 環境のみ認証不要（テスト用）
   const host = request.headers.get('host') ?? '';
-  if (/\.vercel\.app$/.test(host)) return supabaseResponse;
+  if (host.includes('miri-test')) return NextResponse.next();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  // セッションを更新（getUser を使うこと — getSession は信頼性が低い）
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const isLoginPage = request.nextUrl.pathname.startsWith('/login');
-  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth');
-
-  if (!user && !isLoginPage && !isAuthCallback) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith('/login') || pathname.startsWith('/auth')) {
+    return NextResponse.next();
   }
 
-  if (user && isLoginPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
+  // miri_auth クッキーで認証確認
+  if (!request.cookies.has('miri_auth')) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {

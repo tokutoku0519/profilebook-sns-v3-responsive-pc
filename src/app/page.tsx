@@ -5567,7 +5567,28 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
-  // 認証は middleware が処理するためここでは不要
+  const [ready, setReady] = useState(isDev);
+
+  useEffect(() => {
+    if (isDev) return;
+    // miri-test 環境は認証不要
+    if (window.location.hostname.includes('miri-test')) { setReady(true); return; }
+    // miri_auth クッキーで確認（middleware のフォールバック）
+    if (!document.cookie.includes('miri_auth=1')) {
+      window.location.replace('/login');
+      return;
+    }
+    setReady(true);
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="flex h-full items-center justify-center bg-base">
+        <span className="text-3xl animate-pulse">🎀</span>
+      </div>
+    );
+  }
+
   return <ErrorBoundary><AppContent /></ErrorBoundary>;
 }
 

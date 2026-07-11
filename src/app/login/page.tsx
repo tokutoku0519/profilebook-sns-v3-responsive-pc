@@ -2,8 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/terms';
+
+function setAuthCookie() {
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
+  document.cookie = `miri_auth=1; path=/; expires=${expires}; SameSite=Strict`;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,8 +27,8 @@ export default function LoginPage() {
       setError('利用規約とプライバシーポリシーへの同意が必要です');
       return;
     }
+    if (!supabase) { setError('設定エラーです'); return; }
     setLoading(true);
-    const supabase = createClient();
 
     if (mode === 'signup') {
       const { data, error: err } = await supabase.auth.signUp({
@@ -38,16 +43,16 @@ export default function LoginPage() {
       });
       if (err) { setError(err.message); setLoading(false); return; }
       if (data.session) {
+        setAuthCookie();
         router.push('/');
-        router.refresh();
       } else {
         setEmailSent(true);
       }
     } else {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+      setAuthCookie();
       router.push('/');
-      router.refresh();
     }
     setLoading(false);
   }
