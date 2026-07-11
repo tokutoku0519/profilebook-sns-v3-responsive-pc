@@ -39,7 +39,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   return (
     <article className={`${hero ? 'min-h-36' : 'min-h-24'} sticker-shine rounded-[28px] border border-pink/20 bg-gradient-to-br from-white via-pink-50 to-purple-50 p-4 shadow-card`}>
       <div className="mb-3 flex items-center gap-2">
-        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-pinkStrong shadow-sm">{question.category}</span>
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-pinkStrong shadow-sm">{question?.category}</span>
         {question.sponsor && <span className="rounded-full bg-cream px-3 py-1 text-[11px] font-bold text-ink">PR</span>}
       </div>
       <h3 className="relative z-10 text-lg font-bold leading-snug text-ink">{question.title}</h3>

@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
+const CACHE_BUST = 'v2';
 const nextConfig = {
   generateBuildId: async () => {
-    return `build-${Date.now()}`;
+    return `build-${CACHE_BUST}-${Date.now()}`;
   },
   async headers() {
     return [
