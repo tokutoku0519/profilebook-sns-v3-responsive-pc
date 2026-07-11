@@ -5714,6 +5714,12 @@ export default function Page() {
 
   useEffect(() => {
     if (isDev) return;
+    // miri-test (*.vercel.app) ではログイン不要にする
+    if (/\.vercel\.app$/.test(window.location.hostname)) {
+      setAuthed(true);
+      setAuthChecked(true);
+      return;
+    }
     import('@/lib/supabase').then(({ supabase }) => {
       if (!supabase) { setAuthChecked(true); return; }
       supabase.auth.getSession().then(({ data }) => {
