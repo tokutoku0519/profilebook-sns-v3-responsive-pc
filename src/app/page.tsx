@@ -34,7 +34,6 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
-import { TERMS_VERSION } from '@/lib/terms';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
 
@@ -5365,137 +5364,6 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
   );
 }
 
-// ── 認証画面（production のみ表示）──────────────────────────────
-function AuthScreen({ onAuthed: _onAuthed }: { onAuthed: () => void }) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [agreed, setAgreed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (mode === 'signup' && !agreed) {
-      setError('利用規約とプライバシーポリシーへの同意が必要です');
-      return;
-    }
-    setLoading(true);
-    const { supabase } = await import('@/lib/supabase');
-    if (!supabase) { setError('設定エラーです'); setLoading(false); return; }
-
-    if (mode === 'signup') {
-      const { data, error: err } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          // 同意の記録（いつ・どのバージョンの規約に同意したか）をユーザーメタデータに残す
-          data: {
-            terms_agreed_at: new Date().toISOString(),
-            terms_version: TERMS_VERSION,
-          },
-        },
-      });
-      if (err) { setError(err.message); setLoading(false); return; }
-      if (data.session) {
-        // メール確認不要の場合はそのままアプリへ（onAuthStateChange が検知）
-        setDone(true);
-      } else {
-        setError('確認メールを送信しました。メールのリンクをクリックしてください。');
-      }
-    } else {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
-      // onAuthStateChange が自動で authed = true にする
-    }
-    setLoading(false);
-  }
-
-  // onAuthStateChange 経由で authed が true になるのを待つ間の表示
-  if (done) return (
-    <div className="flex min-h-screen items-center justify-center bg-base">
-      <span className="text-3xl animate-pulse">🎀</span>
-    </div>
-  );
-
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 gap-8">
-      <div className="flex flex-col items-center gap-3">
-        <img src="/icon.png" alt="Miri" className="h-20 w-20 rounded-[24px] shadow-card" />
-        <p className="text-2xl font-black text-ink">Miri</p>
-        <p className="text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
-      </div>
-
-      <div className="w-full max-w-sm rounded-[32px] bg-white p-8 shadow-card">
-        <p className="mb-6 text-center text-lg font-black text-ink">
-          {mode === 'login' ? 'ログイン' : 'アカウント作成'}
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="email"
-            placeholder="メールアドレス"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-          />
-          <input
-            type="password"
-            placeholder="パスワード（6文字以上）"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            minLength={6}
-            className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-          />
-          {mode === 'signup' && (
-            <div className="rounded-2xl bg-base px-4 py-3">
-              <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={e => { setAgreed(e.target.checked); setError(''); }}
-                  className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-pink"
-                />
-                <span className="text-xs font-bold leading-5 text-ink">
-                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-pink underline">利用規約</a>
-                  と
-                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-pink underline">プライバシーポリシー</a>
-                  に同意します
-                </span>
-              </label>
-              <p className="mt-2 pl-8 text-[10px] font-bold leading-4 text-muted">
-                本サービスには企業からのPR質問が含まれ、回答データは個人を特定できない統計データに加工したうえで、企業のリサーチ等に利用・提供されることがあります。
-              </p>
-            </div>
-          )}
-          {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || (mode === 'signup' && !agreed)}
-            className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
-          >
-            {loading ? '...' : mode === 'login' ? 'ログイン' : '登録する'}
-          </button>
-        </form>
-        <button
-          onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setError(''); }}
-          className="mt-4 w-full text-center text-xs font-bold text-muted"
-        >
-          {mode === 'login' ? 'アカウントを作成する →' : '← ログインに戻る'}
-        </button>
-        <p className="mt-3 text-center text-[10px] font-bold text-muted">
-          <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">利用規約</a>
-          <span className="mx-1">·</span>
-          <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">プライバシーポリシー</a>
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ── オンボーディング画面 ────────────────────────────────────────
 function OnboardingScreen({ onDone }: { onDone: () => void }) {
   const steps = [
@@ -5699,63 +5567,7 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 }
 
 export default function Page() {
-  // production のみ Supabase 認証を要求
-  const [authed, setAuthed] = useState<boolean>(() => isDev);
-  const [authChecked, setAuthChecked] = useState(isDev);
-  const [fatalError, setFatalError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const h = (e: ErrorEvent) => setFatalError(`${e.message}\n${e.filename}:${e.lineno}:${e.colno}`);
-    const p = (e: PromiseRejectionEvent) => setFatalError(String(e.reason));
-    window.addEventListener('error', h);
-    window.addEventListener('unhandledrejection', p);
-    return () => { window.removeEventListener('error', h); window.removeEventListener('unhandledrejection', p); };
-  }, []);
-
-  useEffect(() => {
-    if (isDev) return;
-    // miri-test (*.vercel.app) ではログイン不要にする
-    if (/\.vercel\.app$/.test(window.location.hostname)) {
-      setAuthed(true);
-      setAuthChecked(true);
-      return;
-    }
-    import('@/lib/supabase').then(({ supabase }) => {
-      if (!supabase) { setAuthChecked(true); return; }
-      supabase.auth.getSession().then(({ data }) => {
-        setAuthed(!!data.session);
-        setAuthChecked(true);
-      });
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-        setAuthed(!!session);
-      });
-      return () => subscription.unsubscribe();
-    });
-  }, []);
-
-  // 認証状態に応じて URL を変える（新しいルートファイル不要）
-  useEffect(() => {
-    if (!authChecked) return;
-    if (!authed) {
-      history.replaceState({}, '', '/?view=login');
-    } else {
-      history.replaceState({}, '', '/');
-    }
-  }, [authChecked, authed]);
-
-  if (!authChecked) {
-    return <div className="flex h-full items-center justify-center bg-base"><span className="text-3xl animate-pulse">🎀</span></div>;
-  }
-  if (!authed) {
-    return <AuthScreen onAuthed={() => setAuthed(true)} />;
-  }
-
-  if (fatalError) return (
-    <div style={{ padding: 24, fontFamily: 'monospace', fontSize: 12, background: '#fef2f2', minHeight: '100vh', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-      <b style={{ color: '#e11d48' }}>クラッシュエラー（開発用）</b>{'\n\n'}{fatalError}
-    </div>
-  );
-
+  // 認証は middleware が処理するためここでは不要
   return <ErrorBoundary><AppContent /></ErrorBoundary>;
 }
 
