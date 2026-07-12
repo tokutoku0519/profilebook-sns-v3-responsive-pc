@@ -6,12 +6,37 @@ import { LANG_LIST, type Lang } from '@/lib/i18n';
 
 const MAIN_LANGS = ['ja', 'en', 'ko', 'zh', 'zh-tw', 'id', 'th', 'vi', 'tl', 'ms'];
 
+function detectBrowserLang(): Lang {
+  if (typeof window === 'undefined') return 'ja';
+  const nav = (navigator.languages?.[0] ?? navigator.language ?? 'ja').toLowerCase();
+  if (nav.startsWith('ja')) return 'ja';
+  if (nav.startsWith('ko')) return 'ko';
+  if (nav.startsWith('zh-tw') || nav.startsWith('zh-hant')) return 'zh-tw';
+  if (nav.startsWith('zh')) return 'zh';
+  if (nav.startsWith('id')) return 'id';
+  if (nav.startsWith('th')) return 'th';
+  if (nav.startsWith('vi')) return 'vi';
+  if (nav.startsWith('fil') || nav.startsWith('tl')) return 'tl';
+  if (nav.startsWith('ms')) return 'ms';
+  if (nav.startsWith('es')) return 'es';
+  if (nav.startsWith('pt')) return 'pt';
+  if (nav.startsWith('fr')) return 'fr';
+  if (nav.startsWith('de')) return 'de';
+  if (nav.startsWith('it')) return 'it';
+  if (nav.startsWith('ru')) return 'ru';
+  if (nav.startsWith('ar')) return 'ar';
+  if (nav.startsWith('hi')) return 'hi';
+  if (nav.startsWith('tr')) return 'tr';
+  if (nav.startsWith('nl')) return 'nl';
+  return 'en';
+}
+
 export default function SetupPage() {
   const router = useRouter();
   const [miriId, setMiriId] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [address, setAddress] = useState('');
-  const [lang, setLang] = useState<Lang>('ja');
+  const [realName, setRealName] = useState('');
+  const [lang, setLang] = useState<Lang>(() => detectBrowserLang());
   const [error, setError] = useState('');
 
   function validate(id: string) {
@@ -26,13 +51,13 @@ export default function SetupPage() {
       return;
     }
     if (!displayName.trim()) {
-      setError('名前を入力してください');
+      setError('表示名を入力してください');
       return;
     }
     try {
       localStorage.setItem('miri_username', miriId);
       localStorage.setItem('miri_displayname', displayName.trim());
-      if (address.trim()) localStorage.setItem('miri_address', address.trim());
+      if (realName.trim()) localStorage.setItem('miri_realname', realName.trim());
       localStorage.setItem('miri_lang', lang);
     } catch {}
     router.push('/welcome');
@@ -66,17 +91,17 @@ export default function SetupPage() {
                 className="flex-1 bg-transparent pl-1 text-sm font-bold text-ink placeholder:text-muted focus:outline-none"
               />
             </div>
-            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">3〜20文字。プロフィールURLに使われます（例: miri.app/@{miriId || 'yourID'}）</p>
+            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">3〜20文字。URLに使われます（例: miri.app/@{miriId || 'yourID'}）</p>
           </div>
 
-          {/* 名前 */}
+          {/* 表示名 */}
           <div>
             <label className="mb-1.5 block text-xs font-black text-ink">
-              名前 <span className="text-pink">*</span>
+              表示名 <span className="text-pink">*</span>
             </label>
             <input
               type="text"
-              placeholder="表示される名前"
+              placeholder="みんなに見える名前"
               value={displayName}
               onChange={e => { setDisplayName(e.target.value); setError(''); }}
               maxLength={30}
@@ -85,22 +110,26 @@ export default function SetupPage() {
             />
           </div>
 
-          {/* アドレス */}
+          {/* 氏名 */}
           <div>
-            <label className="mb-1.5 block text-xs font-black text-ink">アドレス</label>
+            <label className="mb-1.5 block text-xs font-black text-ink">氏名</label>
             <input
               type="text"
-              placeholder="連絡先（LINE IDやメールなど）"
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              maxLength={100}
+              placeholder="本名（非公開）"
+              value={realName}
+              onChange={e => setRealName(e.target.value)}
+              maxLength={50}
               className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
             />
+            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">他のユーザーには公開されません</p>
           </div>
 
           {/* 言語 */}
           <div>
-            <label className="mb-1.5 block text-xs font-black text-ink">言語</label>
+            <label className="mb-1.5 block text-xs font-black text-ink">
+              言語
+              <span className="ml-2 text-[10px] font-bold text-muted normal-case">端末の言語を自動検出しました</span>
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {LANG_LIST.filter(l => MAIN_LANGS.includes(l.id)).map(l => (
                 <button
