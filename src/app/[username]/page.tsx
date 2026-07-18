@@ -436,7 +436,7 @@ const DIARY_COLORS = [
 type AppThemeId = 'default' | 'lavender' | 'soda' | 'herb' | 'peach' | 'strawberry' | 'banana' | 'night';
 
 const APP_THEMES: { id: AppThemeId; name: string; emoji: string; preview: string }[] = [
-  { id: 'default',    name: 'ピンク',       emoji: '🌸', preview: '#F58DB2' },
+  { id: 'default',    name: 'Miri',        emoji: '💙', preview: '#4F73E8' },
   { id: 'lavender',  name: 'ラベンダー',   emoji: '💜', preview: '#B79AEF' },
   { id: 'soda',      name: 'ソーダ',       emoji: '🩵', preview: '#60A5FA' },
   { id: 'herb',      name: 'ハーブ',       emoji: '🌿', preview: '#34D399' },
@@ -1393,7 +1393,7 @@ function CreateScreen({
               ) : (
                 <>
                   <RetroEmojiPicker onInsert={(code) => insertRetroCode(bodyRef, code, (v) => setDraft((prev) => ({ ...prev, body: v })))} />
-                  <textarea ref={bodyRef} value={draft.body} maxLength={160} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className="notebook-lines mt-2 h-44 w-full resize-none rounded-3xl border border-pink/20 bg-pink-50/40 p-4 leading-8 outline-none focus:border-pink" placeholder="ここにプロフィール帳みたいに書いてね" />
+                  <textarea ref={bodyRef} value={draft.body} maxLength={160} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className="notebook-lines mt-2 h-44 w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 leading-8 outline-none focus:border-pink" placeholder="ここにプロフィール帳みたいに書いてね" />
                   {draft.body && (
                     <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
                       <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
@@ -3652,7 +3652,7 @@ function DetailScreen({
               placeholder="コメントする" className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" />
             <button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">送信</button>
           </div>
-          <div className="space-y-2">{comments.map((c, i) => <p key={i} className="rounded-2xl bg-pink-50 p-3 text-sm">{c}</p>)}</div>
+          <div className="space-y-2">{comments.map((c, i) => <p key={i} className="rounded-2xl bg-blue-50 p-3 text-sm">{c}</p>)}</div>
         </section>
 
         <section>
@@ -4426,7 +4426,7 @@ function CircleDetailScreen({
 
         {/* ── ファン申請（部外者向け・承認制） ── */}
         {fanJoinable && !iAmMember && !iAmFan && (
-          <section className="rounded-[24px] bg-gradient-to-br from-amber-50 to-pink-50 p-4 shadow-card">
+          <section className="rounded-[24px] bg-gradient-to-br from-amber-50 to-blue-50 p-4 shadow-card">
             <p className="text-sm font-black text-ink">🎫 ファンになる</p>
             <p className="mt-1 text-[10px] font-bold leading-4 text-muted">
               ファンになると「🎫 ファンもOK」のお題に回答・投票できます。参加はサークルの承認制です。
@@ -4967,7 +4967,7 @@ function ShopScreen({
       {tab === 'theme' && (
         <div className="space-y-4 px-4 pt-3">
           {/* ガチャバナー */}
-          <section className="overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 p-5 shadow-card">
+          <section className="overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-100 via-purple-50 to-blue-100 p-5 shadow-card">
             <div className="mb-1 flex items-center gap-2">
               <span className="text-2xl">🎠</span>
               <p className="text-base font-black text-ink">世界観背景ガチャ</p>
@@ -5516,7 +5516,7 @@ function DailyQuestionScreen({
                 onChange={(e) => { setBody(e.target.value); setNgError(false); }}
                 maxLength={200}
                 rows={4}
-                className="w-full resize-none rounded-3xl border border-pink/20 bg-pink-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
+                className="w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
                 placeholder="ここに書いてね..."
               />
               <div className="mt-1 flex items-center justify-between">

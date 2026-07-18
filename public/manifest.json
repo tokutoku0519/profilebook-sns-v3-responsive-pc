@@ -4,8 +4,8 @@
   "description": "平成プロフィール帳 × シール帳 × SNS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#efe7fb",
-  "theme_color": "#F58DB2",
+  "background_color": "#FFF8EE",
+  "theme_color": "#4F73E8",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon.png", "sizes": "192x192", "type": "image/png" },

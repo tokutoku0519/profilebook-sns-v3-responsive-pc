@@ -37,7 +37,7 @@ export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
 export function QuestionCard({ question, hero = false }: { question: Question; hero?: boolean }) {
   if (!question) return null;
   return (
-    <article className={`${hero ? 'min-h-36' : 'min-h-24'} sticker-shine rounded-[28px] border border-pink/20 bg-gradient-to-br from-white via-pink-50 to-purple-50 p-4 shadow-card`}>
+    <article className={`${hero ? 'min-h-36' : 'min-h-24'} sticker-shine rounded-[28px] border border-pink/20 bg-gradient-to-br from-white via-blue-50 to-purple-50 p-4 shadow-card`}>
       {question.sponsor && (
         <div className="mb-3 flex items-center gap-2">
           <span className="rounded-full bg-cream px-3 py-1 text-[11px] font-bold text-ink">PR</span>

@@ -2,22 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ======== Default theme (ピンク) ======== */
+/* ======== Default theme (Miri Blue / ブランド準拠) ======== */
 :root {
   color-scheme: light;
 
-  /* Base palette — RGB triples (no rgb()) so Tailwind opacity modifiers work */
-  --color-base:        255 249 252;   /* #FFF9FC */
-  --color-ink:         84 75 95;      /* #544B5F */
-  --color-muted:       122 112 133;   /* #7A7085 */
-  --color-pink:        245 141 178;   /* #F58DB2 */
-  --color-pink-strong: 233 107 154;   /* #E96B9A */
-  --color-purple:      183 154 239;   /* #B79AEF */
-  --color-cream:       255 241 204;   /* #FFF1CC */
-  --color-mint:        223 248 238;   /* #DFF8EE */
+  /* Base palette — RGB triples (no rgb()) so Tailwind opacity modifiers work.
+     ブランドガイドライン準拠：Miri Blue #4F73E8 を主役に、Notebook Cream の
+     背景、Sticker Purple のサブ、Dark Navy のテキスト。 */
+  --color-base:        255 248 238;   /* #FFF8EE Notebook Cream */
+  --color-ink:         31 44 86;      /* #1F2C56 Dark Navy */
+  --color-muted:       107 116 144;   /* #6B7490 */
+  --color-pink:        79 115 232;    /* #4F73E8 Miri Blue（主役アクセント） */
+  --color-pink-strong: 62 95 217;     /* #3E5FD9（濃いMiri Blue） */
+  --color-purple:      164 123 255;   /* #A47BFF Sticker Purple */
+  --color-cream:       255 241 204;   /* #FFF1CC（あたたかいアクセント） */
+  --color-mint:        228 238 255;   /* #E4EEFF Sky Blue系のやわらかアクセント */
 
   /* Body background / text (also overridable) */
-  --bg-body: 255 249 252;
+  --bg-body: 255 248 238;
 }
 
 /* ======== Theme variants ======== */
