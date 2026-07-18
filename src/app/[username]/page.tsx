@@ -1334,12 +1334,17 @@ function CreateScreen({
         {/* ── お題モード ── */}
         {createMode === 'question' && (
           <>
-            <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <label className="mb-2 block text-sm font-bold">答えるお題</label>
-              <select value={draft.questionId} onChange={(e) => setDraft({ ...draft, questionId: e.target.value })} className="w-full rounded-2xl border border-purple-100 bg-base p-3 text-sm font-bold outline-none">
-                {questions.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
-              </select>
-            </section>
+            {/* 特定のお題を指定して来た場合（PR・公認お題など）はドロップダウンを出さず、
+                そのお題1件だけを表示（質問が二重に見えるのを防ぐ）。
+                フリー作成時のみ、答えるお題を選べるドロップダウンを表示する。 */}
+            {!question && (
+              <section className="rounded-[28px] bg-white p-4 shadow-card">
+                <label className="mb-2 block text-sm font-bold">答えるお題</label>
+                <select value={draft.questionId} onChange={(e) => setDraft({ ...draft, questionId: e.target.value })} className="w-full rounded-2xl border border-purple-100 bg-base p-3 text-sm font-bold outline-none">
+                  {questions.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
+                </select>
+              </section>
+            )}
             <QuestionCard question={selectedQuestion} />
             <section className="rounded-[28px] border border-purple-100 bg-white p-4 shadow-card">
               <div className="mb-2 flex items-center justify-between">
