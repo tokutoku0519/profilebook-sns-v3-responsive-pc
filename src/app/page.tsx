@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { isDev } from '@/lib/env';
+import { isDev, isAuthBypassHost } from '@/lib/env';
 import { TERMS_VERSION } from '@/lib/terms';
 
 function setAuthCookie() {
@@ -46,8 +46,8 @@ export default function Page() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // dev/test 環境はそのままアプリへ
-    if (isDev || window.location.hostname.includes('miri-test')) {
+    // dev / デモ・テスト用ドメインはログインを経由せずそのままアプリへ
+    if (isDev || isAuthBypassHost(window.location.hostname)) {
       const u = getStoredUsername();
       router.replace(`/${u}`);
       return;

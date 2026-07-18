@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isAuthBypassHost } from '@/lib/env';
 
 export function middleware(request: NextRequest) {
   // development 環境は認証不要
   if (process.env.NEXT_PUBLIC_APP_ENV === 'development') return NextResponse.next();
-  // miri-test 環境のみ認証不要（テスト用）
+  // デモ・テスト用ドメイン（miri-test / miri-delta）は認証不要
   const host = request.headers.get('host') ?? '';
-  if (host.includes('miri-test')) return NextResponse.next();
+  if (isAuthBypassHost(host)) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
   // 認証不要のルート

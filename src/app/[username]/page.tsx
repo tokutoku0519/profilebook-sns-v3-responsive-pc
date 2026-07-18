@@ -25,7 +25,7 @@ import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
-import { isDev } from '@/lib/env';
+import { isDev, isAuthBypassHost } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
@@ -5571,8 +5571,8 @@ export default function Page() {
 
   useEffect(() => {
     if (isDev) return;
-    // miri-test 環境は認証不要
-    if (window.location.hostname.includes('miri-test')) { setReady(true); return; }
+    // デモ・テスト用ドメイン（miri-test / miri-delta）は認証不要
+    if (isAuthBypassHost(window.location.hostname)) { setReady(true); return; }
     // miri_auth クッキーで確認（middleware のフォールバック）
     if (!document.cookie.includes('miri_auth=1')) {
       window.location.replace('/');
