@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --base:#FFF9FC; --ink:#544B5F; --muted:#9C8FA8;
+    --pink:#F58DB2; --pinkStrong:#E96B9A; --purple:#B79AEF;
+    --cream:#FFF1CC; --mint:#DFF8EE;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+    -webkit-font-smoothing:antialiased;background:var(--base);
+  }
+  .poster{
+    width:1080px;height:1350px;position:relative;overflow:hidden;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(245,141,178,.20), transparent 34%),
+      radial-gradient(circle at 88% 6%, rgba(183,154,239,.22), transparent 32%),
+      radial-gradient(circle at 82% 92%, rgba(255,241,204,.55), transparent 40%),
+      radial-gradient(circle at 15% 95%, rgba(223,248,238,.6), transparent 38%),
+      var(--base);
+    padding:64px 64px 54px;
+    display:flex;flex-direction:column;
+  }
+  /* dotted deco */
+  .dots{position:absolute;inset:0;background-image:radial-gradient(rgba(183,154,239,.10) 2.5px, transparent 2.5px);background-size:34px 34px;pointer-events:none;}
+  .float{position:absolute;font-size:44px;opacity:.5;filter:saturate(1.1);}
+  .f1{top:150px;left:40px;transform:rotate(-14deg);}
+  .f2{top:250px;right:52px;transform:rotate(12deg);}
+  .f3{bottom:300px;left:36px;transform:rotate(10deg);font-size:38px;}
+  .f4{bottom:250px;right:44px;transform:rotate(-10deg);font-size:40px;}
+
+  header{display:flex;align-items:center;gap:26px;z-index:2;}
+  .logo{
+    width:118px;height:118px;border-radius:34px;flex:none;
+    background:linear-gradient(140deg,var(--pink),var(--purple));
+    display:grid;place-items:center;color:#fff;font-size:60px;font-weight:900;
+    box-shadow:0 12px 30px rgba(233,107,154,.35);
+  }
+  .brand h1{font-size:74px;font-weight:900;color:var(--ink);letter-spacing:1px;line-height:1;}
+  .brand .tag{
+    margin-top:14px;display:inline-block;font-size:26px;font-weight:800;color:var(--pinkStrong);
+    background:#fff;border:2px solid rgba(245,141,178,.4);padding:8px 20px;border-radius:999px;
+    box-shadow:0 6px 16px rgba(156,125,173,.12);
+  }
+  .lead{
+    margin-top:28px;z-index:2;font-size:33px;font-weight:800;color:var(--ink);line-height:1.5;
+  }
+  .lead b{color:var(--pinkStrong);}
+
+  .grid{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:22px;z-index:2;}
+  .card{
+    background:#fff;border-radius:28px;padding:26px 30px 24px;
+    box-shadow:0 8px 22px rgba(156,125,173,.13);
+    border:2px solid rgba(255,255,255,.9);position:relative;
+  }
+  .card .ico{
+    width:60px;height:60px;border-radius:20px;display:grid;place-items:center;font-size:32px;margin-bottom:14px;
+  }
+  .b-pink{background:rgba(245,141,178,.16);}
+  .b-purple{background:rgba(183,154,239,.18);}
+  .b-cream{background:rgba(255,225,150,.35);}
+  .b-mint{background:rgba(160,230,205,.35);}
+  .card h3{font-size:31px;font-weight:900;color:var(--ink);line-height:1.25;}
+  .card p{margin-top:10px;font-size:23px;font-weight:600;color:var(--muted);line-height:1.5;}
+
+  .strip{
+    margin-top:22px;z-index:2;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;
+  }
+  .chip{
+    font-size:23px;font-weight:800;color:var(--ink);background:#fff;
+    padding:12px 22px;border-radius:999px;box-shadow:0 5px 14px rgba(156,125,173,.12);
+    border:2px solid rgba(183,154,239,.22);
+  }
+  .chip span{margin-right:8px;}
+
+  footer{
+    margin-top:auto;padding-top:22px;z-index:2;
+  }
+  .banner{
+    background:linear-gradient(135deg,var(--pink),var(--purple));
+    border-radius:30px;padding:26px 40px;text-align:center;
+    box-shadow:0 14px 30px rgba(233,107,154,.30);
+  }
+  .banner .cta{font-size:37px;font-weight:900;color:#fff;letter-spacing:.5px;}
+  .banner .sub{margin-top:10px;font-size:24px;font-weight:800;color:rgba(255,255,255,.92);}
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="dots"></div>
+  <div class="float f1">🎀</div>
+  <div class="float f2">⭐️</div>
+  <div class="float f3">🍀</div>
+  <div class="float f4">🌙</div>
+
+  <header>
+    <div class="logo">M</div>
+    <div class="brand">
+      <h1>Miri</h1>
+      <div class="tag">平成プロフィール帳 × シール帳 × SNS</div>
+    </div>
+  </header>
+
+  <p class="lead">
+    毎日のお題に答えて、<b>自分だけのプロフィール帳</b>を育てる。<br>
+    懐かしくて新しい、“交換する”SNS。
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="ico b-pink">📖</div>
+      <h3>お題に答える</h3>
+      <p>平成・恋愛・価値観・深夜…多彩なカテゴリの質問に、プロフ帳みたいに回答。</p>
+    </div>
+    <div class="card">
+      <div class="ico b-purple">🎨</div>
+      <h3>プロフ帳をデコる</h3>
+      <p>背景テーマやシールで、自分だけの1ページを自由にデザイン。</p>
+    </div>
+    <div class="card">
+      <div class="ico b-cream">🎰</div>
+      <h3>シールをガチャで集める</h3>
+      <p>コインを回してデコメ絵文字をゲット。N・R・SRのレア排出＆かけら補償つき。</p>
+    </div>
+    <div class="card">
+      <div class="ico b-mint">💞</div>
+      <h3>交換して仲良くなる</h3>
+      <p>プロフ帳を交換したり、いっしょに日記を書いたり。少しずつ距離が縮まる。</p>
+    </div>
+  </div>
+
+  <div class="strip">
+    <div class="chip"><span>💗</span>なつかしいリアクション</div>
+    <div class="chip"><span>🪙</span>コインでテーマ購入</div>
+    <div class="chip"><span>✓</span>公認・創設メンバー称号</div>
+    <div class="chip"><span>🌏</span>多言語＆自動翻訳</div>
+    <div class="chip"><span>🔔</span>お知らせ通知</div>
+  </div>
+
+  <footer>
+    <div class="banner">
+      <div class="cta">いま、プロフ帳を書きはじめよう ✨</div>
+      <div class="sub">スマホWebアプリ／登録してすぐ使える</div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
