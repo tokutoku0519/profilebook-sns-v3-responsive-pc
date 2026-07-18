@@ -120,14 +120,15 @@ const me = {
   common: 'プロフ帳派',
   isOfficial: true,
 };
-const followers = [
+// ダミーユーザー：development（=①デモ）でのみ表示。production（=②本番）では空。
+const followers = isDev ? [
   { name: 'まゆ', id: '@mayu_note', avatar: '🎀', bio: '平成女児の残党。甘いものと夜散歩。', common: '揚げパン派' },
   { name: 'りん', id: '@rin_puri', avatar: '🌙', bio: '懐かしいものを集めています。', common: '夜型' },
   { name: 'なな', id: '@nana_7', avatar: '🧸', bio: 'シールと喫茶店が好き。', common: 'インドア派' },
   { name: 'はる', id: '@haru_cafe', avatar: '☕️', bio: '喫茶店と散歩が好き。', common: 'カフェ巡り派' },
   { name: 'ゆい', id: '@yui_book', avatar: '📚', bio: 'プロフィール帳世代です。', common: '文房具好き' },
   { name: 'あかり', id: '@akari_28', avatar: '🍒', bio: 'かわいいもの収集中。', common: 'シール派' },
-];
+] : [];
 
 const defaultProfileBookInfo = {
   name: 'Koki',
@@ -195,7 +196,8 @@ type ProfileBook = {
   premium?: PremiumSection;
 };
 
-const mockProfileBooks: Record<string, ProfileBook> = {
+// ダミーのプロフ帳データも development（=①デモ）でのみ。production（=②）は空。
+const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
   '@mayu_note': {
     themeColor: 'pink',
     info: {
@@ -410,7 +412,7 @@ const mockProfileBooks: Record<string, ProfileBook> = {
       { q: 'もし1日だけ過去に戻れたら？', a: 'モーニング娘。の全盛期に行きたい！' },
     ],
   },
-};
+} : {};
 
 // 荒らし・イタズラ対策: NGワードフィルター
 const NG_WORDS = ['死ね', 'ころす', '殺す', 'うざい', 'きもい', 'クズ', 'ゴミ', 'バカ', 'アホ', 'ブス', 'デブ'];
@@ -581,7 +583,7 @@ function containsNgWord(text: string): boolean {
   return NG_WORDS.some((w) => text.includes(w));
 }
 
-const initialDiaryPages: DiaryPage[] = [
+const initialDiaryPages: DiaryPage[] = isDev ? [
   {
     id: 'diary-1',
     theme: '給食の思い出',
@@ -613,7 +615,7 @@ const initialDiaryPages: DiaryPage[] = [
     visibility: 'followers',
     mentionedUserIds: [],
   },
-];
+] : [];
 
 const initialCircles: Circle[] = isDev ? [
   { id: 'circle-1', name: 'ダンスサークル', emoji: '🕺', memberIds: ['@koki', '@mayu_note', '@nana_7', '@akari_28'], createdBy: '@koki' },
@@ -3003,23 +3005,23 @@ function ProfileShareModal({
     canvas.width = W;
     canvas.height = H;
 
-    // 背景グラデーション
+    // 背景グラデーション（Miri Blue 基調）
     const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#ffe4f0');
-    bg.addColorStop(1, '#e8d8ff');
+    bg.addColorStop(0, '#EAF1FF');
+    bg.addColorStop(1, '#F1EBFF');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
 
     // ホワイトカード
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
     canvasRoundRect(ctx, 28, 28, W - 56, H - 56, 44);
     ctx.fill();
 
     // ── 左上：アバター円 ──
     const cx = 165, cy = 165, r = 85;
     const avatarBg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 14);
-    avatarBg.addColorStop(0, '#ffdcea');
-    avatarBg.addColorStop(1, '#e8d0ff');
+    avatarBg.addColorStop(0, '#DCE7FF');
+    avatarBg.addColorStop(1, '#EAE0FF');
     ctx.fillStyle = avatarBg;
     ctx.beginPath();
     ctx.arc(cx, cy, r + 14, 0, Math.PI * 2);
@@ -3040,32 +3042,32 @@ function ProfileShareModal({
     }
 
     // ── アイコンの右：名前＋ID＋口ぐせ ──
-    ctx.fillStyle = '#1a1a2e';
+    ctx.fillStyle = '#1F2C56';
     ctx.font = 'bold 56px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(truncateStr(name, 10), 290, 155);
-    ctx.fillStyle = '#aaa';
+    ctx.fillStyle = '#8A93AD';
     ctx.font = '30px sans-serif';
     ctx.fillText(userId, 290, 205);
     if (info.catchphrase) {
-      ctx.fillStyle = '#ff6b9d';
+      ctx.fillStyle = '#4F73E8';
       ctx.font = 'italic bold 32px serif';
       ctx.fillText(truncateStr(info.catchphrase, 18), 290, 252);
     }
 
     // ── 左下：自己紹介シート風のプロフ抜粋（チラ見せ） ──
     const boxX = 64, boxY = 285, boxW = 560, boxH = 250;
-    ctx.fillStyle = 'rgba(255,179,209,0.10)';
+    ctx.fillStyle = 'rgba(79,115,232,0.06)';
     canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,107,157,0.35)';
+    ctx.strokeStyle = 'rgba(79,115,232,0.28)';
     ctx.lineWidth = 3;
     canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
     ctx.stroke();
 
     // 「PROFILE」タグシール
-    ctx.fillStyle = '#ff6b9d';
+    ctx.fillStyle = '#4F73E8';
     canvasRoundRect(ctx, boxX + 26, boxY - 18, 168, 36, 18);
     ctx.fill();
     ctx.fillStyle = '#fff';
@@ -3073,7 +3075,7 @@ function ProfileShareModal({
     ctx.textAlign = 'center';
     ctx.fillText('♡ PROFILE', boxX + 26 + 84, boxY + 8);
 
-    // プロフィール帳の定番項目（空欄は飛ばして先頭6つ）
+    // プロフィール帳の定番項目（空欄は飛ばして先頭4つ・ゆったり配置）
     const sheetFields = ([
       ['field_nickname', info.nickname],
       ['field_birthday', info.birthday],
@@ -3083,23 +3085,23 @@ function ProfileShareModal({
       ['field_favoriteMusic', info.favoriteMusic],
       ['field_favoriteCharacter', info.favoriteCharacter],
       ['field_dream', info.dream],
-    ] as [string, string][]).filter(([, v]) => v).slice(0, 6);
+    ] as [string, string][]).filter(([, v]) => v).slice(0, 4);
 
-    const cellW = 250, cellH = 74;
+    const cellW = 250, cellH = 90;
     sheetFields.forEach(([key, val], i) => {
       const col = i % 2;
       const row = Math.floor(i / 2);
-      const x = boxX + 36 + col * (cellW + 24);
-      const y = boxY + 52 + row * cellH;
+      const x = boxX + 40 + col * (cellW + 20);
+      const y = boxY + 66 + row * cellH;
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#ff6b9d';
+      ctx.fillStyle = '#4F73E8';
       ctx.font = 'bold 22px sans-serif';
       ctx.fillText(truncateStr(t(key, lang), 9), x, y);
-      ctx.fillStyle = '#1a1a2e';
+      ctx.fillStyle = '#1F2C56';
       ctx.font = 'bold 28px sans-serif';
       ctx.fillText(truncateStr(val, 8), x, y + 38);
       // 記入欄っぽい点線
-      ctx.strokeStyle = 'rgba(255,107,157,0.45)';
+      ctx.strokeStyle = 'rgba(79,115,232,0.35)';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
@@ -3116,7 +3118,7 @@ function ProfileShareModal({
     ctx.fillStyle = fade;
     canvasRoundRect(ctx, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 26);
     ctx.fill();
-    ctx.fillStyle = '#ff6b9d';
+    ctx.fillStyle = '#4F73E8';
     ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`… ${shareT('img_more', lang)} 👀`, boxX + boxW, H - 42);
@@ -3126,7 +3128,7 @@ function ProfileShareModal({
     ctx.fillStyle = '#ffffff';
     canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,179,209,0.5)';
+    ctx.strokeStyle = 'rgba(79,115,232,0.4)';
     ctx.lineWidth = 4;
     canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
     ctx.stroke();
@@ -3137,14 +3139,20 @@ function ProfileShareModal({
     }
     ctx.font = 'bold 30px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#aaa';
+    ctx.fillStyle = '#8A93AD';
     ctx.fillText(shareT('img_scan', lang), qrPanelX + qrPanelW / 2, qrPanelY + qrPanelH - 30);
 
-    // ブランディング
+    // ブランディング：Miri Blue のロゴチップ（白抜き Miri）でブランド準拠に
+    const logoW = 152, logoH = 60, logoX = 64, logoY = H - 92;
+    ctx.fillStyle = '#4F73E8';
+    canvasRoundRect(ctx, logoX, logoY, logoW, logoH, 18);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ff6b9d';
-    ctx.fillText('✿ Miri', 64, H - 42);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Miri', logoX + logoW / 2, logoY + logoH / 2 + 2);
+    ctx.textBaseline = 'alphabetic';
 
     qrIncludedRef.current = !!qrEl;
     setImageGenerated(true);
