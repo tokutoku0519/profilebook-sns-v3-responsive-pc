@@ -931,7 +931,6 @@ function HomeScreen({
           <button onClick={() => go('daily-question')} className="block w-full text-left">
             <div className="relative overflow-hidden rounded-[28px] bg-white p-4 shadow-card active:scale-[0.98] transition">
               <div className="mb-2 flex items-center gap-2">
-                <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{dailyQuestion?.category}</span>
                 <span className="rounded-full bg-base px-2 py-0.5 text-[10px] font-black text-muted">📅 毎日更新</span>
               </div>
               <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion?.title}</p>
