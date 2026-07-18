@@ -837,6 +837,9 @@ function AppHeader({ title = 'Miri', back = false, onBack, onBell }: { title?: s
   );
 }
 
+// PR案件（企業のPR質問）は一旦非表示。データ・ロジックは残し、表示だけオフにする。
+const SHOW_PR_QUESTIONS = false;
+
 function HomeScreen({
   go,
   answers,
@@ -883,26 +886,37 @@ function HomeScreen({
     </div>
 
     {communityQuestions.map((q) => (
-      <button
+      <div
         key={q.id}
-        onClick={() => go('create', q)}
-        className="w-full rounded-[24px] bg-white p-4 text-left shadow-card active:scale-[0.99]"
+        className="w-full rounded-[24px] bg-white p-4 text-left shadow-card"
       >
-        <div className="mb-2 flex items-center gap-2">
+        {/* 投稿者（企業/公認アカウント）: タップでそのアカウントへ遷移 */}
+        <button
+          type="button"
+          onClick={() => go('profile', q.createdBy)}
+          className="mb-2 flex items-center gap-2 rounded-full active:scale-[0.98]"
+        >
           <OfficialBadge />
-          <span className="text-xs font-black text-muted">
+          <span className="text-xs font-black text-muted underline decoration-dotted underline-offset-2">
             {q.createdByName} が作成
           </span>
-        </div>
+        </button>
 
-        <p className="text-base font-black text-ink">
-          {q.title}
-        </p>
+        {/* お題本文: タップで回答画面へ */}
+        <button
+          type="button"
+          onClick={() => go('create', q)}
+          className="block w-full text-left active:scale-[0.99]"
+        >
+          <p className="text-base font-black text-ink">
+            {q.title}
+          </p>
 
-        <p className="mt-1 text-xs font-bold text-muted">
-          {q.description}
-        </p>
-      </button>
+          <p className="mt-1 text-xs font-bold text-muted">
+            {q.description}
+          </p>
+        </button>
+      </div>
     ))}
   </section>
 )}
@@ -931,7 +945,8 @@ function HomeScreen({
             </div>
           </button>
         </section>
-        {/* ── PR案件 ── */}
+        {/* ── PR案件 ──（一旦非表示：SHOW_PR_QUESTIONS で切替） */}
+        {SHOW_PR_QUESTIONS && (
         <section>
           <div className="flex items-center mb-3">
             <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
@@ -956,6 +971,7 @@ function HomeScreen({
             </p>
           </button>
         </section>
+        )}
 
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
