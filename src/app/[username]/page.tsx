@@ -1059,7 +1059,12 @@ function SearchScreen({ go, answers, myProfile }: {
 }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'answer' | 'person' | 'question' | 'match'>('answer');
-  const filteredAnswers = answers.filter((a) => `${a.body} ${a.question?.title ?? ''} ${a.user.name}`.toLowerCase().includes(query.toLowerCase()));
+  // 回答タブでお題を選んで絞り込むためのお題ID（'' = すべてのお題）
+  const [selectedOdaiId, setSelectedOdaiId] = useState('');
+  const filteredAnswers = answers.filter((a) =>
+    `${a.body} ${a.question?.title ?? ''} ${a.user.name}`.toLowerCase().includes(query.toLowerCase())
+    && (!selectedOdaiId || a.question?.id === selectedOdaiId)
+  );
   const filteredProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
   const filteredQuestions = questions.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
 
@@ -1091,8 +1096,8 @@ function SearchScreen({ go, answers, myProfile }: {
         </div>
         <div className="mt-4 grid grid-cols-4 rounded-full bg-white p-1 text-center text-xs font-bold shadow-card">
           <button onClick={() => setMode('answer')} className={`rounded-full py-2 ${mode === 'answer' ? 'bg-pink text-white' : 'text-muted'}`}>回答</button>
-          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>なかま</button>
           <button onClick={() => setMode('question')} className={`rounded-full py-2 ${mode === 'question' ? 'bg-pink text-white' : 'text-muted'}`}>お題</button>
+          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>なかま</button>
           <button onClick={() => setMode('match')} className={`rounded-full py-2 ${mode === 'match' ? 'bg-pink text-white' : 'text-muted'}`}>共通点</button>
         </div>
 
@@ -1126,11 +1131,34 @@ function SearchScreen({ go, answers, myProfile }: {
                 <button key={tag} onClick={() => setQuery(tag)} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-muted shadow-card">#{tag}</button>
               ))}
             </div>
+
+            {/* お題プルダウン（回答タブ=絞り込み / お題タブ=選んで答える） */}
+            {(mode === 'answer' || mode === 'question') && (
+              <div className="mt-4">
+                <select
+                  value={mode === 'answer' ? selectedOdaiId : ''}
+                  onChange={(e) => {
+                    const qid = e.target.value;
+                    if (mode === 'question') {
+                      const q = questions.find((x) => x.id === qid);
+                      if (q) go('create', q);
+                    } else {
+                      setSelectedOdaiId(qid);
+                    }
+                  }}
+                  className="w-full rounded-2xl border border-purple-100 bg-white p-3 text-sm font-bold text-ink outline-none shadow-card"
+                >
+                  <option value="">{mode === 'answer' ? 'すべてのお題' : 'お題を選んで答える…'}</option>
+                  {questions.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
+                </select>
+              </div>
+            )}
+
             <section className="mt-6 space-y-3">
               <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
               {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile.id)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
-              {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create')} className="block w-full text-left"><QuestionCard question={question} /></button>)}
+              {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
                 <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">見つかりませんでした。別の言葉で探してみてね。</div>
               )}
