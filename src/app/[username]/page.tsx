@@ -799,7 +799,7 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
         <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">{avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : me.avatar}</div><div><p className="font-black">{me.name}</p><p className="text-xs font-bold text-muted">{me.id}</p></div></div>
         <div className="mt-4 grid grid-cols-3 rounded-3xl bg-base p-3 text-center text-xs font-bold">
           <div><p className="text-lg text-ink">{myAnswers.length}</p>{t('tab_create', lang)}</div>
-          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">38</p>{t('btn_following', lang)}</button>
+          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{followers.length}</p>{t('btn_following', lang)}</button>
           <button onClick={(e) => { e.stopPropagation(); go('shop'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{ownedStickerCount}</p>{t('nav_shop', lang)}</button>
         </div>
       </section>
@@ -3721,7 +3721,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       }}
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
-      <p className="text-xl">38</p>
+      <p className="text-xl">{followers.length}</p>
       <p className="text-[11px]">{t('label_followers_count', lang)}</p>
     </button>
     <button
@@ -3816,7 +3816,7 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
             onClick={() => setTab('followers')}
             className={`rounded-xl py-2 text-sm font-black transition ${tab === 'followers' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}
           >
-            {t('label_followers_tab', lang)} 38
+            {t('label_followers_tab', lang)} {followers.length}
           </button>
         </div>
 
