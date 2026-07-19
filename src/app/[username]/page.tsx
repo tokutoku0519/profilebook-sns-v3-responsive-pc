@@ -36,6 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
+import { dbReady, getMyProfile, saveProfileBook } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -5733,6 +5734,28 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   } catch { return defaultProfileBookInfo; }
 });
 
+  // ── ログインユーザーのSupabaseプロフィールを読み込み、me・プロフィール帳へ反映 ──
+  // （production で Supabase が設定されているときのみ。dev/未設定では従来どおり）
+  const [, setMeVersion] = useState(0);
+  useEffect(() => {
+    if (!dbReady()) return;
+    let cancelled = false;
+    (async () => {
+      const p = await getMyProfile();
+      if (cancelled || !p) return;
+      // me（モジュールの共有オブジェクト）を本人の値に更新
+      me.id = '@' + p.username;
+      me.name = p.display_name;
+      me.isOfficial = !!p.is_official;
+      // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
+      if (p.book && typeof p.book === 'object' && Object.keys(p.book).length > 0) {
+        setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...(p.book as any) }));
+      }
+      setMeVersion((v) => v + 1); // me 更新を反映するため再レンダー
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
 const [communityQuestions, setCommunityQuestions] = useState(() => {
   if (typeof window === 'undefined') return [];
   try {
@@ -6141,6 +6164,8 @@ function createCommunityQuestion(title: string, description: string, answerType:
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   setProfileBookInfo(next);
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
+  // Supabase にも保存（永続化・端末間で引き継ぎ）。best-effort。
+  if (dbReady()) { void saveProfileBook(next as any); }
 }
 
 const [profileCustomFields, setProfileCustomFields] = useState<Record<string, string>>(() => {

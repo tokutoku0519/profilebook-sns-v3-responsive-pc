@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LANG_LIST, type Lang } from '@/lib/i18n';
+import { saveProfileIdentity } from '@/lib/db';
 
 const MAIN_LANGS = ['ja', 'en', 'ko', 'zh', 'zh-tw', 'id', 'th', 'vi', 'tl', 'ms'];
 
@@ -38,12 +39,13 @@ export default function SetupPage() {
   const [realName, setRealName] = useState('');
   const [lang, setLang] = useState<Lang>(() => detectBrowserLang());
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   function validate(id: string) {
     return /^[a-zA-Z0-9_]{3,20}$/.test(id);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!validate(miriId)) {
@@ -54,6 +56,18 @@ export default function SetupPage() {
       setError('表示名を入力してください');
       return;
     }
+    setLoading(true);
+
+    // Supabase のプロフィール（ID・表示名）を保存。
+    // 未認証や未設定（＝①デモ等）のときは best-effort で先へ進む。
+    const res = await saveProfileIdentity({ username: miriId, display_name: displayName.trim() });
+    if (!res.ok && res.error === 'username_taken') {
+      setError('このIDは既に使われています。別のIDにしてください');
+      setLoading(false);
+      return;
+    }
+
+    // ローカルにも保存（アプリ内の表示・ルーティング用）
     try {
       localStorage.setItem('miri_username', miriId);
       localStorage.setItem('miri_displayname', displayName.trim());
@@ -149,10 +163,10 @@ export default function SetupPage() {
 
           <button
             type="submit"
-            disabled={miriId.length < 3 || !displayName.trim()}
+            disabled={loading || miriId.length < 3 || !displayName.trim()}
             className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
           >
-            はじめる →
+            {loading ? '...' : 'はじめる →'}
           </button>
         </form>
       </div>
