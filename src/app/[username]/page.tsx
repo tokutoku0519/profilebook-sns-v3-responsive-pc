@@ -1048,7 +1048,7 @@ function HomeScreen({
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} onUserClick={(uid) => go('profile', uid)} />
               </button>
             ))}
           </div>
@@ -1245,7 +1245,7 @@ function SearchScreen({ go, answers, myProfile, questionList }: {
 
             <section className="mt-6 space-y-3">
               <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
-              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} /></button>)}
+              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} onUserClick={(uid) => go('profile', uid)} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
@@ -2333,9 +2333,9 @@ function ProfileScreen({
         best3={best3}
         questions={profileQuestions}
         answers={[]}
-        avatarEmoji="🎀"
+        avatarEmoji={me.avatar}
         avatarUrl={avatarUrl || undefined}
-        userId="@koki"
+        userId={me.id}
         themeColor="pink"
         bgTheme={equippedBg}
         favoritePhotos={favoritePhotos}
@@ -2574,7 +2574,7 @@ function ProfileEditScreen({
               {localAvatarUrl ? (
                 <img src={localAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
               ) : (
-                '🎀'
+                me.avatar
               )}
             </div>
             <label className="cursor-pointer rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]">
@@ -3710,7 +3710,7 @@ function Best3EditBlock({
 function DetailScreen({
   go, answer, onReact, isBookmarked, onToggleBookmark, onShare,
 }: {
-  go: (s: Screen) => void;
+  go: (s: Screen, payload?: any) => void;
   answer: Answer;
   onReact: (answerId: string, type: keyof Answer['reactions'], prev: keyof Answer['reactions'] | null) => void;
   isBookmarked: boolean;
@@ -3738,7 +3738,7 @@ function DetailScreen({
     <>
       <AppHeader title="回答詳細" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
-        <AnswerCard answer={answer} detail />
+        <AnswerCard answer={answer} detail onUserClick={(uid) => go('profile', uid)} />
 
         {/* リアクション */}
         <div className="grid grid-cols-4 gap-2">
@@ -5738,7 +5738,12 @@ function DailyQuestionScreen({
                     onClick={() => go('detail', answer.id)}
                     className="w-full rounded-[28px] bg-white p-4 text-left shadow-card transition active:scale-[0.98]"
                   >
-                    <div className="mb-2 flex items-center gap-2">
+                    <div
+                      className="mb-2 flex items-center gap-2 rounded-full -m-1 p-1 transition active:scale-[0.98] hover:bg-pink/5"
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); go('profile', answer.user.id); }}
+                    >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink/10 text-lg">{answer.user.avatar}</span>
                       <div>
                         <p className="text-sm font-black text-ink">{answer.user.name}</p>
@@ -5785,7 +5790,7 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
         ) : saved.map(answer => (
           <button key={answer.id} onClick={() => go('detail', answer.id)}
             className="block w-full text-left">
-            <AnswerCard answer={answer} />
+            <AnswerCard answer={answer} onUserClick={(uid) => go('profile', uid)} />
           </button>
         ))}
       </div>

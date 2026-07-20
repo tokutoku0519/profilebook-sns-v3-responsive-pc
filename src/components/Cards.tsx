@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { Heart, Sparkles } from 'lucide-react';
 import type { answers, profiles, questions } from '@/lib/mock';
 import { RetroText } from '@/components/RetroEmoji';
@@ -49,9 +50,18 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody }: { answer: Answer; detail?: boolean; translatedBody?: string }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (userId: string) => void }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
+  // カード全体が <button> の中に置かれることがあるため、ユーザー部分は span + stopPropagation で扱う
+  const userClickProps = onUserClick
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: (e: MouseEvent) => { e.stopPropagation(); onUserClick(answer.user.id); },
+        className: 'flex items-center gap-2 rounded-full -m-1 p-1 transition active:scale-[0.98] hover:bg-pink/5 cursor-pointer',
+      }
+    : { className: 'flex items-center gap-2' };
   return (
     <article className={`rounded-[28px] border border-purple-100 bg-white p-4 shadow-card ${detail ? 'min-h-56' : ''}`}>
       <div className="mb-3 flex items-center justify-between">
@@ -61,16 +71,16 @@ export function AnswerCard({ answer, detail = false, translatedBody }: { answer:
       <p className="mb-2 text-xs font-bold text-muted">{answer.question?.title}</p>
       <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
       <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <span {...userClickProps}>
           <span className="grid h-11 w-11 place-items-center rounded-full bg-pink/15 text-xl">{answer.user.avatar}</span>
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5">
+          <span>
+            <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-bold">{answer.user.name}</span>
               {titles.map((t) => <TitleBadge key={t} type={t} userId={answer.user.id} />)}
-            </div>
-            <div className="text-[11px] text-muted">{answer.user.id}</div>
-          </div>
-        </div>
+            </span>
+            <span className="block text-[11px] text-muted">{answer.user.id}</span>
+          </span>
+        </span>
         <div className="flex gap-3 text-xs font-bold text-muted">
           <span className="flex items-center gap-1"><Heart size={15} />{answer.reactions.like}</span>
         </div>
