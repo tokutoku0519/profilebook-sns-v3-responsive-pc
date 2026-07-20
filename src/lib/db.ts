@@ -88,6 +88,35 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
   return data as ProfileRow;
 }
 
+/**
+ * 現在のログインユーザーの profiles 行が存在することを保証する。
+ * 無ければ作成して返す（トリガー導入前に作られた旧アカウント対策）。
+ * profiles 行が無いと answers の外部キー制約で回答保存が失敗するため重要。
+ */
+export async function ensureProfile(): Promise<ProfileRow | null> {
+  if (!supabase) return null;
+  const { data: sess } = await supabase.auth.getSession();
+  const user = sess.session?.user;
+  if (!user) return null;
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (existing) return existing as ProfileRow;
+  // 行が無い＝旧アカウント等。フォールバックのID/表示名で作成する。
+  const base =
+    (user.email?.split('@')[0] || 'user').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'user';
+  const username = `${base}_${user.id.slice(0, 4)}`;
+  const { data: created, error } = await supabase
+    .from('profiles')
+    .insert({ id: user.id, username, display_name: base })
+    .select('*')
+    .single();
+  if (error) return null;
+  return created as ProfileRow;
+}
+
 export async function getProfileByUsername(username: string): Promise<ProfileRow | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.from('profiles').select('*').eq('username', username).single();
@@ -140,23 +169,29 @@ export async function upsertAnswer(a: {
   if (!supabase) return null;
   const uid = await getCurrentUserId();
   if (!uid) return null;
-  const { data, error } = await supabase
-    .from('answers')
-    .upsert(
-      {
-        user_id: uid,
-        question_key: a.question_key,
-        question_title: a.question_title,
-        question_category: a.question_category ?? null,
-        body: a.body,
-        sticker: a.sticker ?? null,
-        visibility: a.visibility ?? 'public',
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,question_key' }
-    )
-    .select('*')
-    .single();
+  const payload = {
+    user_id: uid,
+    question_key: a.question_key,
+    question_title: a.question_title,
+    question_category: a.question_category ?? null,
+    body: a.body,
+    sticker: a.sticker ?? null,
+    visibility: a.visibility ?? 'public',
+    updated_at: new Date().toISOString(),
+  };
+  const doUpsert = () =>
+    supabase!
+      .from('answers')
+      .upsert(payload, { onConflict: 'user_id,question_key' })
+      .select('*')
+      .single();
+
+  let { data, error } = await doUpsert();
+  // profiles 行欠落（外部キー違反 23503）等で失敗した場合はプロフィールを作って一度だけ再試行
+  if (error) {
+    await ensureProfile();
+    ({ data, error } = await doUpsert());
+  }
   if (error) return null;
   return data as AnswerRow;
 }

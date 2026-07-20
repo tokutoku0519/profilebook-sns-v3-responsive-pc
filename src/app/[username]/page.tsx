@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, type AnswerRow, type ProfileRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, type AnswerRow, type ProfileRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -5940,6 +5940,9 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
           const ok = await hasValidSession();
           if (!cancelled && !ok) {
             showToast('⚠️ ログインの有効期限が切れています。ログインし直すと回答が正しく共有されます');
+          } else if (!cancelled && ok) {
+            // 有効セッションがあれば profiles 行を保証（旧アカウントで欠落していると回答保存が失敗する）
+            await ensureProfile();
           }
         }
       } catch {}
@@ -6619,18 +6622,35 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     });
   }
 
+  // このお題に既に回答済みか（編集ならコインを配らない＝コイン増殖バグ対策）。
+  // 端末に「報酬付与済みお題」を永続化して判定する（フィード再読込で消えても影響しない）。
+  let alreadyRewarded = false;
+  try {
+    const key = 'miri_rewarded_qids';
+    const set = new Set<string>(JSON.parse(localStorage.getItem(key) || '[]'));
+    alreadyRewarded = set.has(q.id);
+    if (!alreadyRewarded) { set.add(q.id); localStorage.setItem(key, JSON.stringify([...set])); }
+  } catch {}
+
   // PR案件への回答かチェック
   if (draft.questionId.startsWith('pr-')) {
-    const reward = prQuestion.id === draft.questionId ? prQuestion.reward : 15;
-    addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
+    if (!alreadyRewarded) {
+      const reward = prQuestion.id === draft.questionId ? prQuestion.reward : 15;
+      addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
+      showToast(`🎁 +${reward}コイン PR案件ボーナス獲得！`);
+      addNotification('💼', `PR案件に回答して ${reward} コインもらいました`);
+    } else {
+      showToast('✏️ 回答を更新しました');
+    }
     markPRAnswered();
     setHasAnsweredPR(true);
-    showToast(`🎁 +${reward}コイン PR案件ボーナス獲得！`);
-    addNotification('💼', `PR案件に回答して ${reward} コインもらいました`);
-  } else {
+  } else if (!alreadyRewarded) {
     addCoins(5, 'お題に回答');
     showToast('🎁 +5コイン 回答ボーナス！');
     addNotification('✍️', 'お題に回答して 5 コインもらいました');
+  } else {
+    // 編集（2回目以降）はコインを配らない
+    showToast('✏️ 回答を更新しました');
   }
 
   return id;
