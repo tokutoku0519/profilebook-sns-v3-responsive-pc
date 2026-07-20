@@ -1246,7 +1246,7 @@ function SearchScreen({ go, answers, myProfile, questionList }: {
             <section className="mt-6 space-y-3">
               <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
               {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} /></button>)}
-              {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile.id)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
+              {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
                 <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">見つかりませんでした。別の言葉で探してみてね。</div>
@@ -6526,10 +6526,18 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   if (next === 'profile') {
-    const pid = payload && payload !== me.id ? payload : null;
+    // payload は id文字列（例 '@lllfff'）または Profile オブジェクトのどちらでもよい
+    const payloadObj = payload && typeof payload === 'object' ? (payload as Profile) : null;
+    const rawId = payloadObj ? payloadObj.id : payload;
+    const pid = rawId && rawId !== me.id ? rawId : null;
     setSelectedProfileId(pid);
-    // モック（ダミー）に居ない実ユーザーは Supabase から読み込む
-    if (pid) {
+    if (!pid) {
+      setViewedProfile(null);
+    } else if (payloadObj) {
+      // 検索結果など、既にプロフィール情報を持っている場合は即時表示（往復不要）
+      setViewedProfile(payloadObj);
+    } else {
+      // id しか無い場合（フィード等）。モックに居なければ Supabase から読み込む。
       const inMock = [...profiles, ...followers].some((p) => p.id === pid);
       if (!inMock && dbReady()) {
         setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
@@ -6538,8 +6546,6 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           if (row) setViewedProfile(rowToMiniProfile(row));
         });
       }
-    } else {
-      setViewedProfile(null);
     }
   }
 
