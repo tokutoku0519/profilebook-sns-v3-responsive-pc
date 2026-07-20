@@ -17,7 +17,6 @@ const questionsJa: LocaleQuestion[] = [
   { id: 'q11', category: '価値観', title: '友達が多い派？少ない方が深い派？', sponsor: null },
   { id: 'q12', category: '価値観', title: '貯金派？使い切り派？', sponsor: null },
   { id: 'q13', category: '価値観', title: '朝型？夜型？', sponsor: null },
-  { id: 'q15', category: '価値観', title: '好きな人ができたとき、先に告白する派？待つ派？', sponsor: null },
   { id: 'q16', category: '恋愛',  title: '好きな人ができたとき、友達に言う？言わない？', sponsor: null },
   { id: 'q17', category: '恋愛',  title: 'ときめいた瞬間ってどんなとき？', sponsor: null },
   { id: 'q18', category: '恋愛',  title: '理想のデートスポットは？', sponsor: null },

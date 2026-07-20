@@ -5624,7 +5624,7 @@ function DailyQuestionScreen({
 }: {
   go: (s: Screen, payload?: any) => void;
   question: Question;
-  dailyRecord: { date: string; body: string } | null;
+  dailyRecord: { date: string; qid?: string; body: string } | null;
   onSubmit: (body: string) => void;
   answers: Answer[];
 }) {
@@ -5897,18 +5897,22 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     return localizedQuestions[Math.abs(h) % localizedQuestions.length];
   }, [localizedQuestions]);
 
-  const [dailyRecord, setDailyRecord] = useState<{ date: string; body: string } | null>(() => {
+  const [dailyRecord, setDailyRecord] = useState<{ date: string; qid?: string; body: string } | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
       const s = localStorage.getItem('miri_daily_answer');
       if (!s) return null;
-      const r = JSON.parse(s) as { date: string; body: string };
-      return r.date === new Date().toISOString().slice(0, 10) ? r : null;
+      const r = JSON.parse(s) as { date: string; qid?: string; body: string };
+      // お題と同じ「ローカル日付」で判定し、かつ回答が“今日のお題”に対するものだけ表示する
+      // （タイムゾーン差やお題切替による質問と回答のズレを防ぐ）。
+      const okDate = r.date === new Date().toDateString();
+      const okQuestion = !!r.qid && r.qid === dailyQuestion?.id;
+      return okDate && okQuestion ? r : null;
     } catch { return null; }
   });
 
   function submitDailyAnswer(body: string) {
-    const record = { date: new Date().toISOString().slice(0, 10), body };
+    const record = { date: new Date().toDateString(), qid: dailyQuestion?.id ?? '', body };
     setDailyRecord(record);
     localStorage.setItem('miri_daily_answer', JSON.stringify(record));
     postAnswer({ questionId: dailyQuestion?.id ?? '', body, sticker: '✍️', visibility: 'public' });
