@@ -50,6 +50,19 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+// ── ID（username）の空き確認 ─────────────────────────────
+/** username が使用可能か（未使用なら true）。未設定/エラー時は true（送信時に最終判定）。 */
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  if (!supabase) return true;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) return true;
+  return !data;
+}
+
 // ── プロフィール ──────────────────────────────────────────
 export async function getMyProfile(): Promise<ProfileRow | null> {
   if (!supabase) return null;

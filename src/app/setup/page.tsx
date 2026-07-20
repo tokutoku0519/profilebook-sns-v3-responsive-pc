@@ -1,11 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LANG_LIST, type Lang } from '@/lib/i18n';
-import { saveProfileIdentity } from '@/lib/db';
+import { saveProfileIdentity, isUsernameAvailable } from '@/lib/db';
 
 const MAIN_LANGS = ['ja', 'en', 'ko', 'zh', 'zh-tw', 'id', 'th', 'vi', 'tl', 'ms'];
+
+// 取得を禁止する予約語（大文字小文字は区別しない＝入力は小文字化される）
+const RESERVED_IDS = new Set([
+  'admin', 'administrator', 'miri', 'official', 'support', 'help', 'info',
+  'login', 'signup', 'signin', 'logout', 'auth', 'api', 'root', 'system',
+  'www', 'mail', 'contact', 'terms', 'privacy', 'setup', 'welcome',
+  'me', 'user', 'users', 'account', 'accounts', 'settings', 'null', 'undefined',
+]);
+
+const ID_MIN = 3;
+const ID_MAX = 20;
+
+type IdStatus = 'idle' | 'invalid' | 'reserved' | 'checking' | 'available' | 'taken';
 
 function detectBrowserLang(): Lang {
   if (typeof window === 'undefined') return 'ja';
@@ -36,20 +49,45 @@ export default function SetupPage() {
   const router = useRouter();
   const [miriId, setMiriId] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [realName, setRealName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [lang, setLang] = useState<Lang>(() => detectBrowserLang());
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [idStatus, setIdStatus] = useState<IdStatus>('idle');
 
-  function validate(id: string) {
-    return /^[a-zA-Z0-9_]{3,20}$/.test(id);
+  function validateFormat(id: string) {
+    return new RegExp(`^[a-z0-9_]{${ID_MIN},${ID_MAX}}$`).test(id);
   }
+
+  // ID の空き確認（入力が止まってから Supabase に照会）
+  useEffect(() => {
+    const id = miriId;
+    if (!id) { setIdStatus('idle'); return; }
+    if (!validateFormat(id)) { setIdStatus('invalid'); return; }
+    if (RESERVED_IDS.has(id)) { setIdStatus('reserved'); return; }
+    setIdStatus('checking');
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const ok = await isUsernameAvailable(id);
+      if (!cancelled) setIdStatus(ok ? 'available' : 'taken');
+    }, 450);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [miriId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!validate(miriId)) {
-      setError('IDは3〜20文字の英数字とアンダースコアのみ使えます');
+    if (!validateFormat(miriId)) {
+      setError(`IDは${ID_MIN}〜${ID_MAX}文字の英数字とアンダースコアのみ使えます`);
+      return;
+    }
+    if (RESERVED_IDS.has(miriId)) {
+      setError('このIDは使えません（予約語）');
+      return;
+    }
+    if (idStatus === 'taken') {
+      setError('このIDは既に使われています。別のIDにしてください');
       return;
     }
     if (!displayName.trim()) {
@@ -63,19 +101,37 @@ export default function SetupPage() {
     const res = await saveProfileIdentity({ username: miriId, display_name: displayName.trim() });
     if (!res.ok && res.error === 'username_taken') {
       setError('このIDは既に使われています。別のIDにしてください');
+      setIdStatus('taken');
       setLoading(false);
       return;
     }
 
-    // ローカルにも保存（アプリ内の表示・ルーティング用）
+    // ローカルにも保存（アプリ内の表示・ルーティング用）。氏名は非公開なのでローカルのみ。
     try {
       localStorage.setItem('miri_username', miriId);
       localStorage.setItem('miri_displayname', displayName.trim());
-      if (realName.trim()) localStorage.setItem('miri_realname', realName.trim());
+      if (lastName.trim()) localStorage.setItem('miri_lastname', lastName.trim());
+      else localStorage.removeItem('miri_lastname');
+      if (firstName.trim()) localStorage.setItem('miri_firstname', firstName.trim());
+      else localStorage.removeItem('miri_firstname');
+      const full = `${lastName.trim()} ${firstName.trim()}`.trim();
+      if (full) localStorage.setItem('miri_realname', full);
       localStorage.setItem('miri_lang', lang);
     } catch {}
     router.push('/welcome');
   }
+
+  // ID欄の下に出すステータス表示
+  const idHint = (() => {
+    switch (idStatus) {
+      case 'checking':  return { text: '確認中…', cls: 'text-muted' };
+      case 'available': return { text: '✓ このIDは使えます', cls: 'text-emerald-600' };
+      case 'taken':     return { text: '✕ このIDは既に使われています', cls: 'text-red-500' };
+      case 'reserved':  return { text: '✕ このIDは使えません（予約語）', cls: 'text-red-500' };
+      case 'invalid':   return { text: `${ID_MIN}〜${ID_MAX}文字の英数字と _ のみ`, cls: 'text-red-500' };
+      default:          return null;
+    }
+  })();
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-base px-6 gap-8">
@@ -105,7 +161,8 @@ export default function SetupPage() {
                 className="flex-1 bg-transparent pl-1 text-sm font-bold text-ink placeholder:text-muted focus:outline-none"
               />
             </div>
-            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">3〜20文字。URLに使われます（例: miri.app/@{miriId || 'yourID'}）</p>
+            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">{ID_MIN}〜{ID_MAX}文字。URLに使われます（例: miri.app/@{miriId || 'yourID'}）</p>
+            {idHint && <p className={`mt-1 pl-2 text-[10px] font-black ${idHint.cls}`}>{idHint.text}</p>}
           </div>
 
           {/* 表示名 */}
@@ -124,18 +181,28 @@ export default function SetupPage() {
             />
           </div>
 
-          {/* 氏名 */}
+          {/* 氏名（姓・名で分ける／非公開） */}
           <div>
             <label className="mb-1.5 block text-xs font-black text-ink">氏名</label>
-            <input
-              type="text"
-              placeholder="本名（非公開）"
-              value={realName}
-              onChange={e => setRealName(e.target.value)}
-              maxLength={50}
-              className="h-12 w-full rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
-            />
-            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">他のユーザーには公開されません</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="姓"
+                value={lastName}
+                onChange={e => setLastName(e.target.value)}
+                maxLength={25}
+                className="h-12 w-1/2 rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="名"
+                value={firstName}
+                onChange={e => setFirstName(e.target.value)}
+                maxLength={25}
+                className="h-12 w-1/2 rounded-full border-2 border-purple/20 bg-base px-5 text-sm font-bold text-ink placeholder:text-muted focus:border-pink focus:outline-none"
+              />
+            </div>
+            <p className="mt-1 pl-2 text-[10px] font-bold text-muted">他のユーザーには公開されません（任意）</p>
           </div>
 
           {/* 言語 */}
@@ -163,7 +230,7 @@ export default function SetupPage() {
 
           <button
             type="submit"
-            disabled={loading || miriId.length < 3 || !displayName.trim()}
+            disabled={loading || miriId.length < ID_MIN || !displayName.trim() || idStatus === 'taken' || idStatus === 'reserved' || idStatus === 'invalid'}
             className="h-12 w-full rounded-full bg-pink text-sm font-black text-white shadow-floating transition active:scale-[0.98] disabled:opacity-60"
           >
             {loading ? '...' : 'はじめる →'}
