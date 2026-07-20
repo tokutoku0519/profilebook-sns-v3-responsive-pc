@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, saveProfileBook } from '@/lib/db';
+import { dbReady, getMyProfile, saveProfileBook, signOut } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -2298,6 +2298,7 @@ function ProfileEditScreen({
   ownedThemeIds = [],
   equippedBgId = null,
   onEquipBg = () => {},
+  onLogout,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -2324,6 +2325,7 @@ function ProfileEditScreen({
   ownedThemeIds?: string[];
   equippedBgId?: string | null;
   onEquipBg?: (id: string | null) => void;
+  onLogout: () => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
@@ -2927,6 +2929,14 @@ function ProfileEditScreen({
           className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
         >
           保存してプロフィール帳に反映
+        </button>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          className="mt-2 w-full rounded-[24px] border-2 border-red-200 bg-white px-5 py-4 text-base font-black text-red-500 active:scale-[0.99]"
+        >
+          ログアウト
         </button>
       </div>
 
@@ -6198,6 +6208,23 @@ function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   if (dbReady()) { void saveProfileBook(next as any); }
 }
 
+// ログアウト：Supabaseセッション破棄＋認証クッキー削除＋端末内のユーザーデータ消去
+async function logout() {
+  try { await signOut(); } catch {}
+  try {
+    document.cookie = 'miri_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+  } catch {}
+  try {
+    // 次のユーザーに前のユーザーのプロフィール等が残らないよう消す
+    [
+      'miri_username', 'miri_displayname', 'miri_realname', 'miri_lastname', 'miri_firstname',
+      'profileBookInfo', 'best3', 'profileQuestions', 'profileCustomFields',
+      'avatarUrl', 'favoritePhotos', 'miri_onboarded',
+    ].forEach((k) => localStorage.removeItem(k));
+  } catch {}
+  window.location.href = '/';
+}
+
 const [profileCustomFields, setProfileCustomFields] = useState<Record<string, string>>(() => {
   if (typeof window === 'undefined') return {};
   try {
@@ -6473,6 +6500,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       ownedThemeIds={ownedThemeIds}
       equippedBgId={equippedBgId}
       onEquipBg={equipBg}
+      onLogout={logout}
     />
   );
 

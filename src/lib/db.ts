@@ -43,6 +43,12 @@ export type CommentRow = {
 
 export const dbReady = () => !!supabase;
 
+// ── サインアウト ──────────────────────────────────────────
+export async function signOut(): Promise<void> {
+  if (!supabase) return;
+  try { await supabase.auth.signOut(); } catch {}
+}
+
 // ── 認証中ユーザー ────────────────────────────────────────
 export async function getCurrentUserId(): Promise<string | null> {
   if (!supabase) return null;
