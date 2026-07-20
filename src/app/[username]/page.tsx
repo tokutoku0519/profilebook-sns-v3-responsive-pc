@@ -5856,9 +5856,11 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
   // ── スタンプ・ガチャ ──────────────────────────────────────
   const [coins, setCoins] = useState<number>(() => {
-    if (typeof window === 'undefined') return 500;
+    // ①dev=デモ用に500 / ②本番=0スタート（新規ユーザーはKokiの残高を引き継がない）
+    const initial = isDev ? 500 : 0;
+    if (typeof window === 'undefined') return initial;
     const s = localStorage.getItem('miri_coins');
-    return s ? Number(s) : 500;
+    return s ? Number(s) : initial;
   });
 
   // ── PR案件 ────────────────────────────────────────────────
@@ -6222,19 +6224,16 @@ function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   if (dbReady()) { void saveProfileBook(next as any); }
 }
 
-// ログアウト：Supabaseセッション破棄＋認証クッキー削除＋端末内のユーザーデータ消去
+// ログアウト：Supabaseセッション破棄＋認証クッキー削除＋端末内のユーザーデータ全消去
 async function logout() {
   try { await signOut(); } catch {}
   try {
     document.cookie = 'miri_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
   } catch {}
   try {
-    // 次のユーザーに前のユーザーのプロフィール等が残らないよう消す
-    [
-      'miri_username', 'miri_displayname', 'miri_realname', 'miri_lastname', 'miri_firstname',
-      'profileBookInfo', 'best3', 'profileQuestions', 'profileCustomFields',
-      'avatarUrl', 'favoritePhotos', 'miri_onboarded',
-    ].forEach((k) => localStorage.removeItem(k));
+    // コイン・スタンプ・購入アイテム・通知・回答なども含め、前ユーザーの端末データを一掃。
+    // （Supabaseに永続化したデータは残り、再ログインで復元される）
+    localStorage.clear();
   } catch {}
   window.location.href = '/';
 }
