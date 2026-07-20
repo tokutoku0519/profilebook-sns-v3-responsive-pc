@@ -16,6 +16,16 @@ function getStoredUsername(): string {
   try { return localStorage.getItem('miri_username') || 'me'; } catch { return 'me'; }
 }
 
+// ログイン/新規登録時に、前ユーザー・デモの端末データを一掃する。
+// Supabase セッション（sb-* キー）は保持するので、これで認証は切れない。
+function clearLocalExceptSession() {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (!k.startsWith('sb-')) localStorage.removeItem(k);
+    }
+  } catch {}
+}
+
 export default function Page() {
   const router = useRouter();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -68,7 +78,10 @@ export default function Page() {
       if (data.session) {
         // 初回は /setup でID・名前を設定してもらう
         const fallbackId = data.user?.id?.split('-')[0] || 'me';
-        try { if (!localStorage.getItem('miri_username')) localStorage.setItem('miri_username', fallbackId); } catch {}
+        try {
+          clearLocalExceptSession();
+          localStorage.setItem('miri_username', fallbackId);
+        } catch {}
         setAuthCookie();
         router.push('/setup');
       } else {
@@ -77,12 +90,14 @@ export default function Page() {
     } else {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
-      // ログインユーザーのプロフィール（ID・表示名）を Supabase から取得して localStorage に反映。
-      // これが無いと表示が既定(Koki)のままになる。
+      // ログインユーザーのプロフィール（ID・表示名）を Supabase から取得。
       const prof = await getMyProfile();
       try {
+        // 前ユーザー/デモの端末データ（コイン・スタンプ・通知・プロフ等）を一掃。
+        // Supabaseセッション(sb-*)は保持。プロフィールは Supabase から復元される。
+        clearLocalExceptSession();
         if (prof?.username) localStorage.setItem('miri_username', prof.username);
-        else if (!localStorage.getItem('miri_username')) localStorage.setItem('miri_username', data.user?.id?.split('-')[0] || 'me');
+        else localStorage.setItem('miri_username', data.user?.id?.split('-')[0] || 'me');
         if (prof?.display_name) localStorage.setItem('miri_displayname', prof.display_name);
       } catch {}
       setAuthCookie();
