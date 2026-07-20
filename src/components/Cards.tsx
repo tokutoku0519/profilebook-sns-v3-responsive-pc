@@ -50,7 +50,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody, onUserClick }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (userId: string) => void }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   // カード全体が <button> の中に置かれることがあるため、ユーザー部分は span + stopPropagation で扱う
@@ -58,7 +58,7 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
     ? {
         role: 'button' as const,
         tabIndex: 0,
-        onClick: (e: MouseEvent) => { e.stopPropagation(); onUserClick(answer.user.id); },
+        onClick: (e: MouseEvent) => { e.stopPropagation(); onUserClick(answer.user); },
         className: 'flex items-center gap-2 rounded-full -m-1 p-1 transition active:scale-[0.98] hover:bg-pink/5 cursor-pointer',
       }
     : { className: 'flex items-center gap-2' };

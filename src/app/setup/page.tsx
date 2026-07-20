@@ -45,16 +45,25 @@ function detectBrowserLang(): Lang {
   return 'en';
 }
 
+function readLS(key: string): string {
+  if (typeof window === 'undefined') return '';
+  try { return localStorage.getItem(key) || ''; } catch { return ''; }
+}
+
 export default function SetupPage() {
   const router = useRouter();
-  const [miriId, setMiriId] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [firstName, setFirstName] = useState('');
+  // 既存ユーザーの「ID・表示名の変更」も兼ねるため、保存済みの値を初期表示する。
+  const [miriId, setMiriId] = useState(() => readLS('miri_username'));
+  const [displayName, setDisplayName] = useState(() => readLS('miri_displayname'));
+  const [lastName, setLastName] = useState(() => readLS('miri_lastname'));
+  const [firstName, setFirstName] = useState(() => readLS('miri_firstname'));
   const [lang, setLang] = useState<Lang>(() => detectBrowserLang());
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [idStatus, setIdStatus] = useState<IdStatus>('idle');
+
+  // 変更前の自分のID（編集時は自分のIDは「使用可」として扱う）
+  const originalId = readLS('miri_username');
 
   function validateFormat(id: string) {
     return new RegExp(`^[a-z0-9_]{${ID_MIN},${ID_MAX}}$`).test(id);
@@ -66,6 +75,7 @@ export default function SetupPage() {
     if (!id) { setIdStatus('idle'); return; }
     if (!validateFormat(id)) { setIdStatus('invalid'); return; }
     if (RESERVED_IDS.has(id)) { setIdStatus('reserved'); return; }
+    if (id === originalId) { setIdStatus('available'); return; } // 自分の現在のIDはOK
     setIdStatus('checking');
     let cancelled = false;
     const timer = setTimeout(async () => {

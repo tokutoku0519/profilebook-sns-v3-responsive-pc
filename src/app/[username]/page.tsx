@@ -1048,7 +1048,7 @@ function HomeScreen({
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} onUserClick={(uid) => go('profile', uid)} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
               </button>
             ))}
           </div>
@@ -1245,7 +1245,7 @@ function SearchScreen({ go, answers, myProfile, questionList }: {
 
             <section className="mt-6 space-y-3">
               <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
-              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} onUserClick={(uid) => go('profile', uid)} /></button>)}
+              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
@@ -1500,7 +1500,7 @@ function CreateScreen({
               ) : (
                 <>
                   <RetroEmojiPicker onInsert={(code) => insertRetroCode(bodyRef, code, (v) => setDraft((prev) => ({ ...prev, body: v })))} />
-                  <textarea ref={bodyRef} value={draft.body} maxLength={160} onChange={(e) => setDraft({ ...draft, body: e.target.value })} className="notebook-lines mt-2 h-44 w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 leading-8 outline-none focus:border-pink" placeholder="ここにプロフィール帳みたいに書いてね" />
+                  <textarea ref={bodyRef} value={draft.body} maxLength={160} onChange={(e) => setDraft({ ...draft, body: e.target.value })} style={{ lineHeight: '34px', backgroundOrigin: 'content-box' }} className="notebook-lines mt-2 h-44 w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 outline-none focus:border-pink" placeholder="ここにプロフィール帳みたいに書いてね" />
                   {draft.body && (
                     <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
                       <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
@@ -2467,6 +2467,20 @@ function ProfileEditScreen({
       <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
       <div className="space-y-4 px-4 pt-3 pb-32">
+
+        {/* ===== ID・表示名（アカウント） ===== */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">🆔 ID・表示名</p>
+          <p className="mb-3 text-xs font-bold text-muted">現在のID：<span className="font-black text-ink">{me.id}</span></p>
+          <button
+            type="button"
+            onClick={() => { window.location.href = '/setup'; }}
+            className="w-full rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]"
+          >
+            ID・表示名を変更する →
+          </button>
+          <p className="mt-2 text-[10px] font-bold text-muted">ニックネームは下の「きほんじょうほう」で変更できます。</p>
+        </section>
 
         {/* ===== 言語設定 ===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -3738,7 +3752,7 @@ function DetailScreen({
     <>
       <AppHeader title="回答詳細" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
-        <AnswerCard answer={answer} detail onUserClick={(uid) => go('profile', uid)} />
+        <AnswerCard answer={answer} detail onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
 
         {/* リアクション */}
         <div className="grid grid-cols-4 gap-2">
@@ -5742,7 +5756,7 @@ function DailyQuestionScreen({
                       className="mb-2 flex items-center gap-2 rounded-full -m-1 p-1 transition active:scale-[0.98] hover:bg-pink/5"
                       role="button"
                       tabIndex={0}
-                      onClick={(e) => { e.stopPropagation(); go('profile', answer.user.id); }}
+                      onClick={(e) => { e.stopPropagation(); go('profile', { name: answer.user.name, id: answer.user.id, avatar: answer.user.avatar, bio: '', common: '' }); }}
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink/10 text-lg">{answer.user.avatar}</span>
                       <div>
@@ -5790,7 +5804,7 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
         ) : saved.map(answer => (
           <button key={answer.id} onClick={() => go('detail', answer.id)}
             className="block w-full text-left">
-            <AnswerCard answer={answer} onUserClick={(uid) => go('profile', uid)} />
+            <AnswerCard answer={answer} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
           </button>
         ))}
       </div>
@@ -6553,18 +6567,17 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setSelectedProfileId(pid);
     if (!pid) {
       setViewedProfile(null);
-    } else if (payloadObj) {
-      // 検索結果など、既にプロフィール情報を持っている場合は即時表示（往復不要）
-      setViewedProfile(payloadObj);
     } else {
-      // id しか無い場合（フィード等）。モックに居なければ Supabase から読み込む。
+      // 既に持っている情報があれば即時表示（スピナーで固まらない）。
+      if (payloadObj) setViewedProfile(payloadObj);
+      else setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
+      // モックに居なければ Supabase から詳細を取得して差し替え（失敗しても即時表示は維持）。
       const inMock = [...profiles, ...followers].some((p) => p.id === pid);
       if (!inMock && dbReady()) {
-        setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
         const username = String(pid).replace(/^@/, '');
         getProfileByUsername(username).then((row) => {
           if (row) setViewedProfile(rowToMiniProfile(row));
-        });
+        }).catch(() => {});
       }
     }
   }
