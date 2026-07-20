@@ -1119,10 +1119,11 @@ function HomeScreen({
   );
 }
 
-function SearchScreen({ go, answers, myProfile }: {
+function SearchScreen({ go, answers, myProfile, questionList }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
   myProfile: typeof defaultProfileBookInfo;
+  questionList: Question[];
 }) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<'answer' | 'person' | 'question' | 'match'>('answer');
@@ -1133,7 +1134,7 @@ function SearchScreen({ go, answers, myProfile }: {
     && (!selectedOdaiId || a.question?.id === selectedOdaiId)
   );
   const localProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
-  const filteredQuestions = questions.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredQuestions = questionList.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
 
   // なかま検索：Supabase の実ユーザーも検索（入力が止まってから照会）
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
@@ -1228,7 +1229,7 @@ function SearchScreen({ go, answers, myProfile }: {
                   onChange={(e) => {
                     const qid = e.target.value;
                     if (mode === 'question') {
-                      const q = questions.find((x) => x.id === qid);
+                      const q = questionList.find((x) => x.id === qid);
                       if (q) go('create', q);
                     } else {
                       setSelectedOdaiId(qid);
@@ -1237,7 +1238,7 @@ function SearchScreen({ go, answers, myProfile }: {
                   className="w-full rounded-2xl border border-purple-100 bg-white p-3 text-sm font-bold text-ink outline-none shadow-card"
                 >
                   <option value="">{mode === 'answer' ? 'すべてのお題' : 'お題を選んで答える…'}</option>
-                  {questions.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
+                  {questionList.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
                 </select>
               </div>
             )}
@@ -5615,14 +5616,24 @@ function DailyQuestionScreen({
 }) {
   const [body, setBody] = useState('');
   const [ngError, setNgError] = useState(false);
+  const [editing, setEditing] = useState(false);
   const revealed = dailyRecord !== null;
-  const othersAnswers = answers.filter((a) => a.user.id !== me.id);
+  // このお題への、自分以外の回答（同じお題に限定）
+  const othersAnswers = answers.filter((a) => a.user.id !== me.id && a.question?.id === question?.id);
 
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
     if (!body.trim()) return;
     onSubmit(body.trim());
     setBody('');
+    setNgError(false);
+    setEditing(false);
+  }
+
+  // 「編集する」を押したら、今の回答を前入力して編集モードへ
+  function startEdit() {
+    setBody(dailyRecord?.body ?? '');
+    setEditing(true);
     setNgError(false);
   }
 
@@ -5674,10 +5685,40 @@ function DailyQuestionScreen({
           <>
             {/* 自分の回答 */}
             <section className="rounded-[28px] border-2 border-pink/30 bg-white p-5 shadow-card">
-              <div className="mb-3">
+              <div className="mb-3 flex items-center justify-between">
                 <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">✅ あなたの回答</span>
+                {!editing && (
+                  <button onClick={startEdit} className="rounded-full bg-base px-3 py-1 text-[10px] font-black text-pink transition active:scale-95">
+                    ✏️ 編集する
+                  </button>
+                )}
               </div>
-              <p className="text-sm font-bold text-ink leading-6">{dailyRecord.body}</p>
+              {editing ? (
+                <>
+                  <textarea
+                    value={body}
+                    onChange={(e) => { setBody(e.target.value); setNgError(false); }}
+                    maxLength={200}
+                    rows={4}
+                    className="w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
+                    placeholder="ここに書いてね..."
+                  />
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className={`text-xs font-bold ${ngError ? 'text-red-500' : 'text-transparent'}`}>この内容は投稿できません</span>
+                    <span className="text-xs font-bold text-muted">{body.length}/200</span>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={() => { setEditing(false); setNgError(false); }} className="h-11 flex-1 rounded-full bg-base text-sm font-black text-muted transition active:scale-[0.98]">
+                      キャンセル
+                    </button>
+                    <button onClick={submit} disabled={!body.trim()} className={`h-11 flex-1 rounded-full text-sm font-black text-white shadow-floating transition ${body.trim() ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}>
+                      保存する
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm font-bold text-ink leading-6">{dailyRecord.body}</p>
+              )}
             </section>
 
             {/* みんなの回答 */}
@@ -6473,8 +6514,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   function go(next: Screen, payload?: any) {
   setScreen(next);
 
-  // ホーム/さがすに移動したらフィードを最新化（みんなの回答を反映）
-  if (next === 'home' || next === 'search') { void reloadFeed(); }
+  // ホーム/さがす/今日のお題に移動したらフィードを最新化（みんなの回答を反映）
+  if (next === 'home' || next === 'search' || next === 'daily-question') { void reloadFeed(); }
 
   if (next === 'detail' && payload) {
     setSelectedAnswerId(payload);
@@ -6742,7 +6783,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           onReportEntry={reportDiaryEntry}
         />
       );
-    if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} />;
+    if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} />;
     if (screen === 'create')
   return (
     <CreateScreen

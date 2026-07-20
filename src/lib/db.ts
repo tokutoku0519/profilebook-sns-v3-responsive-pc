@@ -205,18 +205,26 @@ export async function getMyAnswer(questionKey: string): Promise<AnswerRow | null
   return data as AnswerRow;
 }
 
-/** ユーザー検索（username / display_name の部分一致）。 */
+/** ユーザー検索（username / display_name / プロフ帳のニックネームの部分一致）。 */
 export async function searchProfiles(query: string, limit = 20): Promise<ProfileRow[]> {
   if (!supabase) return [];
   const safe = query.trim().replace(/[,()%*]/g, '');
   if (!safe) return [];
-  const { data, error } = await supabase
+  const cols = 'id,username,display_name,avatar_url,cover_theme,book,is_official,titles';
+  // ニックネーム（book->>nickname）も含めて検索。JSONBフィルタが使えない場合は簡易検索にフォールバック。
+  let res = await supabase
     .from('profiles')
-    .select('id,username,display_name,avatar_url,cover_theme,book,is_official,titles')
-    .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%`)
+    .select(cols)
+    .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%,book->>nickname.ilike.%${safe}%`)
     .limit(limit);
-  if (error || !data) return [];
-  return data as ProfileRow[];
+  if (res.error) {
+    res = await supabase
+      .from('profiles')
+      .select(cols)
+      .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%`)
+      .limit(limit);
+  }
+  return (res.data ?? []) as ProfileRow[];
 }
 
 /** 特定ユーザーの回答一覧 */
