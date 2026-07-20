@@ -200,6 +200,18 @@ const defaultProfileQuestions = isDev
   ? demoProfileQuestions
   : demoProfileQuestions.map((x) => ({ q: x.q, a: '' }));
 
+// ── オンボーディング報酬 ──────────────────────────────────
+const REWARD_PER_FIELD = 10; // プロフィール項目を新しく1つ埋めるごと
+const SETUP_BONUS = 50;      // 初期設定(/setup)完了ボーナス（初回のみ）
+// 報酬対象のプロフィール帳フィールド（選択式の gender/attribute/activity は除外）
+const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
+  'name', 'nickname', 'birthday', 'bloodType', 'mbti', 'hometown',
+  'favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject',
+  'hobby', 'charmPoint', 'dream', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv',
+  'favoriteArtist', 'favoriteManga', 'favoriteGame', 'specialty', 'personality',
+  'catchphrase', 'message',
+];
+
 type PremiumSection = {
   price: number;
   description: string;
@@ -5792,6 +5804,15 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     } catch {}
     setMeVersion((v) => v + 1);
 
+    // 初期設定(/setup)完了ボーナス（初回のみ）
+    try {
+      if (localStorage.getItem('miri_username') && !localStorage.getItem('miri_setup_bonus')) {
+        localStorage.setItem('miri_setup_bonus', '1');
+        addCoins(SETUP_BONUS, '初期設定ボーナス');
+        showToast(`初期設定ボーナス ＋${SETUP_BONUS} コイン！プロフィールを埋めるともっと貯まるよ`);
+      }
+    } catch {}
+
     // ② Supabase から正式なプロフィールを読み込んで上書き（あれば）
     if (!dbReady()) return;
     let cancelled = false;
@@ -6218,10 +6239,33 @@ function createCommunityQuestion(title: string, description: string, answerType:
 }
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
+  rewardNewlyFilledFields(next); // 新しく埋めた項目にコイン付与
   setProfileBookInfo(next);
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
   // Supabase にも保存（永続化・端末間で引き継ぎ）。best-effort。
   if (dbReady()) { void saveProfileBook(next as any); }
+}
+
+// プロフィール帳の項目を「初めて」埋めたぶんだけコインを付与（重複取得なし）
+function rewardNewlyFilledFields(next: typeof defaultProfileBookInfo) {
+  try {
+    const earned: string[] = JSON.parse(localStorage.getItem('miri_earned_fields') || '[]');
+    const earnedSet = new Set(earned);
+    let count = 0;
+    for (const key of REWARDABLE_FIELDS) {
+      const v = (next as any)[key];
+      const token = 'book.' + key;
+      if (typeof v === 'string' && v.trim() && !earnedSet.has(token)) {
+        earnedSet.add(token);
+        count++;
+      }
+    }
+    if (count > 0) {
+      localStorage.setItem('miri_earned_fields', JSON.stringify([...earnedSet]));
+      addCoins(count * REWARD_PER_FIELD, 'プロフィール入力');
+      showToast(`＋${count * REWARD_PER_FIELD} コイン（プロフィール入力）`);
+    }
+  } catch {}
 }
 
 // ログアウト：Supabaseセッション破棄＋認証クッキー削除＋端末内のユーザーデータ全消去
