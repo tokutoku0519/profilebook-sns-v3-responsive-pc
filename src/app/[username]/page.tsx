@@ -131,7 +131,8 @@ const followers = isDev ? [
   { name: 'あかり', id: '@akari_28', avatar: '🍒', bio: 'かわいいもの収集中。', common: 'シール派' },
 ] : [];
 
-const defaultProfileBookInfo = {
+// デモ用（=①dev）のプロフィール帳サンプル（Koki）。
+const demoProfileBookInfo = {
   name: 'Koki',
   nickname: 'こうき',
   birthday: '5月19日',
@@ -160,15 +161,29 @@ const defaultProfileBookInfo = {
   attribute: 'highschool',
   activity: '',
 };
+// 本番（=②）は空欄スタート（新規ユーザーが自分で埋める）。
+const emptyProfileBookInfo: typeof demoProfileBookInfo = {
+  name: '', nickname: '', birthday: '', bloodType: '', gender: '', mbti: '', hometown: '',
+  favoriteFood: '', dislikeFood: '', favoriteColor: '', favoriteSubject: '', dislikeSubject: '',
+  hobby: '', charmPoint: '', dream: '', favoriteCharacter: '', favoriteMusic: '', favoriteTv: '',
+  favoriteArtist: '', favoriteManga: '', favoriteGame: '', specialty: '', personality: '',
+  catchphrase: '', message: '', attribute: 'highschool', activity: '',
+};
+const defaultProfileBookInfo = isDev ? demoProfileBookInfo : emptyProfileBookInfo;
 
-const defaultBest3 = {
+const defaultBest3 = isDev ? {
   tv: ['水曜日のダウンタウン', 'あちこちオードリー', 'YouTube'],
   food: ['オムライス', '揚げパン', '喫茶店のプリン'],
   places: ['喫茶店', 'ライブハウス', '海沿いの街'],
   music: ['宇多田ヒカル', '椎名林檎', 'Superfly'],
+} : {
+  tv: ['', '', ''],
+  food: ['', '', ''],
+  places: ['', '', ''],
+  music: ['', '', ''],
 };
 
-const defaultProfileQuestions = [
+const demoProfileQuestions = [
   { q: '朝おきて一番にすることは？', a: 'スマホを見る' },
   { q: 'しあわせを感じるときは？', a: '予定のない休日にカフェでぼーっとしている時' },
   { q: '自分を動物に例えると？', a: '好奇心強めの犬' },
@@ -180,6 +195,10 @@ const defaultProfileQuestions = [
   { q: '10年後の自分へひとこと？', a: 'あのときのワクワクを忘れないでね' },
   { q: '好きな季節とその理由は？', a: '秋。空気がいちばん好きな匂いがする' },
 ];
+// 本番はお題（q）はそのまま・回答（a）だけ空にして新規ユーザーに埋めてもらう。
+const defaultProfileQuestions = isDev
+  ? demoProfileQuestions
+  : demoProfileQuestions.map((x) => ({ q: x.q, a: '' }));
 
 type PremiumSection = {
   price: number;
@@ -5738,12 +5757,23 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // （production で Supabase が設定されているときのみ。dev/未設定では従来どおり）
   const [, setMeVersion] = useState(0);
   useEffect(() => {
+    // ① まずローカル（/setup で保存したID・表示名）から me を即時更新（確実・同期）
+    try {
+      const u = localStorage.getItem('miri_username');
+      const dn = localStorage.getItem('miri_displayname');
+      if (u) me.id = '@' + u;
+      if (dn) me.name = dn;
+      // 本番の新規ユーザーは公認扱いにしない（Koki既定のisOfficial=trueを打ち消す）
+      if (!isDev && (u || dn)) me.isOfficial = false;
+    } catch {}
+    setMeVersion((v) => v + 1);
+
+    // ② Supabase から正式なプロフィールを読み込んで上書き（あれば）
     if (!dbReady()) return;
     let cancelled = false;
     (async () => {
       const p = await getMyProfile();
       if (cancelled || !p) return;
-      // me（モジュールの共有オブジェクト）を本人の値に更新
       me.id = '@' + p.username;
       me.name = p.display_name;
       me.isOfficial = !!p.is_official;
@@ -5751,7 +5781,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       if (p.book && typeof p.book === 'object' && Object.keys(p.book).length > 0) {
         setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...(p.book as any) }));
       }
-      setMeVersion((v) => v + 1); // me 更新を反映するため再レンダー
+      setMeVersion((v) => v + 1);
     })();
     return () => { cancelled = true; };
   }, []);
