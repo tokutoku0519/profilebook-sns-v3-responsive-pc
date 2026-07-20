@@ -171,17 +171,63 @@ const emptyProfileBookInfo: typeof demoProfileBookInfo = {
 };
 const defaultProfileBookInfo = isDev ? demoProfileBookInfo : emptyProfileBookInfo;
 
-const defaultBest3 = isDev ? {
-  tv: ['水曜日のダウンタウン', 'あちこちオードリー', 'YouTube'],
-  food: ['オムライス', '揚げパン', '喫茶店のプリン'],
-  places: ['喫茶店', 'ライブハウス', '海沿いの街'],
-  music: ['宇多田ヒカル', '椎名林檎', 'Superfly'],
-} : {
-  tv: ['', '', ''],
-  food: ['', '', ''],
-  places: ['', '', ''],
-  music: ['', '', ''],
+// すきなもの BEST3 のカテゴリ定義（表示・編集はこの配列で共通化する）
+const BEST3_CATEGORIES = [
+  { key: 'food',   emoji: '🍚', label: '食べ物' },
+  { key: 'drink',  emoji: '🥤', label: '飲み物' },
+  { key: 'tv',     emoji: '📺', label: 'テレビ・YouTube' },
+  { key: 'artist', emoji: '🎵', label: 'アーティスト' },
+  { key: 'movie',  emoji: '🎬', label: '映画' },
+  { key: 'book',   emoji: '📖', label: '漫画・本' },
+  { key: 'game',   emoji: '🎮', label: 'ゲーム' },
+  { key: 'hobby',  emoji: '🎨', label: '趣味' },
+] as const;
+
+type Best3Data = Record<string, string[]>;
+
+const emptyBest3: Best3Data = {
+  food: ['', '', ''], drink: ['', '', ''], tv: ['', '', ''], artist: ['', '', ''],
+  movie: ['', '', ''], book: ['', '', ''], game: ['', '', ''], hobby: ['', '', ''],
 };
+const demoBest3: Best3Data = {
+  food: ['オムライス', '揚げパン', '喫茶店のプリン'],
+  drink: ['クリームソーダ', 'コーヒー牛乳', 'ミルクティー'],
+  tv: ['水曜日のダウンタウン', 'あちこちオードリー', 'YouTube'],
+  artist: ['宇多田ヒカル', '椎名林檎', 'Superfly'],
+  movie: ['千と千尋の神隠し', '耳をすませば', '時をかける少女'],
+  book: ['NANA', 'ハチミツとクローバー', '君に届け'],
+  game: ['どうぶつの森', 'マリオカート', 'スプラトゥーン'],
+  hobby: ['写真', '深夜散歩', 'カフェ巡り'],
+};
+const defaultBest3: Best3Data = isDev ? demoBest3 : emptyBest3;
+
+// 今月のBEST3：月ごとに固定テーマを切り替え（1月=index0 … 12月=index11）
+const MONTHLY_BEST3_THEMES = [
+  '今年ハマりたいこと',       // 1月
+  '温まりたい飲み物',         // 2月
+  '春に食べたいもの',         // 3月
+  '新生活で欲しいもの',       // 4月
+  '行ってみたい場所',         // 5月
+  '雨の日のおとも',           // 6月
+  '夏に聴きたい曲',           // 7月
+  '夏にやりたいこと',         // 8月
+  '最近ハマっているもの',     // 9月
+  '秋に読みたい漫画・本',     // 10月
+  'いま欲しいもの',           // 11月
+  '今年買ってよかったもの',   // 12月
+];
+
+type MonthlyBest3 = { monthKey: string; items: string[] };
+
+// 現在の月のキー・テーマ・ラベルを返す（ローカル時刻基準）
+function currentMonthInfo() {
+  const d = new Date();
+  return {
+    monthKey: `${d.getFullYear()}-${d.getMonth() + 1}`,
+    theme: MONTHLY_BEST3_THEMES[d.getMonth()],
+    label: `${d.getMonth() + 1}月`,
+  };
+}
 
 const demoProfileQuestions = [
   { q: '朝おきて一番にすることは？', a: 'スマホを見る' },
@@ -254,7 +300,7 @@ type PremiumSection = {
 
 type ProfileBook = {
   info: Omit<typeof defaultProfileBookInfo, 'attribute' | 'activity'> & { attribute?: string; activity?: string };
-  best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
+  best3: Best3Data;
   questions: Array<{ q: string; a: string }>;
   themeColor: 'pink' | 'purple' | 'blue' | 'green' | 'orange';
   isOfficial?: boolean;
@@ -1771,6 +1817,7 @@ function GachaSpinOverlay({ burst }: { burst: boolean }) {
 function ProfileBookContent({
   info,
   best3,
+  monthlyBest3 = null,
   questions,
   answers,
   avatarEmoji,
@@ -1784,7 +1831,8 @@ function ProfileBookContent({
   lang = 'ja',
 }: {
   info: typeof defaultProfileBookInfo;
-  best3: { tv: string[]; food: string[]; places: string[]; music: string[] };
+  best3: Best3Data;
+  monthlyBest3?: { theme: string; label: string; items: string[] } | null;
   questions: Array<{ q: string; a: string }>;
   answers: Answer[];
   avatarEmoji: string;
@@ -1945,25 +1993,41 @@ function ProfileBookContent({
         </section>
       )}
 
-      {/* ── BEST3 ── */}
-      <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="★" title="すきなもの BEST3" theme={themeColor} />
-        {([
-          ['テレビ・YouTube', best3.tv],
-          ['食べもの', best3.food],
-          ['場所', best3.places],
-          ['音楽', best3.music],
-        ] as [string, string[]][]).map(([label, items]) => (
-          <div key={label} className="mb-3">
-            <p className={`mb-1.5 text-xs font-black ${accent}`}>▶ {label}</p>
-            <div className="space-y-1 pl-1">
-              {items.map((item, i) => (
-                <p key={item} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
-              ))}
-            </div>
+      {/* ── 今月のBEST3（固定テーマ・毎月切替） ── */}
+      {monthlyBest3 && monthlyBest3.items.some((v) => v.trim()) && (
+        <section className="rounded-[28px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full bg-pink/15 px-3 py-1 text-[10px] font-black text-pink">🗓️ {monthlyBest3.label}のBEST3</span>
           </div>
-        ))}
-      </section>
+          <p className="mb-3 text-sm font-black text-ink">{monthlyBest3.theme}</p>
+          <div className="space-y-1 pl-1">
+            {monthlyBest3.items.map((item, i) => item.trim() && (
+              <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── BEST3 ── */}
+      {BEST3_CATEGORIES.some((c) => (best3[c.key] ?? []).some((v) => v.trim())) && (
+        <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <ProfSectionHeader icon="★" title="すきなもの BEST3" theme={themeColor} />
+          {BEST3_CATEGORIES.map((cat) => {
+            const items = (best3[cat.key] ?? []).filter((v) => v.trim());
+            if (items.length === 0) return null;
+            return (
+              <div key={cat.key} className="mb-3">
+                <p className={`mb-1.5 text-xs font-black ${accent}`}>{cat.emoji} {cat.label}</p>
+                <div className="space-y-1 pl-1">
+                  {items.map((item, i) => (
+                    <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {/* ── ひとことしつもん ── */}
       <section className="rounded-[28px] bg-white p-5 shadow-card">
@@ -2273,6 +2337,7 @@ function ProfileScreen({
   go,
   profileBookInfo,
   best3,
+  monthlyBest3,
   profileQuestions,
   avatarUrl,
   favoritePhotos,
@@ -2283,6 +2348,7 @@ function ProfileScreen({
   go: (s: Screen, answerId?: string) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
   best3: typeof defaultBest3;
+  monthlyBest3?: { theme: string; label: string; items: string[] } | null;
   profileQuestions: typeof defaultProfileQuestions;
   avatarUrl: string;
   favoritePhotos: string[];
@@ -2331,6 +2397,7 @@ function ProfileScreen({
       <ProfileBookContent
         info={profileBookInfo}
         best3={best3}
+        monthlyBest3={monthlyBest3}
         questions={profileQuestions}
         answers={[]}
         avatarEmoji={me.avatar}
@@ -2361,6 +2428,8 @@ function ProfileEditScreen({
   go,
   profileBookInfo,
   best3,
+  monthlyBest3,
+  onSaveMonthlyBest3,
   profileQuestions,
   onSave,
   onSaveBest3,
@@ -2388,6 +2457,8 @@ function ProfileEditScreen({
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
   best3: typeof defaultBest3;
+  monthlyBest3: MonthlyBest3;
+  onSaveMonthlyBest3: (items: string[]) => void;
   profileQuestions: typeof defaultProfileQuestions;
   onSave: (next: typeof defaultProfileBookInfo) => void;
   onSaveBest3: (next: typeof defaultBest3) => void;
@@ -2414,6 +2485,8 @@ function ProfileEditScreen({
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
+  const [monthlyForm, setMonthlyForm] = useState<string[]>(monthlyBest3.items);
+  const monthInfo = currentMonthInfo();
   const [questionsForm, setQuestionsForm] = useState(profileQuestions);
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
@@ -2800,52 +2873,31 @@ function ProfileEditScreen({
             </section>
           );
         })()}
+<section className="space-y-4 rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
+  <div>
+    <p className="text-xl font-black text-ink">🗓️ 今月のBEST3</p>
+    <p className="mt-1 text-xs font-bold text-muted">{monthInfo.label}のテーマ「{monthInfo.theme}」。毎月テーマが変わります。</p>
+  </div>
+  <Best3EditBlock
+    title={monthInfo.theme}
+    items={monthlyForm}
+    onChange={(next) => setMonthlyForm(next)}
+  />
+</section>
+
 <section className="space-y-5 rounded-[32px] bg-white p-5 shadow-card">
   <p className="text-xl font-black text-ink">すきなもの BEST3</p>
 
-  <Best3EditBlock
-    title="好きなテレビ・YouTube"
-    items={best3Form.tv}
-    onChange={(next) =>
-      setBest3Form((prev) => ({
-        ...prev,
-        tv: next,
-      }))
-    }
-  />
-
-  <Best3EditBlock
-    title="好きな食べ物"
-    items={best3Form.food}
-    onChange={(next) =>
-      setBest3Form((prev) => ({
-        ...prev,
-        food: next,
-      }))
-    }
-  />
-
-  <Best3EditBlock
-    title="好きな場所"
-    items={best3Form.places}
-    onChange={(next) =>
-      setBest3Form((prev) => ({
-        ...prev,
-        places: next,
-      }))
-    }
-  />
-
-  <Best3EditBlock
-    title="好きな音楽"
-    items={best3Form.music}
-    onChange={(next) =>
-      setBest3Form((prev) => ({
-        ...prev,
-        music: next,
-      }))
-    }
-  />
+  {BEST3_CATEGORIES.map((cat) => (
+    <Best3EditBlock
+      key={cat.key}
+      title={`${cat.emoji} ${cat.label}`}
+      items={best3Form[cat.key] ?? ['', '', '']}
+      onChange={(next) =>
+        setBest3Form((prev) => ({ ...prev, [cat.key]: next }))
+      }
+    />
+  ))}
 </section>
 <section className="space-y-4 rounded-[32px] bg-white p-5 shadow-card">
   <p className="text-xl font-black text-ink">ひとことしつもん</p>
@@ -3018,6 +3070,7 @@ function ProfileEditScreen({
           onClick={() => {
             onSave(form);
             onSaveBest3(best3Form);
+            onSaveMonthlyBest3(monthlyForm);
             onSaveQuestions(questionsForm);
             onSaveAvatar(localAvatarUrl);
             onSaveFavoritePhotos(localPhotos);
@@ -6458,6 +6511,25 @@ function updateBest3(next: typeof defaultBest3) {
   localStorage.setItem('best3', JSON.stringify(next));
 }
 
+// 今月のBEST3（固定テーマを毎月切替）。保存済みが今月のものでなければ空で開始。
+const [monthlyBest3, setMonthlyBest3] = useState<MonthlyBest3>(() => {
+  const { monthKey } = currentMonthInfo();
+  if (typeof window !== 'undefined') {
+    try {
+      const s = JSON.parse(localStorage.getItem('miri_monthly_best3') || 'null');
+      if (s && s.monthKey === monthKey && Array.isArray(s.items)) return s;
+    } catch {}
+  }
+  return { monthKey, items: ['', '', ''] };
+});
+
+function updateMonthlyBest3(items: string[]) {
+  const { monthKey } = currentMonthInfo();
+  const rec: MonthlyBest3 = { monthKey, items };
+  setMonthlyBest3(rec);
+  localStorage.setItem('miri_monthly_best3', JSON.stringify(rec));
+}
+
 const [profileQuestions, setProfileQuestions] = useState(() => {
   if (typeof window === 'undefined') return defaultProfileQuestions;
   try { const saved = localStorage.getItem('profileQuestions'); return saved ? JSON.parse(saved) : defaultProfileQuestions; } catch { return defaultProfileQuestions; }
@@ -6767,6 +6839,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       go={go}
       profileBookInfo={profileBookInfo}
       best3={best3}
+      monthlyBest3={monthlyBest3}
+      onSaveMonthlyBest3={updateMonthlyBest3}
       profileQuestions={profileQuestions}
       onSave={updateProfileBookInfo}
       onSaveBest3={updateBest3}
@@ -6881,6 +6955,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         go={go}
         profileBookInfo={profileBookInfo}
         best3={best3}
+        monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items }}
         profileQuestions={profileQuestions}
         avatarUrl={avatarUrl}
         favoritePhotos={favoritePhotos}
@@ -6932,6 +7007,7 @@ return <ProfileScreen
   go={go}
   profileBookInfo={profileBookInfo}
   best3={best3}
+  monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items }}
   profileQuestions={profileQuestions}
   avatarUrl={avatarUrl}
   favoritePhotos={favoritePhotos}
