@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, saveProfileBook, signOut } from '@/lib/db';
+import { dbReady, getMyProfile, saveProfileBook, signOut, getFeed, upsertAnswer, type AnswerRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -211,6 +211,27 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
   'favoriteArtist', 'favoriteManga', 'favoriteGame', 'specialty', 'personality',
   'catchphrase', 'message',
 ];
+
+// Supabase の回答行(AnswerRow)を、アプリ内の Answer 形に変換する
+function feedRowToAnswer(row: AnswerRow): Answer {
+  const reactions = { like: 0, same: 0, wakaru: 0, natsukashii: 0 };
+  for (const r of row.reactions ?? []) {
+    if (r.type in reactions) (reactions as any)[r.type]++;
+  }
+  const prof = row.profile;
+  const bodyText = row.sticker ? `${row.sticker} ${row.body ?? ''}` : (row.body ?? '');
+  return {
+    id: row.id,
+    question: { id: row.question_key, category: row.question_category ?? '', title: row.question_title, sponsor: null },
+    body: bodyText,
+    user: {
+      name: prof?.display_name ?? 'ゲスト',
+      id: prof ? '@' + prof.username : '@unknown',
+      avatar: prof?.avatar_url || '📷',
+    },
+    reactions,
+  } as Answer;
+}
 
 type PremiumSection = {
   price: number;
@@ -6333,6 +6354,16 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     window.localStorage.setItem('profilebook_answers_v2', JSON.stringify(answers));
   }, [answers]);
 
+  // みんなの回答フィードを Supabase から読み込む（共有SNSの核）
+  async function reloadFeed() {
+    if (!dbReady()) return;
+    try {
+      const rows = await getFeed(100);
+      setAnswers(rows.map(feedRowToAnswer));
+    } catch { /* ネットワーク等は無視（ローカル表示を維持） */ }
+  }
+  useEffect(() => { void reloadFeed(); }, []);
+
   // ── トースト ──────────────────────────────────────────────────
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   function showToast(message: string, type: ToastItem['type'] = 'success') {
@@ -6389,6 +6420,9 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   function go(next: Screen, payload?: any) {
   setScreen(next);
 
+  // ホーム/さがすに移動したらフィードを最新化（みんなの回答を反映）
+  if (next === 'home' || next === 'search') { void reloadFeed(); }
+
   if (next === 'detail' && payload) {
     setSelectedAnswerId(payload);
   }
@@ -6428,6 +6462,19 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   };
 
   setAnswers((prev) => [newAnswer, ...prev]);
+
+  // Supabase に保存して共有（PR案件回答は共有対象外）。
+  // 楽観的にローカル表示済みなので、ここでは保存のみ（フィードは次回起動/再訪で同期）。
+  if (dbReady() && !draft.questionId.startsWith('pr-')) {
+    void upsertAnswer({
+      question_key: q.id,
+      question_title: q.title,
+      question_category: (q as any).category ?? null,
+      body: draft.body,
+      sticker: draft.sticker,
+      visibility: draft.visibility,
+    });
+  }
 
   // PR案件への回答かチェック
   if (draft.questionId.startsWith('pr-')) {
