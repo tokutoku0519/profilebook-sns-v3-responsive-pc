@@ -19,7 +19,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
     return this.props.children;
   }
 }
-import { ArrowLeft, Bell, Bookmark, Home, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, Bookmark, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
@@ -3703,7 +3703,7 @@ function DetailScreen({
   );
 }
 
-function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount, coins, lang }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number; coins: number; lang: Lang }) {
+function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount, coins, lang, onLogout }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number; coins: number; lang: Lang; onLogout: () => void }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
   return (
@@ -3720,8 +3720,8 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
         {avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : '📷'}
       </div>
       <div>
-        <p className="text-xl font-black text-ink">Koki</p>
-        <p className="text-sm font-bold text-muted">@koki</p>
+        <p className="text-xl font-black text-ink">{me.name}</p>
+        <p className="text-sm font-bold text-muted">{me.id}</p>
       </div>
     </div>
     <span className="text-xs font-black text-pink">{t('btn_view_profile_book', lang)}</span>
@@ -3778,6 +3778,20 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
             <p className="text-xs font-black text-white/90">{t('coins_earn', lang)} →</p>
             <p className="text-[10px] font-bold text-white/70">{t('btn_coin_history', lang)}</p>
           </div>
+        </button>
+
+        {/* ログアウト（コインウォレットと同列に配置して分かりやすく） */}
+        <button
+          onClick={onLogout}
+          className="flex w-full items-center justify-between rounded-[24px] border-2 border-red-200 bg-white px-5 py-4 shadow-card transition active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-red-50 text-red-500">
+              <LogOut size={18} />
+            </span>
+            <p className="text-sm font-black text-red-500">ログアウト</p>
+          </div>
+          <span className="text-xs font-black text-red-400">→</span>
         </button>
 
         <div className="grid grid-cols-2 gap-3">
@@ -6609,7 +6623,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
     if (screen === 'notifications') return <NotificationsScreen go={go} notifications={notifications} />;
     if (screen === 'followers') return <FollowersScreen go={go} lang={lang} />;
-    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} />;
+    if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} onLogout={logout} />;
     if (screen === 'shop') return (
       <ShopScreen
         go={go}
