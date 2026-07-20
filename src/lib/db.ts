@@ -53,9 +53,16 @@ export async function signOut(): Promise<void> {
 export async function getCurrentUserId(): Promise<string | null> {
   if (!supabase) return null;
   // getSession はローカルの保存済みセッションを確実に返す（getUser はネットワーク検証で
-  // 起動直後にレースしやすい）。
+  // 起動直後にレースしやすい）。期限切れなら supabase-js が自動リフレッシュを試みる。
   const { data } = await supabase.auth.getSession();
   return data.session?.user?.id ?? null;
+}
+
+/** 有効な Supabase セッションがあるか（自動ログインでも期限切れなら false）。 */
+export async function hasValidSession(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getSession();
+  return !!data.session?.user?.id;
 }
 
 // ── ID（username）の空き確認 ─────────────────────────────

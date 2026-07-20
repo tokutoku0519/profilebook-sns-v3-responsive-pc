@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, type AnswerRow, type ProfileRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, type AnswerRow, type ProfileRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -5932,6 +5932,18 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     if (!dbReady()) return;
     let cancelled = false;
     (async () => {
+      // セッション切れ検知：miri_auth クッキーで「ログイン中」に見えても Supabase セッションが
+      // 失効していると回答が保存されず“自分の回答だけ”になる。明示的に再ログインを促す。
+      try {
+        const looksLoggedIn = document.cookie.includes('miri_auth=1') || !!localStorage.getItem('miri_username');
+        if (!isDev && looksLoggedIn) {
+          const ok = await hasValidSession();
+          if (!cancelled && !ok) {
+            showToast('⚠️ ログインの有効期限が切れています。ログインし直すと回答が正しく共有されます');
+          }
+        }
+      } catch {}
+
       const p = await getMyProfile();
       if (cancelled || !p) return;
       me.id = '@' + p.username;
@@ -6587,7 +6599,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   });
 
   // Supabase に保存して共有（PR案件回答は共有対象外）。
-  // 楽観的にローカル表示済みなので、ここでは保存のみ（フィードは次回起動/再訪で同期）。
+  // 楽観的にローカル表示済み。保存結果を確認し、失敗（＝セッション切れ等）は明示的に通知する。
   if (dbReady() && !draft.questionId.startsWith('pr-')) {
     void upsertAnswer({
       question_key: q.id,
@@ -6596,6 +6608,14 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       body: draft.body,
       sticker: draft.sticker,
       visibility: draft.visibility,
+    }).then((saved) => {
+      if (!saved) {
+        // セッション切れ等で共有できなかった。黙って握りつぶさず再ログインを促す。
+        showToast('⚠️ 回答を共有できませんでした。ログインし直してからもう一度お試しください');
+      } else {
+        // 共有フィードをすぐ同期（他ユーザーの回答も取り込む）
+        void reloadFeed();
+      }
     });
   }
 
