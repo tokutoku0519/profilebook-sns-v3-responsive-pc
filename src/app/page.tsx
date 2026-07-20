@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { isDev } from '@/lib/env';
 import { TERMS_VERSION } from '@/lib/terms';
+import { getMyProfile } from '@/lib/db';
 
 function setAuthCookie() {
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
@@ -76,12 +77,14 @@ export default function Page() {
     } else {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
-      // 既存ユーザー: localStorage になければ UUID 先頭を仮IDとして使う
-      const stored = (() => { try { return localStorage.getItem('miri_username'); } catch { return null; } })();
-      if (!stored) {
-        const fallbackId = data.user?.id?.split('-')[0] || 'me';
-        try { localStorage.setItem('miri_username', fallbackId); } catch {}
-      }
+      // ログインユーザーのプロフィール（ID・表示名）を Supabase から取得して localStorage に反映。
+      // これが無いと表示が既定(Koki)のままになる。
+      const prof = await getMyProfile();
+      try {
+        if (prof?.username) localStorage.setItem('miri_username', prof.username);
+        else if (!localStorage.getItem('miri_username')) localStorage.setItem('miri_username', data.user?.id?.split('-')[0] || 'me');
+        if (prof?.display_name) localStorage.setItem('miri_displayname', prof.display_name);
+      } catch {}
       setAuthCookie();
       router.push('/welcome');
     }

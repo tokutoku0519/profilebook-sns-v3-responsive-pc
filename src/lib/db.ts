@@ -52,8 +52,10 @@ export async function signOut(): Promise<void> {
 // ── 認証中ユーザー ────────────────────────────────────────
 export async function getCurrentUserId(): Promise<string | null> {
   if (!supabase) return null;
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+  // getSession はローカルの保存済みセッションを確実に返す（getUser はネットワーク検証で
+  // 起動直後にレースしやすい）。
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
 }
 
 // ── ID（username）の空き確認 ─────────────────────────────
