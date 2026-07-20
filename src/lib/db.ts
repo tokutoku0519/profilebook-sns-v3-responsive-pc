@@ -154,21 +154,69 @@ export async function upsertAnswer(a: {
   return data as AnswerRow;
 }
 
-/** みんなの回答フィード（新着順）。profile とリアクションを同時取得。 */
-export async function getFeed(limit = 50): Promise<AnswerRow[]> {
-  if (!supabase) return [];
+// 回答行に profile とリアクションを付与する（埋め込み結合に頼らず別クエリでマージ）。
+async function attachProfilesAndReactions(rows: any[]): Promise<AnswerRow[]> {
+  if (!supabase || rows.length === 0) return rows as AnswerRow[];
+  const userIds = [...new Set(rows.map((r) => r.user_id))];
+  const answerIds = rows.map((r) => r.id);
+  const [profRes, reactRes] = await Promise.all([
+    supabase.from('profiles').select('id,username,display_name,avatar_url,titles,is_official').in('id', userIds),
+    supabase.from('reactions').select('answer_id,type,user_id').in('answer_id', answerIds),
+  ]);
+  const profMap = new Map((profRes.data ?? []).map((p: any) => [p.id, p]));
+  const reactByAnswer = new Map<string, { type: string; user_id: string }[]>();
+  for (const r of (reactRes.data ?? []) as any[]) {
+    const arr = reactByAnswer.get(r.answer_id) ?? [];
+    arr.push({ type: r.type, user_id: r.user_id });
+    reactByAnswer.set(r.answer_id, arr);
+  }
+  return rows.map((r) => ({
+    ...r,
+    profile: profMap.get(r.user_id) as any,
+    reactions: reactByAnswer.get(r.id) ?? [],
+  })) as AnswerRow[];
+}
+
+/** みんなの回答フィード（新着順）。エラー時は null（呼び出し側で既存表示を維持できる）。 */
+export async function getFeed(limit = 50): Promise<AnswerRow[] | null> {
+  if (!supabase) return null;
   const { data, error } = await supabase
     .from('answers')
-    .select(
-      'id,user_id,question_key,question_title,question_category,body,sticker,visibility,created_at,' +
-        'profile:profiles(id,username,display_name,avatar_url,titles,is_official),' +
-        'reactions(type,user_id)'
-    )
+    .select('id,user_id,question_key,question_title,question_category,body,sticker,visibility,created_at')
     .neq('visibility', 'private')
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (error) return [];
-  return (data ?? []) as unknown as AnswerRow[];
+  if (error || !data) return null;
+  return attachProfilesAndReactions(data);
+}
+
+/** 自分の、あるお題への既存回答（編集用の前入力に使う）。無ければ null。 */
+export async function getMyAnswer(questionKey: string): Promise<AnswerRow | null> {
+  if (!supabase) return null;
+  const uid = await getCurrentUserId();
+  if (!uid) return null;
+  const { data, error } = await supabase
+    .from('answers')
+    .select('id,user_id,question_key,question_title,question_category,body,sticker,visibility,created_at')
+    .eq('user_id', uid)
+    .eq('question_key', questionKey)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as AnswerRow;
+}
+
+/** ユーザー検索（username / display_name の部分一致）。 */
+export async function searchProfiles(query: string, limit = 20): Promise<ProfileRow[]> {
+  if (!supabase) return [];
+  const safe = query.trim().replace(/[,()%*]/g, '');
+  if (!safe) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,username,display_name,avatar_url,cover_theme,book,is_official,titles')
+    .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%`)
+    .limit(limit);
+  if (error || !data) return [];
+  return data as ProfileRow[];
 }
 
 /** 特定ユーザーの回答一覧 */
@@ -176,11 +224,11 @@ export async function getAnswersByUser(userId: string): Promise<AnswerRow[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from('answers')
-    .select('id,user_id,question_key,question_title,question_category,body,sticker,visibility,created_at,reactions(type,user_id)')
+    .select('id,user_id,question_key,question_title,question_category,body,sticker,visibility,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (error) return [];
-  return (data ?? []) as unknown as AnswerRow[];
+  if (error || !data) return [];
+  return attachProfilesAndReactions(data);
 }
 
 // ── リアクション ─────────────────────────────────────────

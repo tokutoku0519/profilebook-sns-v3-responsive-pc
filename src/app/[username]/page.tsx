@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, saveProfileBook, signOut, getFeed, upsertAnswer, type AnswerRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, type AnswerRow, type ProfileRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -231,6 +231,18 @@ function feedRowToAnswer(row: AnswerRow): Answer {
     },
     reactions,
   } as Answer;
+}
+
+// Supabase の profiles 行 → アプリ内の簡易 Profile（検索結果・外部プロフ表示用）
+function rowToMiniProfile(p: ProfileRow): Profile {
+  const book: Record<string, any> = p.book || {};
+  return {
+    name: p.display_name || p.username,
+    id: '@' + p.username,
+    avatar: p.avatar_url || '📷',
+    bio: book.message || book.personality || book.hobby || '',
+    common: book.hobby || book.favoriteFood || '',
+  } as Profile;
 }
 
 type PremiumSection = {
@@ -1120,8 +1132,29 @@ function SearchScreen({ go, answers, myProfile }: {
     `${a.body} ${a.question?.title ?? ''} ${a.user.name}`.toLowerCase().includes(query.toLowerCase())
     && (!selectedOdaiId || a.question?.id === selectedOdaiId)
   );
-  const filteredProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
+  const localProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
   const filteredQuestions = questions.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
+
+  // なかま検索：Supabase の実ユーザーも検索（入力が止まってから照会）
+  const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (mode !== 'person' || !q || !dbReady()) { setDbProfiles([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const rows = await searchProfiles(q);
+      if (!cancelled) setDbProfiles(rows.map(rowToMiniProfile));
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, mode]);
+
+  // ローカル（ダミー）＋Supabaseをマージ（id重複は排除）
+  const filteredProfiles = useMemo(() => {
+    const seen = new Set(localProfiles.map((p) => p.id));
+    const merged = [...localProfiles];
+    for (const p of dbProfiles) { if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); } }
+    return merged;
+  }, [localProfiles, dbProfiles]);
 
   // 共通点マッチング
   const matches = useMemo(() => {
@@ -1335,6 +1368,24 @@ function CreateScreen({
     if (question?.id) {
       setDraft((prev) => ({ ...prev, questionId: question.id }));
     }
+  }, [question]);
+
+  // 既にこのお題へ回答済みなら、その内容を前入力（＝編集できる）
+  useEffect(() => {
+    const qid = question?.id;
+    if (!qid || !dbReady()) return;
+    let cancelled = false;
+    getMyAnswer(qid).then((row) => {
+      if (cancelled || !row) return;
+      setDraft((prev) => ({
+        ...prev,
+        questionId: qid,
+        body: row.body ?? '',
+        sticker: row.sticker || prev.sticker,
+        visibility: (row.visibility as DraftAnswer['visibility']) ?? 'public',
+      }));
+    });
+    return () => { cancelled = true; };
   }, [question]);
 
   const selectedQuestion =
@@ -5773,6 +5824,8 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   });
   const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0]?.id ?? '');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  // モックに居ない（＝Supabase上の実ユーザー）を開いたときに読み込むプロフィール
+  const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
@@ -6359,7 +6412,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (!dbReady()) return;
     try {
       const rows = await getFeed(100);
-      setAnswers(rows.map(feedRowToAnswer));
+      if (rows) setAnswers(rows.map(feedRowToAnswer)); // null(エラー)なら既存表示を維持
     } catch { /* ネットワーク等は無視（ローカル表示を維持） */ }
   }
   useEffect(() => { void reloadFeed(); }, []);
@@ -6432,7 +6485,21 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   if (next === 'profile') {
-    setSelectedProfileId(payload && payload !== me.id ? payload : null);
+    const pid = payload && payload !== me.id ? payload : null;
+    setSelectedProfileId(pid);
+    // モック（ダミー）に居ない実ユーザーは Supabase から読み込む
+    if (pid) {
+      const inMock = [...profiles, ...followers].some((p) => p.id === pid);
+      if (!inMock && dbReady()) {
+        setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
+        const username = String(pid).replace(/^@/, '');
+        getProfileByUsername(username).then((row) => {
+          if (row) setViewedProfile(rowToMiniProfile(row));
+        });
+      }
+    } else {
+      setViewedProfile(null);
+    }
   }
 
   if (next === 'diary-detail' && payload) {
@@ -6461,7 +6528,16 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     reactions: { like: 0, same: 0, wakaru: 0, natsukashii: 0 },
   };
 
-  setAnswers((prev) => [newAnswer, ...prev]);
+  // 既に同じお題へ回答済みなら「編集」（上書き）、無ければ新規追加。
+  setAnswers((prev) => {
+    const idx = prev.findIndex((a) => a.user.id === me.id && a.question?.id === q.id);
+    if (idx >= 0) {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], body: newAnswer.body };
+      return copy;
+    }
+    return [newAnswer, ...prev];
+  });
 
   // Supabase に保存して共有（PR案件回答は共有対象外）。
   // 楽観的にローカル表示済みなので、ここでは保存のみ（フィードは次回起動/再訪で同期）。
@@ -6682,8 +6758,15 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   );
     if (screen === 'profile') {
       if (selectedProfileId) {
-        const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId);
+        const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId)
+          ?? (viewedProfile && viewedProfile.id === selectedProfileId ? viewedProfile : null);
         if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} lang={lang} />;
+        // Supabase から読み込み中
+        return (
+          <div className="flex min-h-[60vh] items-center justify-center">
+            <span className="text-3xl animate-pulse">🎀</span>
+          </div>
+        );
       }
       return <ProfileScreen
         go={go}
