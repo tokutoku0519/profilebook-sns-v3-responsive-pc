@@ -1910,17 +1910,21 @@ function ProfileBookContent({
               : avatarEmoji}
           </div>
           <div className="min-w-0">
-            <p className="text-xl font-black text-ink leading-tight">{info.name}</p>
-            <p className="text-xs font-bold text-muted">{info.nickname} / {userId}</p>
-            <p className={`mt-2 inline-block rounded-full bg-white/80 px-3 py-1 text-xs font-bold ${accent}`}>
-              {info.catchphrase}
-            </p>
+            <p className="text-xl font-black text-ink leading-tight">{info.name || info.nickname || userId}</p>
+            <p className="text-xs font-bold text-muted">{info.name && info.nickname ? `${info.nickname} / ${userId}` : userId}</p>
+            {info.catchphrase && (
+              <p className={`mt-2 inline-block rounded-full bg-white/80 px-3 py-1 text-xs font-bold ${accent}`}>
+                {info.catchphrase}
+              </p>
+            )}
           </div>
         </div>
-        {/* ひとこと帯 */}
-        <div className="relative mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
-          ✉ {translatedInfo.message ?? info.message}
-        </div>
+        {/* ひとこと帯（未入力なら非表示） */}
+        {(translatedInfo.message ?? info.message) && (
+          <div className="relative mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
+            ✉ {translatedInfo.message ?? info.message}
+          </div>
+        )}
         {bgTheme && (
           <div className="relative mt-2 flex justify-end">
             <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.floaters[0] && <ThemeArt art={bgTheme.floaters[0].art} size={12} />}{bgTheme.name}</span>
