@@ -6059,9 +6059,10 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       me.name = p.display_name;
       me.isOfficial = !!p.is_official;
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
-      if (p.book && typeof p.book === 'object' && Object.keys(p.book).length > 0) {
+      const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
+      const { __best3, __monthly, __questions, ...info } = book;
+      if (Object.keys(book).length > 0) {
         // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
-        const { __best3, __monthly, __questions, ...info } = p.book as any;
         if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
         // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
         if (__monthly && __monthly.monthKey === currentMonthInfo().monthKey) {
@@ -6073,6 +6074,24 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
           setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...info }));
         }
       }
+
+      // ── 旧バージョンで端末だけに保存されたプロフ帳を Supabase へ自動移行 ──
+      // サーバーの book が実質空で、端末に入力済みデータがあるときのみ一度アップロードする。
+      try {
+        const serverHasData =
+          !!__best3 || !!__monthly || !!__questions ||
+          Object.values(info).some((v: any) => typeof v === 'string' && v.trim());
+        const localInfo = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
+        const localHasInfo = Object.values(localInfo).some((v: any) => typeof v === 'string' && v.trim());
+        const localB3 = JSON.parse(localStorage.getItem('best3') || 'null');
+        const localHasB3 = localB3 && Object.values(localB3).some((arr: any) => Array.isArray(arr) && arr.some((v: string) => v && v.trim()));
+        const localMo = JSON.parse(localStorage.getItem('miri_monthly_best3') || 'null');
+        const localHasMo = localMo && Array.isArray(localMo.items) && localMo.items.some((v: string) => v && v.trim());
+        if (!cancelled && !serverHasData && (localHasInfo || localHasB3 || localHasMo)) {
+          persistBook(); // 端末のデータをサーバーへ移行
+        }
+      } catch {}
+
       setMeVersion((v) => v + 1);
     })();
     return () => { cancelled = true; };
