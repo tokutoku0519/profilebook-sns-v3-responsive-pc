@@ -1818,6 +1818,7 @@ function ProfileBookContent({
   info,
   best3,
   monthlyBest3 = null,
+  isSelf = false,
   questions,
   answers,
   avatarEmoji,
@@ -1833,6 +1834,7 @@ function ProfileBookContent({
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
   monthlyBest3?: { theme: string; label: string; items: string[] } | null;
+  isSelf?: boolean;
   questions: Array<{ q: string; a: string }>;
   answers: Answer[];
   avatarEmoji: string;
@@ -1994,38 +1996,47 @@ function ProfileBookContent({
       )}
 
       {/* ── 今月のBEST3（固定テーマ・毎月切替） ── */}
-      {monthlyBest3 && monthlyBest3.items.some((v) => v.trim()) && (
+      {monthlyBest3 && (monthlyBest3.items.some((v) => v.trim()) || isSelf) && (
         <section className="rounded-[28px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
           <div className="mb-2 flex items-center gap-2">
             <span className="rounded-full bg-pink/15 px-3 py-1 text-[10px] font-black text-pink">🗓️ {monthlyBest3.label}のBEST3</span>
           </div>
           <p className="mb-3 text-sm font-black text-ink">{monthlyBest3.theme}</p>
-          <div className="space-y-1 pl-1">
-            {monthlyBest3.items.map((item, i) => item.trim() && (
-              <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
-            ))}
-          </div>
+          {monthlyBest3.items.some((v) => v.trim()) ? (
+            <div className="space-y-1 pl-1">
+              {monthlyBest3.items.map((item, i) => item.trim() && (
+                <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から今月のテーマで書けます。</p>
+          )}
         </section>
       )}
 
       {/* ── BEST3 ── */}
-      {BEST3_CATEGORIES.some((c) => (best3[c.key] ?? []).some((v) => v.trim())) && (
+      {(isSelf || BEST3_CATEGORIES.some((c) => (best3[c.key] ?? []).some((v) => v.trim()))) && (
         <section className="rounded-[28px] bg-white p-5 shadow-card">
           <ProfSectionHeader icon="★" title="すきなもの BEST3" theme={themeColor} />
-          {BEST3_CATEGORIES.map((cat) => {
-            const items = (best3[cat.key] ?? []).filter((v) => v.trim());
-            if (items.length === 0) return null;
-            return (
-              <div key={cat.key} className="mb-3">
-                <p className={`mb-1.5 text-xs font-black ${accent}`}>{cat.emoji} {cat.label}</p>
-                <div className="space-y-1 pl-1">
-                  {items.map((item, i) => (
-                    <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
-                  ))}
+          {(() => {
+            const filled = BEST3_CATEGORIES.filter((c) => (best3[c.key] ?? []).some((v) => v.trim()));
+            if (filled.length === 0) {
+              return <p className="text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から好きなものを追加できます。</p>;
+            }
+            return filled.map((cat) => {
+              const items = (best3[cat.key] ?? []).filter((v) => v.trim());
+              return (
+                <div key={cat.key} className="mb-3">
+                  <p className={`mb-1.5 text-xs font-black ${accent}`}>{cat.emoji} {cat.label}</p>
+                  <div className="space-y-1 pl-1">
+                    {items.map((item, i) => (
+                      <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </section>
       )}
 
@@ -2398,6 +2409,7 @@ function ProfileScreen({
         info={profileBookInfo}
         best3={best3}
         monthlyBest3={monthlyBest3}
+        isSelf
         questions={profileQuestions}
         answers={[]}
         avatarEmoji={me.avatar}
@@ -6030,7 +6042,18 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       me.isOfficial = !!p.is_official;
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       if (p.book && typeof p.book === 'object' && Object.keys(p.book).length > 0) {
-        setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...(p.book as any) }));
+        // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
+        const { __best3, __monthly, __questions, ...info } = p.book as any;
+        if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
+        // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
+        if (__monthly && __monthly.monthKey === currentMonthInfo().monthKey) {
+          setMonthlyBest3(__monthly);
+          try { localStorage.setItem('miri_monthly_best3', JSON.stringify(__monthly)); } catch {}
+        }
+        if (__questions) { setProfileQuestions(__questions); try { localStorage.setItem('profileQuestions', JSON.stringify(__questions)); } catch {} }
+        if (Object.keys(info).length > 0) {
+          setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...info }));
+        }
       }
       setMeVersion((v) => v + 1);
     })();
@@ -6444,12 +6467,29 @@ function createCommunityQuestion(title: string, description: string, answerType:
   localStorage.setItem('communityQuestions', JSON.stringify(next));
 }
 
+// プロフ帳一式（info＋BEST3＋今月のBEST3＋ひとことしつもん）を Supabase の book にまとめて保存。
+// 各 update 関数は localStorage を先に更新してから呼ぶので、ここでは localStorage を正として組み立てる。
+// （state はバッチ更新で直後は古い可能性があるため localStorage を参照する）
+function persistBook() {
+  if (!dbReady()) return;
+  try {
+    const info = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
+    const book: Record<string, any> = { ...info };
+    const b3 = localStorage.getItem('best3');
+    const mo = localStorage.getItem('miri_monthly_best3');
+    const qs = localStorage.getItem('profileQuestions');
+    if (b3) book.__best3 = JSON.parse(b3);
+    if (mo) book.__monthly = JSON.parse(mo);
+    if (qs) book.__questions = JSON.parse(qs);
+    void saveProfileBook(book);
+  } catch {}
+}
+
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   rewardNewlyFilledFields(next); // 新しく埋めた項目にコイン付与
   setProfileBookInfo(next);
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
-  // Supabase にも保存（永続化・端末間で引き継ぎ）。best-effort。
-  if (dbReady()) { void saveProfileBook(next as any); }
+  persistBook(); // Supabase にも保存（永続化・端末間で引き継ぎ）
 }
 
 // プロフィール帳の項目を「初めて」埋めたぶんだけコインを付与（重複取得なし）
@@ -6509,6 +6549,7 @@ const [best3, setBest3] = useState(() => {
 function updateBest3(next: typeof defaultBest3) {
   setBest3(next);
   localStorage.setItem('best3', JSON.stringify(next));
+  persistBook();
 }
 
 // 今月のBEST3（固定テーマを毎月切替）。保存済みが今月のものでなければ空で開始。
@@ -6528,6 +6569,7 @@ function updateMonthlyBest3(items: string[]) {
   const rec: MonthlyBest3 = { monthKey, items };
   setMonthlyBest3(rec);
   localStorage.setItem('miri_monthly_best3', JSON.stringify(rec));
+  persistBook();
 }
 
 const [profileQuestions, setProfileQuestions] = useState(() => {
@@ -6538,6 +6580,7 @@ const [profileQuestions, setProfileQuestions] = useState(() => {
 function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   setProfileQuestions(next);
   localStorage.setItem('profileQuestions', JSON.stringify(next));
+  persistBook();
 }
 
   useEffect(() => {
