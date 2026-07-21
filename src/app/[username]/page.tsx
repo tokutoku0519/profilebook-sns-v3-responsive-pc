@@ -2106,6 +2106,7 @@ function OtherProfileScreen({
   circles = [],
   exchanged = false,
   onExchange,
+  supabaseBook = null,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -2118,6 +2119,7 @@ function OtherProfileScreen({
   circles?: Circle[];
   exchanged?: boolean;
   onExchange?: (userId: string) => void;
+  supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null;
   lang?: Lang;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
@@ -2125,19 +2127,32 @@ function OtherProfileScreen({
 
   const book = mockProfileBooks[profile.id];
   const theirAnswers = answers.filter((a) => a.user.id === profile.id);
+  // Supabase から取得した本人のプロフ帳があれば優先。無ければモック／簡易合成。
+  const hasSb = !!supabaseBook && !!supabaseBook.info && Object.keys(supabaseBook.info).length > 0;
   const info = {
-    ...(book?.info ?? {
-      ...defaultProfileBookInfo,
-      name: profile.name,
-      nickname: profile.name,
-      message: profile.bio,
-      catchphrase: `「${profile.common}」`,
-    }),
-    attribute: book?.info?.attribute ?? 'highschool',
-    activity: book?.info?.activity ?? '',
+    ...(hasSb
+      ? { ...defaultProfileBookInfo, ...supabaseBook!.info }
+      : book?.info ?? {
+          ...defaultProfileBookInfo,
+          name: profile.name,
+          nickname: profile.name,
+          message: profile.bio,
+          catchphrase: `「${profile.common}」`,
+        }),
+    attribute: (hasSb ? supabaseBook!.info!.attribute : book?.info?.attribute) ?? 'highschool',
+    activity: (hasSb ? supabaseBook!.info!.activity : book?.info?.activity) ?? '',
   };
-  const best3 = book?.best3 ?? { tv: [], food: [], places: [], music: [] };
-  const questions = book?.questions ?? [];
+  const best3 = supabaseBook?.best3 ?? book?.best3 ?? {};
+  const questions = supabaseBook?.questions ?? book?.questions ?? [];
+  // 相手の「今月のBEST3」（今月のぶんのみ表示）
+  const otherMonthly = (() => {
+    const m = supabaseBook?.monthly;
+    const cur = currentMonthInfo();
+    if (m && m.monthKey === cur.monthKey && m.items.some((v) => v.trim())) {
+      return { theme: cur.theme, label: cur.label, items: m.items };
+    }
+    return null;
+  })();
   const themeColor = book?.themeColor ?? 'pink';
   const premium = book?.premium;
   const isSubscribed = subscribedOfficials.includes(profile.id) || (me.isOfficial && book?.isOfficial === true);
@@ -2260,6 +2275,7 @@ function OtherProfileScreen({
       <ProfileBookContent
         info={info}
         best3={best3}
+        monthlyBest3={otherMonthly}
         questions={questions}
         answers={theirAnswers}
         avatarEmoji={profile.avatar}
@@ -5951,6 +5967,8 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   // モックに居ない（＝Supabase上の実ユーザー）を開いたときに読み込むプロフィール
   const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
+  // 開いている他ユーザーの Supabase プロフ帳（info/BEST3/今月/しつもん）
+  const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
@@ -6686,16 +6704,25 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setSelectedProfileId(pid);
     if (!pid) {
       setViewedProfile(null);
+      setViewedProfileBook(null);
     } else {
       // 既に持っている情報があれば即時表示（スピナーで固まらない）。
       if (payloadObj) setViewedProfile(payloadObj);
       else setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
+      setViewedProfileBook(null); // 別ユーザーを開くので一旦クリア
       // モックに居なければ Supabase から詳細を取得して差し替え（失敗しても即時表示は維持）。
       const inMock = [...profiles, ...followers].some((p) => p.id === pid);
       if (!inMock && dbReady()) {
         const username = String(pid).replace(/^@/, '');
         getProfileByUsername(username).then((row) => {
-          if (row) setViewedProfile(rowToMiniProfile(row));
+          if (!row) return;
+          setViewedProfile(rowToMiniProfile(row));
+          // book(jsonb) を info / BEST3 / 今月 / しつもん に分解して保持
+          const b: any = row.book;
+          if (b && typeof b === 'object') {
+            const { __best3, __monthly, __questions, ...info } = b;
+            setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions });
+          }
         }).catch(() => {});
       }
     }
@@ -6986,7 +7013,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId)
           ?? (viewedProfile && viewedProfile.id === selectedProfileId ? viewedProfile : null);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} lang={lang} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} supabaseBook={viewedProfileBook} lang={lang} />;
         // Supabase から読み込み中
         return (
           <div className="flex min-h-[60vh] items-center justify-center">
@@ -7070,6 +7097,8 @@ return <ProfileScreen
   diaryPages,
   selectedDiary,
   selectedProfileId,
+  viewedProfile,
+  viewedProfileBook,
   appTheme,
   circles,
   circlePosts,
