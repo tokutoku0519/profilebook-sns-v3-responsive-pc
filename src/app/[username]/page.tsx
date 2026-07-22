@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, type AnswerRow, type ProfileRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -2111,6 +2111,7 @@ function OtherProfileScreen({
   exchanged = false,
   onExchange,
   supabaseBook = null,
+  targetUid = null,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -2124,10 +2125,27 @@ function OtherProfileScreen({
   exchanged?: boolean;
   onExchange?: (userId: string) => void;
   supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null;
+  targetUid?: string | null;
   lang?: Lang;
 }) {
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
   const [isFollowing, setIsFollowing] = useState(alreadyFollowing);
+
+  // Supabase 上の実ユーザーはフォロー状態をサーバーから復元
+  useEffect(() => {
+    if (!dbReady() || !targetUid) return;
+    let cancelled = false;
+    getFollowingIds().then((ids) => { if (!cancelled) setIsFollowing(ids.includes(targetUid)); });
+    return () => { cancelled = true; };
+  }, [targetUid]);
+
+  function toggleFollow() {
+    const next = !isFollowing;
+    setIsFollowing(next); // 楽観
+    if (dbReady() && targetUid) {
+      if (next) void dbFollow(targetUid); else void dbUnfollow(targetUid);
+    }
+  }
 
   const book = mockProfileBooks[profile.id];
   const theirAnswers = answers.filter((a) => a.user.id === profile.id);
@@ -2197,7 +2215,7 @@ function OtherProfileScreen({
       <AppHeader title={`${profile.name}のプロフ帳`} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="flex gap-2 px-4 pt-2">
         <button
-          onClick={() => setIsFollowing((v) => !v)}
+          onClick={toggleFollow}
           className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
             isFollowing
               ? 'bg-base text-pink ring-2 ring-pink'
@@ -3807,30 +3825,41 @@ function Best3EditBlock({
 }
 
 function DetailScreen({
-  go, answer, onReact, isBookmarked, onToggleBookmark, onShare,
+  go, answer, onReact, myReaction, isBookmarked, onToggleBookmark, onShare,
 }: {
   go: (s: Screen, payload?: any) => void;
   answer: Answer;
-  onReact: (answerId: string, type: keyof Answer['reactions'], prev: keyof Answer['reactions'] | null) => void;
+  onReact: (answerId: string, type: keyof Answer['reactions']) => void;
+  myReaction: keyof Answer['reactions'] | null;
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
   onShare: (text: string) => void;
 }) {
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState(['これ完全にわかる、揚げパンの日だけ給食楽しみだった。']);
-  const [reacted, setReacted] = useState<keyof Answer['reactions'] | null>(null);
+  const [comments, setComments] = useState<CommentRow[]>([]);
 
-  function react(type: keyof Answer['reactions']) {
-    const prev = reacted;
-    const next = prev === type ? null : type;
-    setReacted(next);
-    onReact(answer.id, type, prev);
-  }
+  // コメントを Supabase から読み込み（ローカル生成の回答 a-... は対象外）
+  useEffect(() => {
+    if (!dbReady() || answer.id.startsWith('a-')) { setComments([]); return; }
+    let cancelled = false;
+    getComments(answer.id).then((cs) => { if (!cancelled) setComments(cs); });
+    return () => { cancelled = true; };
+  }, [answer.id]);
 
-  function addComment() {
-    if (!comment.trim()) return;
-    setComments([comment.trim(), ...comments]);
+  async function addComment() {
+    const body = comment.trim();
+    if (!body) return;
     setComment('');
+    // 楽観追加
+    const optimistic: CommentRow = {
+      id: 'tmp-' + Date.now(), answer_id: answer.id, user_id: 'me', body,
+      created_at: new Date().toISOString(),
+      profile: { username: me.id.replace(/^@/, ''), display_name: me.name, avatar_url: me.avatar } as any,
+    };
+    setComments((cs) => [...cs, optimistic]);
+    if (dbReady() && !answer.id.startsWith('a-')) {
+      await dbAddComment(answer.id, body);
+    }
   }
 
   return (
@@ -3842,8 +3871,8 @@ function DetailScreen({
         {/* リアクション */}
         <div className="grid grid-cols-4 gap-2">
           {(['like','same','wakaru','natsukashii'] as const).map((type) => (
-            <button key={type} onClick={() => react(type)}
-              className={`rounded-full py-3 text-xs font-black shadow-card transition ${reacted === type ? 'bg-pink text-white' : 'bg-white'}`}>
+            <button key={type} onClick={() => onReact(answer.id, type)}
+              className={`rounded-full py-3 text-xs font-black shadow-card transition ${myReaction === type ? 'bg-pink text-white' : 'bg-white'}`}>
               {type === 'like' ? '♡ すき' : type === 'same' ? '同じ' : type === 'wakaru' ? 'わかる' : '懐かしい'}
             </button>
           ))}
@@ -3874,7 +3903,15 @@ function DetailScreen({
               placeholder="コメントする" className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" />
             <button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">送信</button>
           </div>
-          <div className="space-y-2">{comments.map((c, i) => <p key={i} className="rounded-2xl bg-blue-50 p-3 text-sm">{c}</p>)}</div>
+          <div className="space-y-2">
+            {comments.length === 0 && <p className="py-2 text-center text-xs font-bold text-muted">まだコメントはありません。最初のひとことを！</p>}
+            {comments.map((c) => (
+              <div key={c.id} className="rounded-2xl bg-blue-50 p-3">
+                <p className="mb-0.5 text-[11px] font-black text-muted">{c.profile?.display_name ?? 'ゲスト'}</p>
+                <p className="text-sm text-ink">{c.body}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section>
@@ -5973,7 +6010,13 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
   // 開いている他ユーザーの Supabase プロフ帳（info/BEST3/今月/しつもん）
   const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null>(null);
+  // 開いている他ユーザーの uuid（フォロー用）
+  const [viewedProfileUid, setViewedProfileUid] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
+  // 自分の uuid と、回答ごとの自分のリアクション種別（Supabase同期用）
+  const [myUid, setMyUid] = useState<string | null>(null);
+  const [myReactions, setMyReactions] = useState<Record<string, keyof Answer['reactions']>>({});
+  useEffect(() => { if (dbReady()) { void getCurrentUserId().then((id) => setMyUid(id)); } }, []);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
   // ── 今日のお題（言語に応じて切り替わる）────────────────────────
@@ -6647,7 +6690,20 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (!dbReady()) return;
     try {
       const rows = await getFeed(100);
-      if (rows) setAnswers(rows.map(feedRowToAnswer)); // null(エラー)なら既存表示を維持
+      if (!rows) return; // null(エラー)なら既存表示を維持
+      setAnswers(rows.map(feedRowToAnswer));
+      // 自分のリアクション種別を復元（選択状態の表示に使う）
+      const uid = myUid ?? (await getCurrentUserId());
+      if (uid) {
+        const mine: Record<string, keyof Answer['reactions']> = {};
+        for (const r of rows) {
+          const myr = (r.reactions ?? []).find((x) => x.user_id === uid);
+          if (myr && ['like', 'same', 'wakaru', 'natsukashii'].includes(myr.type)) {
+            mine[r.id] = myr.type as keyof Answer['reactions'];
+          }
+        }
+        setMyReactions(mine);
+      }
     } catch { /* ネットワーク等は無視（ローカル表示を維持） */ }
   }
   useEffect(() => { void reloadFeed(); }, []);
@@ -6728,11 +6784,13 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (!pid) {
       setViewedProfile(null);
       setViewedProfileBook(null);
+      setViewedProfileUid(null);
     } else {
       // 既に持っている情報があれば即時表示（スピナーで固まらない）。
       if (payloadObj) setViewedProfile(payloadObj);
       else setViewedProfile((cur) => (cur && cur.id === pid ? cur : null));
       setViewedProfileBook(null); // 別ユーザーを開くので一旦クリア
+      setViewedProfileUid(null);
       // モックに居なければ Supabase から詳細を取得して差し替え（失敗しても即時表示は維持）。
       const inMock = [...profiles, ...followers].some((p) => p.id === pid);
       if (!inMock && dbReady()) {
@@ -6740,6 +6798,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         getProfileByUsername(username).then((row) => {
           if (!row) return;
           setViewedProfile(rowToMiniProfile(row));
+          setViewedProfileUid((row as any).id ?? null); // フォロー用の uuid
           // book(jsonb) を info / BEST3 / 今月 / しつもん に分解して保持
           const b: any = row.book;
           if (b && typeof b === 'object') {
@@ -6843,14 +6902,27 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   return id;
 }
 
-  function react(answerId: string, type: keyof Answer['reactions'], prev: keyof Answer['reactions'] | null) {
+  function react(answerId: string, type: keyof Answer['reactions']) {
+    const prev = myReactions[answerId] ?? null;
+    const next = prev === type ? null : type; // 同じものを再タップで解除
+    // 楽観的にカウントと自分の選択状態を更新
     setAnswers((answers) => answers.map((a) => {
       if (a.id !== answerId) return a;
       const r = { ...a.reactions };
-      if (prev) r[prev] = Math.max(0, r[prev] - 1);     // 前のリアクションを -1
-      if (type !== prev) r[type] = r[type] + 1;         // 新しいリアクションを +1（トグル解除時はスキップ）
+      if (prev) r[prev] = Math.max(0, r[prev] - 1);
+      if (next) r[type] = r[type] + 1;
       return { ...a, reactions: r };
     }));
+    setMyReactions((m) => {
+      const c = { ...m };
+      if (next) c[answerId] = next; else delete c[answerId];
+      return c;
+    });
+    // Supabase 同期（切替時は前のを外してから付ける）。ローカル生成の回答(a-...)は対象外。
+    if (dbReady() && !answerId.startsWith('a-')) {
+      if (prev && prev !== type) void toggleReaction(answerId, prev);
+      void toggleReaction(answerId, type);
+    }
   }
 
   const [diaryPages, setDiaryPages] = useState<DiaryPage[]>(initialDiaryPages);
@@ -7036,7 +7108,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId)
           ?? (viewedProfile && viewedProfile.id === selectedProfileId ? viewedProfile : null);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} supabaseBook={viewedProfileBook} lang={lang} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} supabaseBook={viewedProfileBook} targetUid={viewedProfileUid} lang={lang} />;
         // Supabase から読み込み中
         return (
           <div className="flex min-h-[60vh] items-center justify-center">
@@ -7063,6 +7135,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         go={go}
         answer={selectedAnswer}
         onReact={react}
+        myReaction={myReactions[selectedAnswer.id] ?? null}
         isBookmarked={bookmarks.includes(selectedAnswer.id)}
         onToggleBookmark={toggleBookmark}
         onShare={shareText}
@@ -7122,6 +7195,8 @@ return <ProfileScreen
   selectedProfileId,
   viewedProfile,
   viewedProfileBook,
+  viewedProfileUid,
+  myReactions,
   appTheme,
   circles,
   circlePosts,

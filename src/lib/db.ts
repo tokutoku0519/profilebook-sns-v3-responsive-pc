@@ -310,13 +310,22 @@ export async function toggleReaction(answerId: string, type: string): Promise<'a
 // ── コメント ────────────────────────────────────────────
 export async function getComments(answerId: string): Promise<CommentRow[]> {
   if (!supabase) return [];
+  // 埋め込み結合は失敗することがあるため、コメントとプロフィールを別クエリで取得して結合する。
   const { data, error } = await supabase
     .from('comments')
-    .select('id,answer_id,user_id,body,created_at,profile:profiles(username,display_name,avatar_url)')
+    .select('id,answer_id,user_id,body,created_at')
     .eq('answer_id', answerId)
     .order('created_at', { ascending: true });
-  if (error) return [];
-  return (data ?? []) as unknown as CommentRow[];
+  if (error || !data) return [];
+  const rows = data as any[];
+  if (rows.length === 0) return [];
+  const userIds = [...new Set(rows.map((r) => r.user_id))];
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id,username,display_name,avatar_url')
+    .in('id', userIds);
+  const profMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
+  return rows.map((r) => ({ ...r, profile: profMap.get(r.user_id) })) as CommentRow[];
 }
 
 export async function addComment(answerId: string, body: string): Promise<CommentRow | null> {
