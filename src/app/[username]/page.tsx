@@ -1387,6 +1387,7 @@ function CreateScreen({
   go,
   onPost,
   question,
+  questionList = [],
   onCreateDiary,
   ownedPackIds,
   ownedGachaStickers,
@@ -1394,6 +1395,7 @@ function CreateScreen({
   go: (s: Screen, payload?: any) => void;
   onPost: (draft: DraftAnswer) => string;
   question?: any;
+  questionList?: any[];
   onCreateDiary: (caption: string, photoUrl: string, font: string, textColor: string, visibility: 'public' | 'followers' | 'mentioned', mentionedUserIds: string[]) => string;
   ownedPackIds: string[];
   ownedGachaStickers: string[];
@@ -1402,7 +1404,9 @@ function CreateScreen({
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   // --- お題モード ---
-  const _fallbackQ = questions[0] ?? getQuestionsForLang('ja')[0];
+  // 特定のお題（PR案件・公認お題）は変更不可。それ以外はプルダウンでお題を選べる。
+  const isLocked = !!question && (String(question.id).startsWith('pr-') || !!question.isOfficialQuestion || !!question.sponsor);
+  const _fallbackQ = questionList[0] ?? questions[0] ?? getQuestionsForLang('ja')[0];
   const [draft, setDraft] = useState<DraftAnswer>({
     questionId: question?.id || _fallbackQ.id,
     body: '',
@@ -1435,10 +1439,9 @@ function CreateScreen({
     return () => { cancelled = true; };
   }, [question]);
 
-  const selectedQuestion =
-    question ||
-    questions.find((q) => q.id === draft.questionId) ||
-    _fallbackQ;
+  const selectedQuestion = isLocked
+    ? question
+    : (questionList.find((q) => q.id === draft.questionId) || question || _fallbackQ);
 
   const canPost = draft.body.trim().length > 0;
 
@@ -1517,11 +1520,11 @@ function CreateScreen({
             {/* 特定のお題を指定して来た場合（PR・公認お題など）はドロップダウンを出さず、
                 そのお題1件だけを表示（質問が二重に見えるのを防ぐ）。
                 フリー作成時のみ、答えるお題を選べるドロップダウンを表示する。 */}
-            {!question && (
+            {!isLocked && (
               <section className="rounded-[28px] bg-white p-4 shadow-card">
                 <label className="mb-2 block text-sm font-bold">答えるお題</label>
                 <select value={draft.questionId} onChange={(e) => setDraft({ ...draft, questionId: e.target.value })} className="w-full rounded-2xl border border-purple-100 bg-base p-3 text-sm font-bold outline-none">
-                  {questions.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
+                  {questionList.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
                 </select>
               </section>
             )}
@@ -6956,8 +6959,9 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setSelectedAnswerId(payload);
   }
 
-  if (next === 'create' && payload) {
-    setSelectedQuestion(payload);
+  if (next === 'create') {
+    // お題を指定して開いたらそれを、指定なし（＋ボタン）なら今日のお題を既定に。
+    setSelectedQuestion(payload ?? dailyQuestion ?? null);
   }
 
   if (next === 'profile') {
@@ -7288,6 +7292,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       go={go}
       onPost={postAnswer}
       question={selectedQuestion}
+      questionList={[...communityQuestions, ...localizedQuestions]}
       onCreateDiary={(caption, photoUrl, font, textColor, visibility, mentionedUserIds) =>
         createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, font, textColor)
       }
