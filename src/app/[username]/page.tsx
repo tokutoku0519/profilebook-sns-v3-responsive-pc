@@ -3865,7 +3865,31 @@ function Best3EditBlock({
   );
 }
 
-const STICKER_CHOICES = ['😆', '😭', '👏', '🥹', '🔥', '🎉', '😮', '🙏', '💯', '✨', '😂', '🥰'];
+// よく使う絵文字（クイック選択）。これ以外でも下の入力欄から任意の絵文字が使える。
+const STICKER_CHOICES = [
+  '😆', '😭', '👏', '🥹', '🔥', '🎉', '😮', '🙏', '💯', '✨', '😂', '🥰',
+  '😍', '🤣', '😊', '😎', '🥺', '😳', '😱', '🤔', '😴', '😇', '🤗', '😏',
+  '👍', '👎', '🙌', '🤝', '💪', '✌️', '🫶', '👀', '🫡', '🤙', '🙆', '🙅',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🩷', '💗', '💖', '💕', '💔', '💫',
+  '🌸', '🌟', '⭐️', '🌈', '☀️', '🌙', '🍀', '🎀', '🎁', '🍰', '🍜', '☕️',
+  '🎮', '🎵', '📷', '📚', '⚽️', '🏆', '💎', '👑', '💰', '🚀', '🫠', '💤',
+];
+
+// 入力文字列から先頭の1絵文字を取り出す（複数コードポイントの絵文字も1つとして扱う）
+function firstGrapheme(s: string): string {
+  const v = s.trim();
+  if (!v) return '';
+  try {
+    // @ts-ignore Segmenter は対応環境のみ
+    if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+      // @ts-ignore
+      const seg = new (Intl as any).Segmenter('ja', { granularity: 'grapheme' });
+      const it = seg.segment(v)[Symbol.iterator]().next();
+      return it.value ? it.value.segment : v;
+    }
+  } catch {}
+  return [...v][0] ?? v;
+}
 
 function DetailScreen({
   go, answer, onReact, reactions, authorUid, isBookmarked, onToggleBookmark, onShare,
@@ -3883,6 +3907,16 @@ function DetailScreen({
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [heartPop, setHeartPop] = useState(false);
+  const [emojiInput, setEmojiInput] = useState('');
+
+  // 自由入力：端末の絵文字キーボードから任意の絵文字でリアクション
+  function submitEmojiInput(raw: string) {
+    const e = firstGrapheme(raw);
+    if (!e) return;
+    onReact(answer.id, e);
+    setEmojiInput('');
+    setShowStickerPicker(false);
+  }
 
   const likeInfo = reactions['like'] ?? { count: 0, mine: false };
   // 絵文字スタンプ（like以外）を件数の多い順に
@@ -3960,16 +3994,36 @@ function DetailScreen({
 
           {/* スタンプ選択パネル（通常フローで全幅表示・つぶれない） */}
           {showStickerPicker && (
-            <div className="flex flex-wrap gap-2 rounded-2xl bg-white p-3 shadow-card">
-              {STICKER_CHOICES.map((emoji) => (
+            <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
+              {/* 自由入力：端末の絵文字キーボードで“すべての絵文字”に対応 */}
+              <div className="flex items-center gap-2">
+                <input
+                  value={emojiInput}
+                  onChange={(e) => setEmojiInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') submitEmojiInput(emojiInput); }}
+                  placeholder="😊 好きな絵文字を入力"
+                  className="min-w-0 flex-1 rounded-full bg-base px-4 py-2.5 text-base outline-none"
+                />
                 <button
-                  key={emoji}
-                  onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
-                  className="grid h-11 w-11 place-items-center rounded-xl text-2xl transition hover:bg-pink/10 active:scale-90"
+                  onClick={() => submitEmojiInput(emojiInput)}
+                  disabled={!emojiInput.trim()}
+                  className="shrink-0 rounded-full bg-pink px-4 py-2.5 text-xs font-black text-white disabled:opacity-40"
                 >
-                  {emoji}
+                  つける
                 </button>
-              ))}
+              </div>
+              {/* よく使う絵文字（スクロール可） */}
+              <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
+                {STICKER_CHOICES.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
+                    className="grid h-11 w-11 place-items-center rounded-xl text-2xl transition hover:bg-pink/10 active:scale-90"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
