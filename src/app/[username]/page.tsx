@@ -938,14 +938,19 @@ function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl,
   );
 }
 
-function AppHeader({ title = 'Miri', back = false, onBack, onBell }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void }) {
+function AppHeader({ title = 'Miri', back = false, onBack, onBell, unread = 0 }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void; unread?: number }) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-base/90 px-4 pt-2 backdrop-blur">
       <button onClick={back ? onBack : undefined} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
         {back ? <ArrowLeft size={20} /> : <img src="/icon.png" alt="Miri" className="h-8 w-8 rounded-xl object-cover" />}
       </button>
       <h1 className="text-lg font-black tracking-tight">{title}</h1>
-      <button onClick={onBell} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card"><Bell size={19} /></button>
+      <button onClick={onBell} className="relative grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
+        <Bell size={19} />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-pink px-1 text-[9px] font-black text-white">{unread > 9 ? '9+' : unread}</span>
+        )}
+      </button>
     </header>
   );
 }
@@ -966,6 +971,8 @@ function HomeScreen({
   hasAnsweredPR,
   translatedAnswerBodies,
   isTranslating,
+  likedIds,
+  unread = 0,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -980,11 +987,13 @@ function HomeScreen({
   hasAnsweredPR: boolean;
   translatedAnswerBodies: Record<string, string>;
   isTranslating: boolean;
+  likedIds?: Set<string>;
+  unread?: number;
   lang?: Lang;
 }) {
   return (
     <>
-      <AppHeader onBell={() => go('notifications')} />
+      <AppHeader onBell={() => go('notifications')} unread={unread} />
       <div className="space-y-6 px-4 pt-3">
 {communityQuestions.length > 0 && (
   <section className="space-y-3">
@@ -1094,7 +1103,7 @@ function HomeScreen({
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
               </button>
             ))}
           </div>
@@ -3915,7 +3924,7 @@ function DetailScreen({
     <>
       <AppHeader title="回答詳細" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
-        <AnswerCard answer={answer} detail onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+        <AnswerCard answer={answer} detail liked={likeInfo.mine} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
 
         {/* リアクション（❤️すき＋絵文字スタンプ） */}
         <div className="space-y-2">
@@ -7269,6 +7278,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       hasAnsweredPR={hasAnsweredPR}
       translatedAnswerBodies={translatedAnswerBodies}
       isTranslating={isTranslating}
+      likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))}
+      unread={unreadCount}
       lang={lang}
     />
   );
@@ -7395,6 +7406,7 @@ return <ProfileScreen
   viewedProfileUid,
   reactState,
   serverNotifs,
+  unreadCount,
   appTheme,
   circles,
   circlePosts,

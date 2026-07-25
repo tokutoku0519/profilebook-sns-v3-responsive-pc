@@ -50,7 +50,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody, onUserClick }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   // カード全体が <button> の中に置かれることがあるため、ユーザー部分は span + stopPropagation で扱う
@@ -82,7 +82,10 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
           </span>
         </span>
         <div className="flex gap-3 text-xs font-bold text-muted">
-          <span className="flex items-center gap-1"><Heart size={15} />{answer.reactions.like}</span>
+          <span className={`flex items-center gap-1 ${liked ? 'text-pink' : ''}`}>
+            <Heart size={15} fill={liked ? 'currentColor' : 'none'} className={liked ? 'heart-pop' : ''} />
+            {answer.reactions.like}
+          </span>
         </div>
       </div>
     </article>
