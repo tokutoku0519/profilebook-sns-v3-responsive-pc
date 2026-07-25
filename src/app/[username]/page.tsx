@@ -3878,11 +3878,31 @@ const STICKER_CHOICES = [
   '🎮', '🎵', '📷', '📚', '⚽️', '🏆', '💎', '👑', '💰', '🚀', '🫠', '💤',
 ];
 
-// アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）
-function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
-  const [cat, setCat] = useState(EMOJI_CATEGORIES[0].id);
+// 所持しているスタンプ（無料＋購入パック＋当てたガチャ）の絵文字一覧を返す
+function getOwnedStickerEmojis(ownedPackIds: string[], ownedGachaStickers: string[]): string[] {
+  const out: string[] = [];
+  for (const p of STICKER_PACKS) {
+    const usable =
+      p.acquisition.type === 'free' ||
+      ownedPackIds.includes(p.id) ||
+      (p.acquisition.type === 'gacha' && p.stickers.some((s) => ownedGachaStickers.includes(s.id)));
+    if (!usable) continue;
+    const items = p.acquisition.type === 'gacha'
+      ? p.stickers.filter((s) => ownedGachaStickers.includes(s.id))
+      : p.stickers;
+    for (const s of items) if (s.emoji && !out.includes(s.emoji)) out.push(s.emoji);
+  }
+  return out;
+}
+
+// アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）。myStickers があれば先頭に「マイスタンプ」タブ。
+function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => void; myStickers?: string[] }) {
+  const categories = myStickers.length > 0
+    ? [{ id: 'mine', label: 'マイスタンプ', icon: '🎁', emojis: myStickers }, ...EMOJI_CATEGORIES]
+    : EMOJI_CATEGORIES;
+  const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
-  const current = EMOJI_CATEGORIES.find((c) => c.id === cat) ?? EMOJI_CATEGORIES[0];
+  const current = categories.find((c) => c.id === cat) ?? categories[0];
   const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
@@ -3899,7 +3919,7 @@ function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
       </div>
       {/* カテゴリタブ */}
       <div className="flex gap-1 overflow-x-auto pb-1">
-        {EMOJI_CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <button
             key={c.id}
             onClick={() => setCat(c.id)}
@@ -3944,6 +3964,7 @@ function firstGrapheme(s: string): string {
 
 function DetailScreen({
   go, answer, onReact, reactions, authorUid, isBookmarked, onToggleBookmark, onShare,
+  ownedPackIds = [], ownedGachaStickers = [],
 }: {
   go: (s: Screen, payload?: any) => void;
   answer: Answer;
@@ -3953,7 +3974,10 @@ function DetailScreen({
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
   onShare: (text: string) => void;
+  ownedPackIds?: string[];
+  ownedGachaStickers?: string[];
 }) {
+  const myStickers = getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers);
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
@@ -4033,9 +4057,9 @@ function DetailScreen({
             </button>
           </div>
 
-          {/* スタンプ選択パネル：全絵文字ピッカー */}
+          {/* スタンプ選択パネル：全絵文字ピッカー＋マイスタンプ */}
           {showStickerPicker && (
-            <EmojiPicker onPick={(e) => { onReact(answer.id, e); setShowStickerPicker(false); }} />
+            <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(answer.id, e); setShowStickerPicker(false); }} />
           )}
         </div>
 
@@ -7410,6 +7434,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         onReact={react}
         reactions={reactState[selectedAnswer.id] ?? {}}
         authorUid={answerAuthorUid[selectedAnswer.id] ?? null}
+        ownedPackIds={ownedPackIds}
+        ownedGachaStickers={ownedGachaStickers}
         isBookmarked={bookmarks.includes(selectedAnswer.id)}
         onToggleBookmark={toggleBookmark}
         onShare={shareText}
