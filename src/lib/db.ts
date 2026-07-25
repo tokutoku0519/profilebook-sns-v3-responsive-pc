@@ -382,6 +382,20 @@ export async function getFollowers(): Promise<ProfileRow[]> {
   return (profs ?? []) as ProfileRow[];
 }
 
+/** 相手が自分をフォローしているか（相互フォロー判定用） */
+export async function isFollowedBy(otherUid: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { data } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('follower_id', otherUid)
+    .eq('following_id', uid)
+    .maybeSingle();
+  return !!data;
+}
+
 /** 自分がフォローしている人の一覧（プロフィール付き） */
 export async function getFollowing(): Promise<ProfileRow[]> {
   if (!supabase) return [];

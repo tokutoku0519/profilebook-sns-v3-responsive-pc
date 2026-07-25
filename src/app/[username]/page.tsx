@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -2146,13 +2146,17 @@ function OtherProfileScreen({
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
   const [isFollowing, setIsFollowing] = useState(alreadyFollowing);
 
+  // 相手が自分をフォローしているか（相互フォロー判定＝仲良し度を双方向で同じにするため）
+  const [followsMe, setFollowsMe] = useState(false);
   // Supabase 上の実ユーザーはフォロー状態をサーバーから復元
   useEffect(() => {
     if (!dbReady() || !targetUid) return;
     let cancelled = false;
     getFollowingIds().then((ids) => { if (!cancelled) setIsFollowing(ids.includes(targetUid)); });
+    isFollowedBy(targetUid).then((v) => { if (!cancelled) setFollowsMe(v); });
     return () => { cancelled = true; };
   }, [targetUid]);
+  const mutualFollow = isFollowing && followsMe;
 
   function toggleFollow() {
     const next = !isFollowing;
@@ -2230,15 +2234,17 @@ function OtherProfileScreen({
 
   // ── なかよし度：プロフ帳の共通点＋いっしょの行動から算出 ──
   const commonPoints = useMemo(() => {
-    if (!myProfile || !book?.info) return [] as { label: string; value: string }[];
+    // 相手のプロフ帳は Supabase 優先（無ければモック）。共通点は両者で同じになる（対称）。
+    const theirInfo: Record<string, any> | undefined = supabaseBook?.info ?? book?.info;
+    if (!myProfile || !theirInfo) return [] as { label: string; value: string }[];
     const result: { label: string; value: string }[] = [];
     for (const { key, label } of MATCH_FIELDS) {
-      const mine = myProfile[key]?.trim();
-      const theirs = book.info[key]?.trim();
+      const mine = (myProfile as any)[key]?.trim();
+      const theirs = theirInfo[key]?.trim?.();
       if (mine && theirs && mine === theirs) result.push({ label, value: mine });
     }
     return result;
-  }, [myProfile, book]);
+  }, [myProfile, book, supabaseBook]);
   // いっしょに日記を書いたことがあるか
   const wroteDiaryTogether = useMemo(() =>
     diaryPages.some((page) => {
@@ -2250,10 +2256,10 @@ function OtherProfileScreen({
     circles.some((c) => c.memberIds.includes(me.id) && c.memberIds.includes(profile.id)),
     [circles, profile.id]);
   // なかよしアクション（各1ポイント）
-  // 仲良し度は「あなたとその人の関係」で決まる（見る人ごとに変わるのが正しい）。
-  // Supabaseの関係（フォロー/なかよし）を正として、端末依存の値は使わない。
+  // 仲良し度は双方向で同じになるよう、対称な関係だけで算出する
+  // （相互フォロー／なかよし／いっしょに日記／おなじサークル／プロフ帳の共通点）。
   const friendActions: { label: string; done: boolean }[] = [
-    { label: '🎀 フォロー', done: isFollowing },
+    { label: '🎀 相互フォロー', done: mutualFollow },
     { label: '📖 プロフ帳を交換（なかよし）', done: isFriend },
     { label: '📔 いっしょに日記を書いた', done: wroteDiaryTogether },
     { label: '🔒 おなじサークル', done: inSameCircle },
