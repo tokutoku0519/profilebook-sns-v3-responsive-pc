@@ -6311,6 +6311,12 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     return localizedQuestions[Math.abs(h) % localizedQuestions.length];
   }, [localizedQuestions]);
 
+  // 自分が既に回答したお題のID集合（＝もう「新規回答」できないお題）
+  const myAnsweredQids = useMemo(
+    () => new Set(answers.filter((a) => a.user.id === me.id && a.question?.id).map((a) => a.question!.id)),
+    [answers]
+  );
+
   const [dailyRecord, setDailyRecord] = useState<{ date: string; qid?: string; body: string } | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
@@ -7083,8 +7089,15 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   if (next === 'create') {
-    // お題を指定して開いたらそれを、指定なし（＋ボタン）なら今日のお題を既定に。
-    setSelectedQuestion(payload ?? dailyQuestion ?? null);
+    // お題を指定して開いたらそれを。指定なし（＋ボタン）は「今まだ回答していないお題」を既定に
+    // （今日のお題が未回答ならそれ、済みなら未回答の先頭）。
+    if (payload) {
+      setSelectedQuestion(payload);
+    } else {
+      const dailyOk = dailyQuestion && !myAnsweredQids.has(dailyQuestion.id) ? dailyQuestion : null;
+      const firstUnanswered = localizedQuestions.find((q) => !myAnsweredQids.has(q.id));
+      setSelectedQuestion(dailyOk ?? firstUnanswered ?? dailyQuestion ?? null);
+    }
   }
 
   if (next === 'profile') {
@@ -7418,7 +7431,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       go={go}
       onPost={postAnswer}
       question={selectedQuestion}
-      questionList={[...communityQuestions, ...localizedQuestions]}
+      questionList={[...communityQuestions, ...localizedQuestions].filter((q) => !myAnsweredQids.has(q.id) || q.id === selectedQuestion?.id)}
       onCreateDiary={(caption, photoUrl, font, textColor, visibility, mentionedUserIds) =>
         createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, font, textColor)
       }
