@@ -838,7 +838,7 @@ function tabFromScreen(screen: Screen): TabKey {
   return 'home';
 }
 
-function Phone({ children, active, go, lang, bgTheme = null }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang; bgTheme?: BgTheme | null }) {
+function Phone({ children, active, go, lang, bgTheme = null, unread = 0 }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang; bgTheme?: BgTheme | null; unread?: number }) {
   return (
     <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-h-none lg:max-w-none lg:rounded-[32px]">
       {/* 装備中テーマをアプリ全体の背景に敷く（上に薄い白で読みやすさを確保） */}
@@ -849,7 +849,7 @@ function Phone({ children, active, go, lang, bgTheme = null }: { children: React
         </div>
       )}
       <div className="relative z-10 h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
-      <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} /></div>
+      <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} unread={unread} /></div>
     </main>
   );
 }
@@ -927,12 +927,12 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
   );
 }
 
-function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {} }: { children: React.ReactNode; active: TabKey; currentScreen?: Screen; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string> }) {
+function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {}, unread = 0 }: { children: React.ReactNode; active: TabKey; currentScreen?: Screen; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string>; unread?: number }) {
   return (
     <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} lang={lang} currentScreen={currentScreen} />
-        <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme}>{children}</Phone></div>
+        <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme} unread={unread}>{children}</Phone></div>
         <RightRail answers={answers} go={go} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} translatedAnswerBodies={translatedAnswerBodies} />
       </div>
     </div>
@@ -2250,9 +2250,11 @@ function OtherProfileScreen({
     circles.some((c) => c.memberIds.includes(me.id) && c.memberIds.includes(profile.id)),
     [circles, profile.id]);
   // なかよしアクション（各1ポイント）
+  // 仲良し度は「あなたとその人の関係」で決まる（見る人ごとに変わるのが正しい）。
+  // Supabaseの関係（フォロー/なかよし）を正として、端末依存の値は使わない。
   const friendActions: { label: string; done: boolean }[] = [
     { label: '🎀 フォロー', done: isFollowing },
-    { label: '📖 プロフ帳を交換（なかよし）', done: isFriend || exchanged },
+    { label: '📖 プロフ帳を交換（なかよし）', done: isFriend },
     { label: '📔 いっしょに日記を書いた', done: wroteDiaryTogether },
     { label: '🔒 おなじサークル', done: inSameCircle },
   ];
@@ -7536,7 +7538,7 @@ return <ProfileScreen
 
   return (
     <>
-      <DesktopShell active={active} currentScreen={screen} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies}>{current}</DesktopShell>
+      <DesktopShell active={active} currentScreen={screen} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies} unread={unreadCount}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );

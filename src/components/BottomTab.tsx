@@ -11,7 +11,7 @@ const items: { key: TabKey; labelKey: string; icon: any; center?: boolean }[] = 
   { key: 'mypage', labelKey: 'tab_mypage', icon: UserRound }
 ];
 
-export function BottomTab({ active, onChange, lang = 'ja' }: { active: TabKey; onChange: (key: TabKey) => void; lang?: Lang }) {
+export function BottomTab({ active, onChange, lang = 'ja', unread = 0 }: { active: TabKey; onChange: (key: TabKey) => void; lang?: Lang; unread?: number }) {
   return (
     <nav className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border border-purple-100 bg-white/95 px-4 pt-2 shadow-floating backdrop-blur" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
       <div className="grid grid-cols-5 items-end gap-1">
@@ -24,8 +24,11 @@ export function BottomTab({ active, onChange, lang = 'ja' }: { active: TabKey; o
               onClick={() => onChange(item.key)}
               className={`flex flex-col items-center gap-1 text-[10px] font-medium transition ${isActive ? 'text-pinkStrong' : 'text-muted'}`}
             >
-              <span className={`${item.center ? 'mb-1 grid h-14 w-14 place-items-center rounded-full bg-pink text-white shadow-floating' : isActive ? 'grid h-9 w-12 place-items-center rounded-full bg-pink/15 text-pinkStrong' : 'grid h-9 w-12 place-items-center'}`}>
+              <span className={`relative ${item.center ? 'mb-1 grid h-14 w-14 place-items-center rounded-full bg-pink text-white shadow-floating' : isActive ? 'grid h-9 w-12 place-items-center rounded-full bg-pink/15 text-pinkStrong' : 'grid h-9 w-12 place-items-center'}`}>
                 <Icon size={item.center ? 26 : 21} />
+                {item.key === 'notifications' && unread > 0 && (
+                  <span className="absolute right-1.5 top-0 grid h-4 min-w-[16px] place-items-center rounded-full bg-pink px-1 text-[9px] font-black text-white">{unread > 9 ? '9+' : unread}</span>
+                )}
               </span>
               {!item.center && t(item.labelKey, lang)}
             </button>
