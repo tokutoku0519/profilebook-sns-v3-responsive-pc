@@ -5302,6 +5302,10 @@ function ShopScreen({
   const [detailPack, setDetailPack] = useState<StickerPack | null>(null);
   const [bgResult, setBgResult] = useState<{ theme: BgTheme; isNew: boolean; shards: number } | null>(null);
   const [gachaResultShards, setGachaResultShards] = useState(0);
+  // はじめて1回無料ガチャ（端末に使用済みフラグ）
+  const [freeGachaUsed, setFreeGachaUsed] = useState(() => {
+    try { return localStorage.getItem('miri_free_gacha_used') === '1'; } catch { return false; }
+  });
   // ガチャ演出：'spin'（カプセルが揺れる）→ 'burst'（弾ける）→ 結果表示
   const [spinPhase, setSpinPhase] = useState<'spin' | 'burst' | null>(null);
   const pendingRevealRef = useRef<(() => void) | null>(null);
@@ -5321,11 +5325,17 @@ function ShopScreen({
     }, 1850);
   }
 
-  function handleDraw(pack: StickerPack, count: 1 | 10) {
+  function handleDraw(pack: StickerPack, count: 1 | 10, free = false) {
     if (pack.acquisition.type !== 'gacha') return;
     const cost = pack.acquisition.coinCost * count;
-    if (coins < cost) return;
-    onSpendCoins(cost);
+    if (free) {
+      if (freeGachaUsed) return;
+      try { localStorage.setItem('miri_free_gacha_used', '1'); } catch {}
+      setFreeGachaUsed(true);
+    } else {
+      if (coins < cost) return;
+      onSpendCoins(cost);
+    }
     const results = count === 1
       ? [drawGacha(pack, ownedGachaStickers)]
       : draw10Gacha(pack, ownedGachaStickers);
@@ -5447,6 +5457,13 @@ function ShopScreen({
                       ))}
                       {pack.stickers.length > 8 && <span className="grid h-8 w-8 place-items-center rounded-xl bg-base text-[10px] font-black text-muted">+{pack.stickers.length - 8}</span>}
                     </button>
+                    {!freeGachaUsed && (
+                      <button
+                        onClick={() => handleDraw(pack, 1, true)}
+                        className="mb-2 w-full rounded-full bg-gradient-to-r from-pink to-purple py-2.5 text-sm font-black text-white shadow-floating active:scale-[0.98]">
+                        🎁 はじめて無料で1回引く！
+                      </button>
+                    )}
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleDraw(pack, 1)}
