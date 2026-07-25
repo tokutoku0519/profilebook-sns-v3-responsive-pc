@@ -3941,28 +3941,28 @@ function DetailScreen({
             ))}
 
             {/* スタンプ追加 */}
-            <div className="relative">
-              <button
-                onClick={() => setShowStickerPicker((v) => !v)}
-                className="grid h-11 w-11 place-items-center rounded-full bg-white text-lg text-muted shadow-card transition active:scale-95"
-              >
-                ＋
-              </button>
-              {showStickerPicker && (
-                <div className="absolute bottom-full left-0 z-20 mb-2 grid grid-cols-6 gap-1 rounded-2xl bg-white p-2 shadow-floating">
-                  {STICKER_CHOICES.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
-                      className="grid h-9 w-9 place-items-center rounded-xl text-xl transition hover:bg-pink/10 active:scale-90"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setShowStickerPicker((v) => !v)}
+              className={`grid h-11 w-11 place-items-center rounded-full text-lg shadow-card transition active:scale-95 ${showStickerPicker ? 'bg-pink/15 text-pink' : 'bg-white text-muted'}`}
+            >
+              ＋
+            </button>
           </div>
+
+          {/* スタンプ選択パネル（通常フローで全幅表示・つぶれない） */}
+          {showStickerPicker && (
+            <div className="flex flex-wrap gap-2 rounded-2xl bg-white p-3 shadow-card">
+              {STICKER_CHOICES.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
+                  className="grid h-11 w-11 place-items-center rounded-xl text-2xl transition hover:bg-pink/10 active:scale-90"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* シェア・ブックマーク */}
