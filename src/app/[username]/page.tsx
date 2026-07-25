@@ -22,6 +22,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
 import { ArrowLeft, Bell, Bookmark, Heart, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
+import { EMOJI_CATEGORIES } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
@@ -3875,6 +3876,54 @@ const STICKER_CHOICES = [
   '🎮', '🎵', '📷', '📚', '⚽️', '🏆', '💎', '👑', '💰', '🚀', '🫠', '💤',
 ];
 
+// アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）
+function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
+  const [cat, setCat] = useState(EMOJI_CATEGORIES[0].id);
+  const [input, setInput] = useState('');
+  const current = EMOJI_CATEGORIES.find((c) => c.id === cat) ?? EMOJI_CATEGORIES[0];
+  const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
+  return (
+    <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
+      {/* 自由入力（端末キーボードからでも） */}
+      <div className="flex items-center gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
+          placeholder="😊 絵文字を入力"
+          className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base outline-none"
+        />
+        <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
+      </div>
+      {/* カテゴリタブ */}
+      <div className="flex gap-1 overflow-x-auto pb-1">
+        {EMOJI_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => setCat(c.id)}
+            aria-label={c.label}
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xl transition ${cat === c.id ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}
+          >
+            {c.icon}
+          </button>
+        ))}
+      </div>
+      {/* 絵文字一覧 */}
+      <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
+        {current.emojis.map((emoji, i) => (
+          <button
+            key={emoji + i}
+            onClick={() => onPick(emoji)}
+            className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 入力文字列から先頭の1絵文字を取り出す（複数コードポイントの絵文字も1つとして扱う）
 function firstGrapheme(s: string): string {
   const v = s.trim();
@@ -3907,16 +3956,6 @@ function DetailScreen({
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [heartPop, setHeartPop] = useState(false);
-  const [emojiInput, setEmojiInput] = useState('');
-
-  // 自由入力：端末の絵文字キーボードから任意の絵文字でリアクション
-  function submitEmojiInput(raw: string) {
-    const e = firstGrapheme(raw);
-    if (!e) return;
-    onReact(answer.id, e);
-    setEmojiInput('');
-    setShowStickerPicker(false);
-  }
 
   const likeInfo = reactions['like'] ?? { count: 0, mine: false };
   // 絵文字スタンプ（like以外）を件数の多い順に
@@ -3992,39 +4031,9 @@ function DetailScreen({
             </button>
           </div>
 
-          {/* スタンプ選択パネル（通常フローで全幅表示・つぶれない） */}
+          {/* スタンプ選択パネル：全絵文字ピッカー */}
           {showStickerPicker && (
-            <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
-              {/* 自由入力：端末の絵文字キーボードで“すべての絵文字”に対応 */}
-              <div className="flex items-center gap-2">
-                <input
-                  value={emojiInput}
-                  onChange={(e) => setEmojiInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') submitEmojiInput(emojiInput); }}
-                  placeholder="😊 好きな絵文字を入力"
-                  className="min-w-0 flex-1 rounded-full bg-base px-4 py-2.5 text-base outline-none"
-                />
-                <button
-                  onClick={() => submitEmojiInput(emojiInput)}
-                  disabled={!emojiInput.trim()}
-                  className="shrink-0 rounded-full bg-pink px-4 py-2.5 text-xs font-black text-white disabled:opacity-40"
-                >
-                  つける
-                </button>
-              </div>
-              {/* よく使う絵文字（スクロール可） */}
-              <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
-                {STICKER_CHOICES.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
-                    className="grid h-11 w-11 place-items-center rounded-xl text-2xl transition hover:bg-pink/10 active:scale-90"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <EmojiPicker onPick={(e) => { onReact(answer.id, e); setShowStickerPicker(false); }} />
           )}
         </div>
 
