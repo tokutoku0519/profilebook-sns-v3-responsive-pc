@@ -5858,6 +5858,8 @@ const COIN_PACKAGES = [
 ];
 
 function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void; coins: number; onPurchaseCoins: (amount: number) => void }) {
+  // 購入は確認をはさむ（誤タップでの無限増殖を防ぐ）
+  const [pendingPkg, setPendingPkg] = useState<{ coins: number; bonus: number; price: number } | null>(null);
   const history: Array<{ amount: number; reason: string; date: string }> = (() => {
     if (typeof window === 'undefined') return [];
     try { return JSON.parse(localStorage.getItem('miri_coin_history') || '[]'); } catch { return []; }
@@ -5890,7 +5892,7 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
             {COIN_PACKAGES.map((pkg) => (
               <button
                 key={pkg.coins}
-                onClick={() => onPurchaseCoins(pkg.coins + pkg.bonus)}
+                onClick={() => setPendingPkg(pkg)}
                 className={`flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition active:scale-[0.98] ${pkg.popular ? 'bg-gradient-to-r from-amber-400 to-orange-400 shadow-card' : 'bg-base hover:bg-amber-50'}`}
               >
                 <div className="flex items-center gap-2 text-left">
@@ -5968,6 +5970,24 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
           </section>
         )}
       </div>
+
+      {/* 購入確認（誤タップでの増殖防止） */}
+      {pendingPkg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-8" onClick={() => setPendingPkg(null)}>
+          <div className="w-full max-w-xs rounded-[28px] bg-white p-6 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-3xl"><CoinIcon size={32} /></p>
+            <p className="mt-2 text-lg font-black text-ink">{(pendingPkg.coins + pendingPkg.bonus).toLocaleString()}コイン</p>
+            <p className="mt-1 text-xs font-bold text-muted">テスト購入（実際の決済は発生しません）</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setPendingPkg(null)} className="flex-1 rounded-full bg-base py-3 text-sm font-black text-muted active:scale-[0.98]">キャンセル</button>
+              <button
+                onClick={() => { onPurchaseCoins(pendingPkg.coins + pendingPkg.bonus); setPendingPkg(null); }}
+                className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-black text-white shadow-card active:scale-[0.98]"
+              >購入する</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
