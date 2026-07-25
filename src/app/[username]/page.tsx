@@ -4159,6 +4159,19 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // デモ(①)ではダミーユーザーで仲良し度を見せる
+    if (isDev) {
+      const rows: ProfileRow[] = followers.map((f) => ({
+        id: f.id, username: f.id.replace(/^@/, ''), display_name: f.name,
+        avatar_url: f.avatar, cover_theme: null, book: {}, is_official: false, titles: [],
+      }));
+      setFollowing(rows);
+      setFollowerList([...rows].reverse());
+      // 先頭2人を「なかよし」、残りは相互フォロー扱い（デモ用）
+      setFriendIds(new Set(rows.slice(0, 2).map((r) => r.id)));
+      setLoading(false);
+      return;
+    }
     if (!dbReady()) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
