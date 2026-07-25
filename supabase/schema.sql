@@ -26,15 +26,10 @@ alter table public.profiles add column if not exists is_official boolean default
 alter table public.profiles add column if not exists titles text[] default '{}';
 alter table public.profiles add column if not exists updated_at timestamptz default now();
 
--- ── 旧スキーマからの作り直し ─────────────────────────────
--- answers/reactions/comments は構造が変わったため作り直す。
--- （アプリはまだSupabaseへ書き込んでいないので中身は空＝安全）。
--- 依存関係のため cascade で一括削除してから再作成する。
-drop table if exists public.comments  cascade;
-drop table if exists public.reactions cascade;
-drop table if exists public.answers   cascade;
--- 旧・未使用の questions テーブルがあれば削除（今回は使わない）
-drop table if exists public.questions cascade;
+-- ⚠️ 重要：このスキーマは「何度でも安全に再実行できる（冪等）」ことを保証する。
+-- 以前ここにあった drop table (answers/reactions/comments) cascade は、
+-- 再実行で既存の回答データを消してしまうため削除した。破壊的な操作は行わない。
+-- 構造変更が必要な場合は個別の alter table add column if not exists で行うこと。
 
 -- ── answers：お題への回答（共有フィード） ─────────────────
 -- お題はクライアント側の多言語定数（q1 / eq1 / official-... など）なので
