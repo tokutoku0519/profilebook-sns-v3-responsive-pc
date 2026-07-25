@@ -50,9 +50,13 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }> }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
+  // 絵文字スタンプ（like以外）を件数の多い順に。詳細画面はリアクションバーがあるので非表示。
+  const stickerChips = !detail && reactions
+    ? Object.entries(reactions).filter(([type]) => type !== 'like').sort((a, b) => b[1].count - a[1].count)
+    : [];
   // カード全体が <button> の中に置かれることがあるため、ユーザー部分は span + stopPropagation で扱う
   const userClickProps = onUserClick
     ? {
@@ -70,6 +74,15 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
       </div>
       <p className="mb-2 text-xs font-bold text-muted">{answer.question?.title}</p>
       <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
+      {stickerChips.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {stickerChips.map(([emoji, info]) => (
+            <span key={emoji} className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-base text-ink'}`}>
+              <span className="text-sm">{emoji}</span>{info.count}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-4 flex items-center justify-between">
         <span {...userClickProps}>
           <span className="grid h-11 w-11 place-items-center rounded-full bg-pink/15 text-xl">{answer.user.avatar}</span>

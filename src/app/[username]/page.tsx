@@ -973,6 +973,7 @@ function HomeScreen({
   translatedAnswerBodies,
   isTranslating,
   likedIds,
+  reactionsMap,
   unread = 0,
   lang = 'ja',
 }: {
@@ -989,6 +990,7 @@ function HomeScreen({
   translatedAnswerBodies: Record<string, string>;
   isTranslating: boolean;
   likedIds?: Set<string>;
+  reactionsMap?: Record<string, Record<string, { count: number; mine: boolean }>>;
   unread?: number;
   lang?: Lang;
 }) {
@@ -1104,7 +1106,7 @@ function HomeScreen({
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
               </button>
             ))}
           </div>
@@ -7342,6 +7344,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       translatedAnswerBodies={translatedAnswerBodies}
       isTranslating={isTranslating}
       likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))}
+      reactionsMap={reactState}
       unread={unreadCount}
       lang={lang}
     />
