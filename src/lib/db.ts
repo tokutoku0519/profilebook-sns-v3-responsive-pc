@@ -366,3 +366,199 @@ export async function getFollowingIds(): Promise<string[]> {
   if (error) return [];
   return (data ?? []).map((r: any) => r.following_id);
 }
+
+/** 自分をフォローしている人（フォロワー）の一覧（プロフィール付き） */
+export async function getFollowers(): Promise<ProfileRow[]> {
+  if (!supabase) return [];
+  const uid = await getCurrentUserId();
+  if (!uid) return [];
+  const { data } = await supabase.from('follows').select('follower_id').eq('following_id', uid);
+  const ids = (data ?? []).map((r: any) => r.follower_id);
+  if (ids.length === 0) return [];
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id,username,display_name,avatar_url,cover_theme,book,is_official,titles')
+    .in('id', ids);
+  return (profs ?? []) as ProfileRow[];
+}
+
+/** 自分がフォローしている人の一覧（プロフィール付き） */
+export async function getFollowing(): Promise<ProfileRow[]> {
+  if (!supabase) return [];
+  const ids = await getFollowingIds();
+  if (ids.length === 0) return [];
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id,username,display_name,avatar_url,cover_theme,book,is_official,titles')
+    .in('id', ids);
+  return (profs ?? []) as ProfileRow[];
+}
+
+/** なかよし成立（accepted）の相手 uuid 一覧 */
+export async function getFriendIds(): Promise<string[]> {
+  if (!supabase) return [];
+  const uid = await getCurrentUserId();
+  if (!uid) return [];
+  const { data } = await supabase
+    .from('friendships')
+    .select('requester_id,addressee_id')
+    .eq('status', 'accepted')
+    .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+  return (data ?? []).map((r: any) => (r.requester_id === uid ? r.addressee_id : r.requester_id));
+}
+
+/** フォロー中・フォロワーの件数 */
+export async function getFollowCounts(): Promise<{ following: number; followers: number }> {
+  if (!supabase) return { following: 0, followers: 0 };
+  const uid = await getCurrentUserId();
+  if (!uid) return { following: 0, followers: 0 };
+  const [a, b] = await Promise.all([
+    supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', uid),
+    supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', uid),
+  ]);
+  return { following: a.count ?? 0, followers: b.count ?? 0 };
+}
+
+// ── なかよし（承認制のプロフ帳交換） ─────────────────────
+export type FriendStatus = 'none' | 'pending_out' | 'pending_in' | 'friends';
+
+/** 相手との「なかよし」状態を返す */
+export async function getFriendStatus(otherUid: string): Promise<FriendStatus> {
+  if (!supabase) return 'none';
+  const uid = await getCurrentUserId();
+  if (!uid || uid === otherUid) return 'none';
+  const { data } = await supabase
+    .from('friendships')
+    .select('requester_id,addressee_id,status')
+    .or(`and(requester_id.eq.${uid},addressee_id.eq.${otherUid}),and(requester_id.eq.${otherUid},addressee_id.eq.${uid})`)
+    .maybeSingle();
+  if (!data) return 'none';
+  if (data.status === 'accepted') return 'friends';
+  return data.requester_id === uid ? 'pending_out' : 'pending_in';
+}
+
+/** なかよし申請を送る */
+export async function requestFriend(otherUid: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid || uid === otherUid) return false;
+  const { error } = await supabase.from('friendships').insert({ requester_id: uid, addressee_id: otherUid, status: 'pending' });
+  return !error;
+}
+
+/** 受け取った申請を承認する */
+export async function acceptFriend(otherUid: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase
+    .from('friendships')
+    .update({ status: 'accepted', updated_at: new Date().toISOString() })
+    .eq('requester_id', otherUid)
+    .eq('addressee_id', uid);
+  return !error;
+}
+
+/** なかよし解除／申請取り消し */
+export async function removeFriend(otherUid: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    .or(`and(requester_id.eq.${uid},addressee_id.eq.${otherUid}),and(requester_id.eq.${otherUid},addressee_id.eq.${uid})`);
+  return !error;
+}
+
+/** 承認待ちの受信申請一覧（申請者プロフィール付き） */
+export async function getIncomingFriendRequests(): Promise<ProfileRow[]> {
+  if (!supabase) return [];
+  const uid = await getCurrentUserId();
+  if (!uid) return [];
+  const { data } = await supabase.from('friendships').select('requester_id').eq('addressee_id', uid).eq('status', 'pending');
+  const ids = (data ?? []).map((r: any) => r.requester_id);
+  if (ids.length === 0) return [];
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id,username,display_name,avatar_url,cover_theme,book,is_official,titles')
+    .in('id', ids);
+  return (profs ?? []) as ProfileRow[];
+}
+
+// ── 通知 ────────────────────────────────────────────────
+export type NotificationRow = {
+  id: string;
+  user_id: string;
+  actor_id: string | null;
+  type: string;
+  answer_id: string | null;
+  emoji: string | null;
+  body: string | null;
+  read: boolean;
+  created_at: string;
+  actor?: Pick<ProfileRow, 'username' | 'display_name' | 'avatar_url'>;
+};
+
+/** 相手へ通知を作成（自分自身へは作らない）。best-effort。 */
+export async function createNotification(
+  recipientUid: string,
+  type: string,
+  extra?: { answerId?: string | null; emoji?: string | null; body?: string | null }
+): Promise<void> {
+  if (!supabase || !recipientUid) return;
+  const uid = await getCurrentUserId();
+  if (!uid || uid === recipientUid) return;
+  try {
+    await supabase.from('notifications').insert({
+      user_id: recipientUid,
+      actor_id: uid,
+      type,
+      answer_id: extra?.answerId ?? null,
+      emoji: extra?.emoji ?? null,
+      body: extra?.body ?? null,
+    });
+  } catch {}
+}
+
+/** 自分宛の通知一覧（行動者プロフィール付き） */
+export async function getNotifications(limit = 50): Promise<NotificationRow[]> {
+  if (!supabase) return [];
+  const uid = await getCurrentUserId();
+  if (!uid) return [];
+  const { data } = await supabase
+    .from('notifications')
+    .select('id,user_id,actor_id,type,answer_id,emoji,body,read,created_at')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  const rows = (data ?? []) as any[];
+  if (rows.length === 0) return [];
+  const actorIds = [...new Set(rows.map((r) => r.actor_id).filter(Boolean))];
+  const { data: profs } = actorIds.length
+    ? await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', actorIds)
+    : { data: [] as any[] };
+  const map = new Map((profs ?? []).map((p: any) => [p.id, p]));
+  return rows.map((r) => ({ ...r, actor: map.get(r.actor_id) })) as NotificationRow[];
+}
+
+/** 未読件数 */
+export async function getUnreadNotificationCount(): Promise<number> {
+  if (!supabase) return 0;
+  const uid = await getCurrentUserId();
+  if (!uid) return 0;
+  const { count } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', uid)
+    .eq('read', false);
+  return count ?? 0;
+}
+
+/** すべて既読にする */
+export async function markNotificationsRead(): Promise<void> {
+  if (!supabase) return;
+  const uid = await getCurrentUserId();
+  if (!uid) return;
+  try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false); } catch {}
+}

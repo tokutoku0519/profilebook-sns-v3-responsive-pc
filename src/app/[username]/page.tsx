@@ -19,7 +19,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
     return this.props.children;
   }
 }
-import { ArrowLeft, Bell, Bookmark, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, Bookmark, Heart, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
@@ -36,7 +36,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -2143,9 +2143,43 @@ function OtherProfileScreen({
     const next = !isFollowing;
     setIsFollowing(next); // 楽観
     if (dbReady() && targetUid) {
-      if (next) void dbFollow(targetUid); else void dbUnfollow(targetUid);
+      if (next) { void dbFollow(targetUid); void createNotification(targetUid, 'follow'); }
+      else void dbUnfollow(targetUid);
     }
   }
+
+  // なかよし（承認制のプロフ帳交換）
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>('none');
+  useEffect(() => {
+    if (!dbReady() || !targetUid) { setFriendStatus('none'); return; }
+    let cancelled = false;
+    getFriendStatus(targetUid).then((s) => { if (!cancelled) setFriendStatus(s); });
+    return () => { cancelled = true; };
+  }, [targetUid]);
+
+  function onFriendAction() {
+    if (!dbReady() || !targetUid) return;
+    if (friendStatus === 'none') {
+      setFriendStatus('pending_out');
+      void requestFriend(targetUid);
+      void createNotification(targetUid, 'friend_request');
+    } else if (friendStatus === 'pending_in') {
+      setFriendStatus('friends');
+      void acceptFriend(targetUid);
+      void createNotification(targetUid, 'friend_accept');
+    } else {
+      // pending_out（取消）／friends（解除）
+      setFriendStatus('none');
+      void removeFriend(targetUid);
+    }
+  }
+  const friendBtn = {
+    none:        { label: '📖 なかよし申請', cls: 'bg-purple text-white' },
+    pending_out: { label: '⏳ 申請中', cls: 'bg-base text-purple ring-2 ring-purple/40' },
+    pending_in:  { label: '✅ 承認する', cls: 'bg-purple text-white' },
+    friends:     { label: '📖 なかよし（交換ずみ）', cls: 'bg-base text-purple ring-2 ring-purple/40' },
+  }[friendStatus];
+  const isFriend = friendStatus === 'friends';
 
   const book = mockProfileBooks[profile.id];
   const theirAnswers = answers.filter((a) => a.user.id === profile.id);
@@ -2202,8 +2236,8 @@ function OtherProfileScreen({
     [circles, profile.id]);
   // なかよしアクション（各1ポイント）
   const friendActions: { label: string; done: boolean }[] = [
-    { label: '🎀 なかよし登録', done: isFollowing },
-    { label: '📖 プロフ帳を交換した', done: exchanged },
+    { label: '🎀 フォロー', done: isFollowing },
+    { label: '📖 プロフ帳を交換（なかよし）', done: isFriend || exchanged },
     { label: '📔 いっしょに日記を書いた', done: wroteDiaryTogether },
     { label: '🔒 おなじサークル', done: inSameCircle },
   ];
@@ -2222,18 +2256,13 @@ function OtherProfileScreen({
               : 'bg-pink text-white'
           }`}
         >
-          {isFollowing ? '🎀 なかよし登録中' : '🎀 なかよくなる'}
+          {isFollowing ? '🎀 フォロー中' : '🎀 フォロー'}
         </button>
         <button
-          onClick={() => { if (!exchanged) onExchange?.(profile.id); }}
-          disabled={exchanged}
-          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
-            exchanged
-              ? 'bg-base text-purple ring-2 ring-purple/40'
-              : 'bg-purple text-white'
-          }`}
+          onClick={onFriendAction}
+          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${friendBtn.cls}`}
         >
-          {exchanged ? '📖 交換ずみ' : '📖 プロフ帳を交換'}
+          {friendBtn.label}
         </button>
       </div>
 
@@ -3824,19 +3853,35 @@ function Best3EditBlock({
   );
 }
 
+const STICKER_CHOICES = ['😆', '😭', '👏', '🥹', '🔥', '🎉', '😮', '🙏', '💯', '✨', '😂', '🥰'];
+
 function DetailScreen({
-  go, answer, onReact, myReaction, isBookmarked, onToggleBookmark, onShare,
+  go, answer, onReact, reactions, authorUid, isBookmarked, onToggleBookmark, onShare,
 }: {
   go: (s: Screen, payload?: any) => void;
   answer: Answer;
-  onReact: (answerId: string, type: keyof Answer['reactions']) => void;
-  myReaction: keyof Answer['reactions'] | null;
+  onReact: (answerId: string, type: string) => void;
+  reactions: Record<string, { count: number; mine: boolean }>;
+  authorUid?: string | null;
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
   onShare: (text: string) => void;
 }) {
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<CommentRow[]>([]);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [heartPop, setHeartPop] = useState(false);
+
+  const likeInfo = reactions['like'] ?? { count: 0, mine: false };
+  // 絵文字スタンプ（like以外）を件数の多い順に
+  const stickerEntries = Object.entries(reactions)
+    .filter(([type]) => type !== 'like')
+    .sort((a, b) => b[1].count - a[1].count);
+
+  function tapLike() {
+    if (!likeInfo.mine) { setHeartPop(true); setTimeout(() => setHeartPop(false), 450); }
+    onReact(answer.id, 'like');
+  }
 
   // コメントを Supabase から読み込み（ローカル生成の回答 a-... は対象外）
   useEffect(() => {
@@ -3859,6 +3904,7 @@ function DetailScreen({
     setComments((cs) => [...cs, optimistic]);
     if (dbReady() && !answer.id.startsWith('a-')) {
       await dbAddComment(answer.id, body);
+      if (authorUid) void createNotification(authorUid, 'comment', { answerId: answer.id, body });
     }
   }
 
@@ -3868,14 +3914,52 @@ function DetailScreen({
       <div className="space-y-5 px-4 pt-3">
         <AnswerCard answer={answer} detail onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
 
-        {/* リアクション */}
-        <div className="grid grid-cols-4 gap-2">
-          {(['like','same','wakaru','natsukashii'] as const).map((type) => (
-            <button key={type} onClick={() => onReact(answer.id, type)}
-              className={`rounded-full py-3 text-xs font-black shadow-card transition ${myReaction === type ? 'bg-pink text-white' : 'bg-white'}`}>
-              {type === 'like' ? '♡ すき' : type === 'same' ? '同じ' : type === 'wakaru' ? 'わかる' : '懐かしい'}
+        {/* リアクション（❤️すき＋絵文字スタンプ） */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* いいね（ハート） */}
+            <button
+              onClick={tapLike}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-black shadow-card transition active:scale-95 ${likeInfo.mine ? 'bg-pink text-white' : 'bg-white text-ink'}`}
+            >
+              <Heart size={18} fill={likeInfo.mine ? 'currentColor' : 'none'} className={heartPop ? 'heart-pop' : ''} />
+              すき{likeInfo.count > 0 && <span>{likeInfo.count}</span>}
             </button>
-          ))}
+
+            {/* 付いている絵文字スタンプ（Slack風チップ） */}
+            {stickerEntries.map(([emoji, info]) => (
+              <button
+                key={emoji}
+                onClick={() => onReact(answer.id, emoji)}
+                className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-black shadow-card transition active:scale-95 ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-white text-ink'}`}
+              >
+                <span className="text-base">{emoji}</span>{info.count}
+              </button>
+            ))}
+
+            {/* スタンプ追加 */}
+            <div className="relative">
+              <button
+                onClick={() => setShowStickerPicker((v) => !v)}
+                className="grid h-11 w-11 place-items-center rounded-full bg-white text-lg text-muted shadow-card transition active:scale-95"
+              >
+                ＋
+              </button>
+              {showStickerPicker && (
+                <div className="absolute bottom-full left-0 z-20 mb-2 grid grid-cols-6 gap-1 rounded-2xl bg-white p-2 shadow-floating">
+                  {STICKER_CHOICES.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => { onReact(answer.id, emoji); setShowStickerPicker(false); }}
+                      className="grid h-9 w-9 place-items-center rounded-xl text-xl transition hover:bg-pink/10 active:scale-90"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* シェア・ブックマーク */}
@@ -4060,51 +4144,86 @@ function ProfileLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+// 関係性から「仲良し度」を算出（1〜3）。なかよし成立＞相互フォロー＞片方向。
+function closenessOf(uid: string, opts: { friendIds: Set<string>; followingIds: Set<string>; followerIds: Set<string> }) {
+  if (opts.friendIds.has(uid)) return { level: 3, label: 'なかよし' };
+  if (opts.followingIds.has(uid) && opts.followerIds.has(uid)) return { level: 2, label: '相互フォロー' };
+  return { level: 1, label: 'フォロー' };
+}
+
 function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) => void; lang?: Lang }) {
   const [tab, setTab] = useState<'following' | 'followers'>('following');
+  const [following, setFollowing] = useState<ProfileRow[]>([]);
+  const [followerList, setFollowerList] = useState<ProfileRow[]>([]);
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
-  const mockFollowersList = [...followers].reverse();
+  useEffect(() => {
+    if (!dbReady()) { setLoading(false); return; }
+    let cancelled = false;
+    (async () => {
+      const [fg, fl, fr] = await Promise.all([getFollowing(), getFollowers(), getFriendIds()]);
+      if (cancelled) return;
+      setFollowing(fg); setFollowerList(fl); setFriendIds(new Set(fr)); setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const followingIds = new Set(following.map((p) => p.id));
+  const followerIds = new Set(followerList.map((p) => p.id));
+  const list = tab === 'following' ? following : followerList;
 
   return (
     <>
       <AppHeader title={t('header_follow', lang)} back onBack={() => go('mypage')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3">
-        {/* タブ */}
         <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
-          <button
-            onClick={() => setTab('following')}
-            className={`rounded-xl py-2 text-sm font-black transition ${tab === 'following' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}
-          >
-            {t('btn_following', lang)} {followers.length}
+          <button onClick={() => setTab('following')}
+            className={`rounded-xl py-2 text-sm font-black transition ${tab === 'following' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>
+            {t('btn_following', lang)} {following.length}
           </button>
-          <button
-            onClick={() => setTab('followers')}
-            className={`rounded-xl py-2 text-sm font-black transition ${tab === 'followers' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}
-          >
-            {t('label_followers_tab', lang)} {followers.length}
+          <button onClick={() => setTab('followers')}
+            className={`rounded-xl py-2 text-sm font-black transition ${tab === 'followers' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>
+            {t('label_followers_tab', lang)} {followerList.length}
           </button>
         </div>
 
         <section className="space-y-3">
-          {(tab === 'following' ? followers : mockFollowersList).map((person) => (
-            <button
-              key={person.id}
-              onClick={() => go('profile', person.id)}
-              className="flex w-full items-center gap-3 rounded-[24px] bg-white p-4 text-left shadow-card transition active:scale-[0.98]"
-            >
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-pink/15 text-2xl">
-                {person.avatar}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-black">{person.name}</p>
-                <p className="text-xs font-bold text-muted">{person.id}</p>
-                <p className="mt-1 truncate text-xs text-muted">{person.bio}</p>
-              </div>
-              <span className="rounded-full bg-purple/10 px-3 py-2 text-xs font-black text-purple">
-                {person.common}
-              </span>
-            </button>
-          ))}
+          {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">読み込み中…</div>}
+          {!loading && list.length === 0 && (
+            <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">
+              {tab === 'following' ? 'まだ誰もフォローしていません' : 'まだフォロワーはいません'}
+            </div>
+          )}
+          {list.map((person) => {
+            const close = closenessOf(person.id, { friendIds, followingIds, followerIds });
+            return (
+              <button
+                key={person.id}
+                onClick={() => go('profile', '@' + person.username)}
+                className="flex w-full items-center gap-3 rounded-[24px] bg-white p-4 text-left shadow-card transition active:scale-[0.98]"
+              >
+                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">
+                  {person.avatar_url && person.avatar_url.startsWith('http')
+                    ? <img src={person.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : (person.avatar_url || '📷')}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-black">{person.display_name || person.username}</p>
+                  <p className="text-xs font-bold text-muted">@{person.username}</p>
+                  {/* 仲良し度（ハート） */}
+                  <div className="mt-1 flex items-center gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} className={`text-xs ${i < close.level ? '' : 'opacity-20 grayscale'}`}>💗</span>
+                    ))}
+                  </div>
+                </div>
+                <span className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-black ${close.level === 3 ? 'bg-pink/15 text-pink' : close.level === 2 ? 'bg-purple/10 text-purple' : 'bg-base text-muted'}`}>
+                  {close.label}
+                </span>
+              </button>
+            );
+          })}
         </section>
       </div>
     </>
@@ -5534,26 +5653,53 @@ function notificationTimeAgo(at: number): string {
   return `${Math.floor(hour / 24)}日前`;
 }
 
-function NotificationsScreen({ go, notifications = [] }: { go: (s: Screen) => void; notifications?: AppNotification[] }) {
+// Supabase通知（他ユーザーの行動）を表示用に整形
+function formatServerNotif(n: NotificationRow): { id: string; icon: string; text: string; at: number; onOpen?: 'answer' | 'profile'; answerId?: string; username?: string } {
+  const who = n.actor?.display_name ?? 'だれか';
+  const uname = n.actor?.username;
+  const at = new Date(n.created_at).getTime();
+  const base = { id: n.id, at, answerId: n.answer_id ?? undefined, username: uname };
+  switch (n.type) {
+    case 'like':          return { ...base, icon: '💗', text: `${who}さんがあなたの回答に「すき」しました`, onOpen: 'answer' };
+    case 'sticker':       return { ...base, icon: n.emoji || '⭐️', text: `${who}さんがあなたの回答に ${n.emoji ?? 'スタンプ'} でリアクションしました`, onOpen: 'answer' };
+    case 'comment':       return { ...base, icon: '💬', text: `${who}さんがコメントしました${n.body ? '：' + n.body : ''}`, onOpen: 'answer' };
+    case 'follow':        return { ...base, icon: '🎀', text: `${who}さんがあなたをフォローしました`, onOpen: 'profile' };
+    case 'friend_request':return { ...base, icon: '📖', text: `${who}さんからなかよし申請が届きました`, onOpen: 'profile' };
+    case 'friend_accept': return { ...base, icon: '📖', text: `${who}さんがなかよし申請を承認しました`, onOpen: 'profile' };
+    default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };
+  }
+}
+
+function NotificationsScreen({ go, notifications = [], serverNotifs = [] }: { go: (s: Screen, payload?: any) => void; notifications?: AppNotification[]; serverNotifs?: NotificationRow[] }) {
+  // 他ユーザー通知（サーバー）＋端末内通知を時系列でまとめる
+  const server = serverNotifs.map(formatServerNotif);
+  const local = notifications.map((n) => ({ id: 'l-' + n.id, icon: n.icon, text: n.text, at: n.at, onOpen: undefined as undefined, answerId: undefined, username: undefined }));
+  const merged = [...server, ...local].sort((a, b) => b.at - a.at);
   return (
     <>
       <AppHeader title="通知" />
       <div className="space-y-3 px-4 pt-3">
-        {notifications.length === 0 && (
+        {merged.length === 0 && (
           <div className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15">🎀</span>
-            <p className="text-sm font-bold leading-6">Miriへようこそ！お題に答えたりガチャを引くと、ここにお知らせが届くよ</p>
+            <p className="text-sm font-bold leading-6">Miriへようこそ！リアクションやフォロー、コメントが届くとここに表示されます</p>
           </div>
         )}
-        {notifications.map((n) => (
-          <div key={n.id} className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15">{n.icon}</span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold leading-6">{n.text}</p>
-              <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at)}</p>
+        {merged.map((n) => {
+          const clickable = n.onOpen === 'answer' ? () => n.answerId && go('detail', n.answerId)
+            : n.onOpen === 'profile' ? () => n.username && go('profile', '@' + n.username)
+            : undefined;
+          return (
+            <div key={n.id} onClick={clickable} role={clickable ? 'button' : undefined}
+              className={`flex gap-3 rounded-[24px] bg-white p-4 shadow-card ${clickable ? 'cursor-pointer transition active:scale-[0.99]' : ''}`}>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15 text-lg">{n.icon}</span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold leading-6">{n.text}</p>
+                <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at)}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <button onClick={() => go('home')} className="mt-4 h-12 w-full rounded-full bg-pink text-sm font-black text-white">ホームに戻る</button>
       </div>
     </>
@@ -5888,11 +6034,7 @@ function DailyQuestionScreen({
                     </div>
                     <p className="text-sm font-bold text-ink leading-6">{answer.body}</p>
                     <div className="mt-3 flex gap-4">
-                      {(['like','same','wakaru','natsukashii'] as const).map((k) => (
-                        <span key={k} className="text-xs font-bold text-muted">
-                          {k === 'like' ? '💗' : k === 'same' ? '✋' : k === 'wakaru' ? '😭' : '🥹'} {answer.reactions[k]}
-                        </span>
-                      ))}
+                      <span className="text-xs font-bold text-muted">💗 {answer.reactions.like}</span>
                     </div>
                   </button>
                 ))}
@@ -6013,9 +6155,12 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // 開いている他ユーザーの uuid（フォロー用）
   const [viewedProfileUid, setViewedProfileUid] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
-  // 自分の uuid と、回答ごとの自分のリアクション種別（Supabase同期用）
+  // 自分の uuid
   const [myUid, setMyUid] = useState<string | null>(null);
-  const [myReactions, setMyReactions] = useState<Record<string, keyof Answer['reactions']>>({});
+  // 回答ごとのリアクション集計： { answerId: { type('like'|絵文字): {count, mine} } }
+  const [reactState, setReactState] = useState<Record<string, Record<string, { count: number; mine: boolean }>>>({});
+  // 回答ごとの投稿者 uuid（通知の宛先に使う）
+  const [answerAuthorUid, setAnswerAuthorUid] = useState<Record<string, string>>({});
   useEffect(() => { if (dbReady()) { void getCurrentUserId().then((id) => setMyUid(id)); } }, []);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
@@ -6692,18 +6837,23 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       const rows = await getFeed(100);
       if (!rows) return; // null(エラー)なら既存表示を維持
       setAnswers(rows.map(feedRowToAnswer));
-      // 自分のリアクション種別を復元（選択状態の表示に使う）
+      // リアクション集計（like＋絵文字スタンプ）と投稿者uuidを構築
       const uid = myUid ?? (await getCurrentUserId());
-      if (uid) {
-        const mine: Record<string, keyof Answer['reactions']> = {};
-        for (const r of rows) {
-          const myr = (r.reactions ?? []).find((x) => x.user_id === uid);
-          if (myr && ['like', 'same', 'wakaru', 'natsukashii'].includes(myr.type)) {
-            mine[r.id] = myr.type as keyof Answer['reactions'];
-          }
+      const rs: Record<string, Record<string, { count: number; mine: boolean }>> = {};
+      const authors: Record<string, string> = {};
+      for (const r of rows) {
+        authors[r.id] = r.user_id;
+        const m: Record<string, { count: number; mine: boolean }> = {};
+        for (const re of r.reactions ?? []) {
+          const e = m[re.type] ?? { count: 0, mine: false };
+          e.count++;
+          if (uid && re.user_id === uid) e.mine = true;
+          m[re.type] = e;
         }
-        setMyReactions(mine);
+        rs[r.id] = m;
       }
+      setReactState(rs);
+      setAnswerAuthorUid(authors);
     } catch { /* ネットワーク等は無視（ローカル表示を維持） */ }
   }
   useEffect(() => { void reloadFeed(); }, []);
@@ -6731,6 +6881,28 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       return next;
     });
   }
+
+  // 他ユーザーからの通知（Supabase）＋未読数
+  const [serverNotifs, setServerNotifs] = useState<NotificationRow[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  async function refreshNotifications() {
+    if (!dbReady()) return;
+    try {
+      const [list, unread] = await Promise.all([getNotifications(50), getUnreadNotificationCount()]);
+      setServerNotifs(list);
+      setUnreadCount(unread);
+    } catch {}
+  }
+  useEffect(() => { void refreshNotifications(); }, []);
+  // 通知画面を開いたら取得＋既読化
+  useEffect(() => {
+    if (screen !== 'notifications') return;
+    void (async () => {
+      await refreshNotifications();
+      if (dbReady()) { await markNotificationsRead(); setUnreadCount(0); }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
 
   // ── ブックマーク ──────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
@@ -6902,26 +7074,32 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   return id;
 }
 
-  function react(answerId: string, type: keyof Answer['reactions']) {
-    const prev = myReactions[answerId] ?? null;
-    const next = prev === type ? null : type; // 同じものを再タップで解除
-    // 楽観的にカウントと自分の選択状態を更新
-    setAnswers((answers) => answers.map((a) => {
-      if (a.id !== answerId) return a;
-      const r = { ...a.reactions };
-      if (prev) r[prev] = Math.max(0, r[prev] - 1);
-      if (next) r[type] = r[type] + 1;
-      return { ...a, reactions: r };
-    }));
-    setMyReactions((m) => {
-      const c = { ...m };
-      if (next) c[answerId] = next; else delete c[answerId];
-      return c;
+  // リアクション（'like' または絵文字スタンプ）を独立トグル。Slack風に複数付けられる。
+  function react(answerId: string, type: string) {
+    const mine = !!reactState[answerId]?.[type]?.mine;
+    const next = !mine;
+    setReactState((s) => {
+      const forAnswer = { ...(s[answerId] ?? {}) };
+      const entry = { ...(forAnswer[type] ?? { count: 0, mine: false }) };
+      entry.mine = next;
+      entry.count = Math.max(0, entry.count + (next ? 1 : -1));
+      if (entry.count === 0 && !entry.mine) delete forAnswer[type];
+      else forAnswer[type] = entry;
+      return { ...s, [answerId]: forAnswer };
     });
-    // Supabase 同期（切替時は前のを外してから付ける）。ローカル生成の回答(a-...)は対象外。
+    // AnswerCard等のハート表示用に like カウントも同期
+    if (type === 'like') {
+      setAnswers((as) => as.map((a) => a.id === answerId
+        ? { ...a, reactions: { ...a.reactions, like: Math.max(0, a.reactions.like + (next ? 1 : -1)) } }
+        : a));
+    }
+    // Supabase 同期＋相手への通知（付けたときのみ）。ローカル生成の回答(a-...)は対象外。
     if (dbReady() && !answerId.startsWith('a-')) {
-      if (prev && prev !== type) void toggleReaction(answerId, prev);
       void toggleReaction(answerId, type);
+      if (next) {
+        const author = answerAuthorUid[answerId];
+        if (author) void createNotification(author, type === 'like' ? 'like' : 'sticker', { answerId, emoji: type === 'like' ? null : type });
+      }
     }
   }
 
@@ -7135,7 +7313,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         go={go}
         answer={selectedAnswer}
         onReact={react}
-        myReaction={myReactions[selectedAnswer.id] ?? null}
+        reactions={reactState[selectedAnswer.id] ?? {}}
+        authorUid={answerAuthorUid[selectedAnswer.id] ?? null}
         isBookmarked={bookmarks.includes(selectedAnswer.id)}
         onToggleBookmark={toggleBookmark}
         onShare={shareText}
@@ -7144,7 +7323,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'bookmarks') return (
       <BookmarksScreen go={go} answers={answers} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} />
     );
-    if (screen === 'notifications') return <NotificationsScreen go={go} notifications={notifications} />;
+    if (screen === 'notifications') return <NotificationsScreen go={go} notifications={notifications} serverNotifs={serverNotifs} />;
     if (screen === 'followers') return <FollowersScreen go={go} lang={lang} />;
     if (screen === 'mypage') return <MyPageScreen go={go} answers={answers} avatarUrl={avatarUrl} onGoBookmarks={() => go('bookmarks')} ownedStickerCount={ownedStickerCount} coins={coins} lang={lang} onLogout={logout} />;
     if (screen === 'shop') return (
@@ -7196,7 +7375,8 @@ return <ProfileScreen
   viewedProfile,
   viewedProfileBook,
   viewedProfileUid,
-  myReactions,
+  reactState,
+  serverNotifs,
   appTheme,
   circles,
   circlePosts,

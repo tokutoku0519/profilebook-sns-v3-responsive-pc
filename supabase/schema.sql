@@ -55,14 +55,16 @@ create table if not exists public.answers (
 create index if not exists answers_created_idx on public.answers (created_at desc);
 create index if not exists answers_question_idx on public.answers (question_key);
 
--- ── reactions：回答へのリアクション ──────────────────────
+-- ── reactions：回答へのリアクション（like＋任意の絵文字スタンプ） ──
 create table if not exists public.reactions (
   answer_id uuid not null references public.answers(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  type text not null check (type in ('like','same','wakaru','natsukashii')),
+  type text not null,   -- 'like' または絵文字（😆❤️🔥 など）
   created_at timestamptz default now(),
   primary key (answer_id, user_id, type)
 );
+-- 旧スキーマの type 制約（4種のみ）を撤廃して絵文字スタンプを許可
+alter table public.reactions drop constraint if exists reactions_type_check;
 
 -- ── comments：回答へのコメント ──────────────────────────
 create table if not exists public.comments (
@@ -74,7 +76,7 @@ create table if not exists public.comments (
 );
 create index if not exists comments_answer_idx on public.comments (answer_id, created_at);
 
--- ── follows：フォロー関係 ───────────────────────────────
+-- ── follows：フォロー関係（片思いOK・投稿を追う） ──────────
 create table if not exists public.follows (
   follower_id uuid not null references public.profiles(id) on delete cascade,
   following_id uuid not null references public.profiles(id) on delete cascade,
@@ -82,6 +84,32 @@ create table if not exists public.follows (
   primary key (follower_id, following_id),
   constraint no_self_follow check (follower_id <> following_id)
 );
+
+-- ── friendships：なかよし（承認制のプロフ帳交換） ──────────
+create table if not exists public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  addressee_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null default 'pending',   -- pending / accepted
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(requester_id, addressee_id),
+  constraint no_self_friend check (requester_id <> addressee_id)
+);
+
+-- ── notifications：相手に関わる行動の通知 ────────────────
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,  -- 受信者
+  actor_id uuid references public.profiles(id) on delete cascade,           -- 行動した人
+  type text not null,   -- like / sticker / comment / follow / friend_request / friend_accept
+  answer_id uuid,
+  emoji text,
+  body text,
+  read boolean default false,
+  created_at timestamptz default now()
+);
+create index if not exists notifications_user_idx on public.notifications (user_id, created_at desc);
 
 -- ============================================================
 -- サインアップ時に profiles を自動作成するトリガー
@@ -122,6 +150,8 @@ alter table public.answers   enable row level security;
 alter table public.reactions enable row level security;
 alter table public.comments  enable row level security;
 alter table public.follows   enable row level security;
+alter table public.friendships   enable row level security;
+alter table public.notifications enable row level security;
 
 -- profiles
 drop policy if exists "profiles readable"   on public.profiles;
@@ -165,3 +195,21 @@ drop policy if exists "follows delete"   on public.follows;
 create policy "follows readable" on public.follows for select using (true);
 create policy "follows insert"   on public.follows for insert with check (auth.uid() = follower_id);
 create policy "follows delete"   on public.follows for delete using (auth.uid() = follower_id);
+
+-- friendships（当事者だけが読める。申請は本人、承認は受け手のみ）
+drop policy if exists "friendships readable" on public.friendships;
+drop policy if exists "friendships insert"   on public.friendships;
+drop policy if exists "friendships update"   on public.friendships;
+drop policy if exists "friendships delete"   on public.friendships;
+create policy "friendships readable" on public.friendships for select using (auth.uid() = requester_id or auth.uid() = addressee_id);
+create policy "friendships insert"   on public.friendships for insert with check (auth.uid() = requester_id);
+create policy "friendships update"   on public.friendships for update using (auth.uid() = addressee_id);
+create policy "friendships delete"   on public.friendships for delete using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+-- notifications（受信者だけが読む・既読にできる。作成は行動者のみ）
+drop policy if exists "notifications readable" on public.notifications;
+drop policy if exists "notifications insert"   on public.notifications;
+drop policy if exists "notifications update"   on public.notifications;
+create policy "notifications readable" on public.notifications for select using (auth.uid() = user_id);
+create policy "notifications insert"   on public.notifications for insert with check (auth.uid() = actor_id);
+create policy "notifications update"   on public.notifications for update using (auth.uid() = user_id);

@@ -205,6 +205,15 @@ body {
 
 button, input, textarea { font: inherit; }
 
+/* いいね（ハート）を押したときのポップ演出 */
+@keyframes heartPop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.5); }
+  55%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+.heart-pop { animation: heartPop 0.45s ease-in-out; }
+
 .notebook-lines {
   background-image: linear-gradient(
     rgb(var(--color-purple) / 0.18) 1px,
