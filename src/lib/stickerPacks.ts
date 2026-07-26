@@ -153,26 +153,28 @@ export const STICKER_PACKS: StickerPack[] = [
   // ── ラッキーガチャ（ガチャ 100コイン/回） ─────────────────
   {
     id: 'lucky-gacha',
-    name: 'ラッキーガチャ',
+    name: 'ガラケーデコガチャ',
     creator: 'Miri',
     thumbnail: '🎰',
-    description: '引くたびにちがうスタンプが当たる！SR排出率5%。',
+    description: 'ガラケー風のピクセルデコが当たる！リアクションでも使える。SR 5%。',
     acquisition: { type: 'gacha', coinCost: 100 },
-    tags: ['ガチャ', 'レア', 'コレクション'],
+    tags: ['ガチャ', 'デコ', 'ピクセル', 'レトロ'],
+    // emoji には Retro ショートコードを入れる（アプリ側でピクセルアートに描画される）
     stickers: [
       // N
-      { id: 'lg-n1', name: 'クローバー',  emoji: '🍀', rarity: 'N' },
-      { id: 'lg-n2', name: 'スター',      emoji: '⭐', rarity: 'N' },
-      { id: 'lg-n3', name: 'はなびら',    emoji: '🌸', rarity: 'N' },
-      { id: 'lg-n4', name: 'うさぎ',      emoji: '🐰', rarity: 'N' },
-      { id: 'lg-n5', name: 'キャンディ',  emoji: '🍬', rarity: 'N' },
+      { id: 'lg-n1', name: 'ハート',    emoji: '[♥]', rarity: 'N' },
+      { id: 'lg-n2', name: 'キラキラ',  emoji: '[★]', rarity: 'N' },
+      { id: 'lg-n3', name: 'お花',      emoji: '[✿]', rarity: 'N' },
+      { id: 'lg-n4', name: '音符',      emoji: '[♪]', rarity: 'N' },
+      { id: 'lg-n5', name: 'クローバー', emoji: '[🍀]', rarity: 'N' },
+      { id: 'lg-n6', name: 'スマイル',  emoji: '[😊]', rarity: 'N' },
       // R
-      { id: 'lg-r1', name: '虹が出た',    emoji: '🌈', rarity: 'R' },
-      { id: 'lg-r2', name: 'ダイヤ',      emoji: '💎', rarity: 'R' },
-      { id: 'lg-r3', name: 'プレゼント',  emoji: '🎁', rarity: 'R' },
+      { id: 'lg-r1', name: 'にじ',      emoji: '[🌈]', rarity: 'R' },
+      { id: 'lg-r2', name: 'つき',      emoji: '[🌙]', rarity: 'R' },
+      { id: 'lg-r3', name: 'リボン',    emoji: '[🎀]', rarity: 'R' },
       // SR
-      { id: 'lg-sr1', name: '最強ラッキー', emoji: '🏆', rarity: 'SR' },
-      { id: 'lg-sr2', name: 'クラウン',     emoji: '👑', rarity: 'SR' },
+      { id: 'lg-sr1', name: 'ダイヤ',   emoji: '[💎]', rarity: 'SR' },
+      { id: 'lg-sr2', name: 'おうかん', emoji: '[👑]', rarity: 'SR' },
     ],
   },
 

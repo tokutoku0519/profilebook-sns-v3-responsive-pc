@@ -1378,7 +1378,7 @@ function StickerPickerPanel({
                 onClick={() => { onSelect(s); onClose(); }}
                 className="flex flex-col items-center gap-1 rounded-2xl bg-base p-2 active:scale-95 transition"
               >
-                <span className="text-3xl">{s.emoji}</span>
+                <span className="text-3xl"><RetroText text={s.emoji} /></span>
                 <span className="text-[9px] font-bold text-muted leading-tight text-center">{s.name}</span>
               </button>
             ))}
@@ -3946,7 +3946,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
             onClick={() => onPick(emoji)}
             className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
           >
-            {emoji}
+            <RetroText text={emoji} />
           </button>
         ))}
       </div>
@@ -4052,7 +4052,7 @@ function DetailScreen({
                 onClick={() => onReact(answer.id, emoji)}
                 className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-black shadow-card transition active:scale-95 ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-white text-ink'}`}
               >
-                <span className="text-base">{emoji}</span>{info.count}
+                <span className="text-base"><RetroText text={emoji} /></span>{info.count}
               </button>
             ))}
 
@@ -5460,7 +5460,7 @@ function ShopScreen({
                       {pack.stickers.slice(0, 8).map((s) => (
                         <span key={s.id}
                           className={`grid h-8 w-8 place-items-center rounded-xl text-lg ${ownedGachaStickers.includes(s.id) ? '' : 'opacity-30'}`}>
-                          {s.emoji}
+                          <RetroText text={s.emoji} />
                         </span>
                       ))}
                       {pack.stickers.length > 8 && <span className="grid h-8 w-8 place-items-center rounded-xl bg-base text-[10px] font-black text-muted">+{pack.stickers.length - 8}</span>}
@@ -5669,7 +5669,7 @@ function ShopScreen({
             <div className="grid grid-cols-4 gap-2">
               {detailPack.stickers.map((s) => (
                 <div key={s.id} className="flex flex-col items-center gap-1 rounded-2xl bg-base p-2">
-                  <span className={`text-3xl ${detailPack.acquisition.type === 'gacha' && !ownedGachaStickers.includes(s.id) ? 'opacity-30' : ''}`}>{s.emoji}</span>
+                  <span className={`text-3xl ${detailPack.acquisition.type === 'gacha' && !ownedGachaStickers.includes(s.id) ? 'opacity-30' : ''}`}><RetroText text={s.emoji} /></span>
                   <span className="text-[9px] font-bold text-muted text-center leading-tight">{s.name}</span>
                   {s.rarity && (
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[s.rarity]}`}>{s.rarity}</span>
@@ -5691,7 +5691,7 @@ function ShopScreen({
             <div className={`${gachaResult.length === 1 ? 'flex justify-center' : 'grid grid-cols-5 gap-2'}`}>
               {gachaResult.map((r, i) => (
                 <div key={i} className={`flex flex-col items-center gap-1 rounded-2xl p-2 ${r.sticker.rarity === 'SR' ? 'bg-zinc-900' : r.sticker.rarity === 'R' ? 'bg-sky-50' : 'bg-base'} ${gachaResult.length === 1 ? 'h-32 w-32' : ''}`}>
-                  <span className={gachaResult.length === 1 ? 'text-6xl' : 'text-2xl'}>{r.sticker.emoji}</span>
+                  <span className={gachaResult.length === 1 ? 'text-6xl' : 'text-2xl'}><RetroText text={r.sticker.emoji} /></span>
                   {r.sticker.rarity && (
                     <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[r.sticker.rarity]}`}>{r.sticker.rarity}</span>
                   )}
@@ -5772,7 +5772,7 @@ function PackRow({ pack, owned, onDetail, action }: {
         </div>
         <p className="text-[11px] font-bold text-muted">{pack.creator}</p>
         <button onClick={onDetail} className="mt-1 flex gap-0.5">
-          {pack.stickers.slice(0, 6).map((s) => <span key={s.id} className="text-base">{s.emoji}</span>)}
+          {pack.stickers.slice(0, 6).map((s) => <span key={s.id} className="text-base"><RetroText text={s.emoji} /></span>)}
         </button>
       </div>
       {action}
@@ -5800,7 +5800,7 @@ function formatServerNotif(n: NotificationRow): { id: string; icon: string; text
   const base = { id: n.id, at, answerId: n.answer_id ?? undefined, username: uname };
   switch (n.type) {
     case 'like':          return { ...base, icon: '💗', text: `${who}さんがあなたの回答に「すき」しました`, onOpen: 'answer' };
-    case 'sticker':       return { ...base, icon: n.emoji || '⭐️', text: `${who}さんがあなたの回答に ${n.emoji ?? 'スタンプ'} でリアクションしました`, onOpen: 'answer' };
+    case 'sticker':       return { ...base, icon: n.emoji || '⭐️', text: `${who}さんがあなたの回答にスタンプでリアクションしました`, onOpen: 'answer' };
     case 'comment':       return { ...base, icon: '💬', text: `${who}さんがコメントしました${n.body ? '：' + n.body : ''}`, onOpen: 'answer' };
     case 'follow':        return { ...base, icon: '🎀', text: `${who}さんがあなたをフォローしました`, onOpen: 'profile' };
     case 'friend_request':return { ...base, icon: '📖', text: `${who}さんからなかよし申請が届きました`, onOpen: 'profile' };
@@ -5831,7 +5831,7 @@ function NotificationsScreen({ go, notifications = [], serverNotifs = [] }: { go
           return (
             <div key={n.id} onClick={clickable} role={clickable ? 'button' : undefined}
               className={`flex gap-3 rounded-[24px] bg-white p-4 shadow-card ${clickable ? 'cursor-pointer transition active:scale-[0.99]' : ''}`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15 text-lg">{n.icon}</span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15 text-lg"><RetroText text={n.icon} /></span>
               <div className="min-w-0">
                 <p className="text-sm font-bold leading-6">{n.text}</p>
                 <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at)}</p>

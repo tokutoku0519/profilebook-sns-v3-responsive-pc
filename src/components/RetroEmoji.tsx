@@ -143,6 +143,77 @@ ROYYGGBB.`,
   { R: '#FF4444', O: '#FF9900', Y: '#FFDD00', G: '#44CC66', B: '#4499FF' }
 );
 
+// スマイル 7×7
+const SMILE_PX = parseMap(
+  `.YYYYY.
+YYYYYYY
+YKYYYKY
+YYYYYYY
+YKYYYKY
+.YKKKY.
+.YYYYY.`,
+  { Y: '#FFCC33', K: '#7A4A1A' }
+);
+
+// なきがお 7×7（青い涙つき）
+const CRY_PX = parseMap(
+  `.YYYYY.
+YYYYYYY
+YKYYYKY
+YBYYYBY
+YKYYYKY
+.YKKKY.
+.YYYYY.`,
+  { Y: '#FFCC33', K: '#7A4A1A', B: '#4AA8FF' }
+);
+
+// つき 7×7（三日月）
+const MOON_PX = parseMap(
+  `..MMM..
+.MM....
+MM.....
+MM.....
+MM.....
+.MM....
+..MMM..`,
+  { M: '#FFD24A' }
+);
+
+// クローバー 7×7（四つ葉）
+const CLOVER_PX = parseMap(
+  `.G...G.
+GGG.GGG
+GGGGGGG
+...S...
+GGGGGGG
+GGG.GGG
+.G.S.G.`,
+  { G: '#4CC66A', S: '#2E7D46' }
+);
+
+// ダイヤ 7×7（宝石）
+const GEM_PX = parseMap(
+  `.CCCCC.
+CWCCWCC
+.CCCCC.
+.CCCCC.
+..CCC..
+..CCC..
+...C...`,
+  { C: '#5AD1FF', W: '#EAFBFF' }
+);
+
+// おうかん 7×6（王冠）
+const CROWN_PX = parseMap(
+  `Y..Y..Y
+YY.Y.YY
+YYYYYYY
+YYYYYYY
+YRYRYRY
+YYYYYYY`,
+  { Y: '#FFC93A', R: '#FF5A7A' }
+);
+
 // ── エクスポートコンポーネント ───────────────────────────────
 
 export function RetroStar({ scale = 1 }: { scale?: number }) {
@@ -209,6 +280,13 @@ export function RetroRainbow({ scale = 1 }: { scale?: number }) {
   );
 }
 
+export function RetroSmile({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={SMILE_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroCry({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CRY_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroMoon({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={MOON_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroClover({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CLOVER_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroGem({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={GEM_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroCrown({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CROWN_PX} w={7} h={6} scale={scale} /></span>; }
+
 // ── ショートコードシステム ─────────────────────────────────
 
 // ショートコード → レンダリング関数
@@ -220,6 +298,13 @@ const CODE_RENDER: Record<string, () => React.ReactElement> = {
   '[✉]':  () => <RetroMail  scale={0.85} />,
   '[🎀]': () => <RetroRibbon scale={0.85} />,
   '[⭐]': () => <RetroMiniStar scale={0.85} />,
+  '[🌈]': () => <RetroRainbow scale={0.7} />,
+  '[😊]': () => <RetroSmile scale={0.85} />,
+  '[😭]': () => <RetroCry scale={0.85} />,
+  '[🌙]': () => <RetroMoon scale={0.85} />,
+  '[🍀]': () => <RetroClover scale={0.85} />,
+  '[💎]': () => <RetroGem scale={0.85} />,
+  '[👑]': () => <RetroCrown scale={0.85} />,
 };
 
 // ピッカーに表示する順番・ラベル
@@ -231,10 +316,25 @@ export const RETRO_CODES: { code: string; label: string }[] = [
   { code: '[✉]',  label: 'メール'   },
   { code: '[🎀]', label: 'リボン'   },
   { code: '[⭐]', label: 'スター'   },
+  { code: '[🌈]', label: 'にじ'     },
+  { code: '[😊]', label: 'スマイル' },
+  { code: '[😭]', label: 'なき'     },
+  { code: '[🌙]', label: 'つき'     },
+  { code: '[🍀]', label: 'クローバー' },
+  { code: '[💎]', label: 'ダイヤ'   },
+  { code: '[👑]', label: 'おうかん' },
 ];
 
-// ショートコードを検索する正規表現
-const CODE_RE = /(\[★\]|\[♥\]|\[♪\]|\[✿\]|\[✉\]|\[🎀\]|\[⭐\])/g;
+// ショートコードを検索する正規表現（RETRO_CODES から自動生成）
+const CODE_RE = new RegExp(
+  '(' + RETRO_CODES.map((c) => c.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')',
+  'g'
+);
+
+/** 文字列が単一のレトロコードか（＝ピクセルデコ・スタンプか） */
+export function isRetroCode(s: string): boolean {
+  return !!CODE_RENDER[s];
+}
 
 /** テキスト中のショートコードをアニメSVGに変換して表示 */
 export function RetroText({ text, className }: { text: string; className?: string }) {

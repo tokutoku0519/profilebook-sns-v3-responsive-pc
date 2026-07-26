@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react';
 import { Heart, Sparkles } from 'lucide-react';
 import type { answers, profiles, questions } from '@/lib/mock';
 import { RetroText } from '@/components/RetroEmoji';
+// RetroText はレトロコード([♥]等)をピクセルアートに、それ以外はそのまま表示する
 import { getUserTitles, TITLE_DEFS, type TitleType } from '@/lib/titles';
 
 type Question = (typeof questions)[number];
@@ -78,7 +79,7 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
         <div className="mt-3 flex flex-wrap gap-1.5">
           {stickerChips.map(([emoji, info]) => (
             <span key={emoji} className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-black ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-base text-ink'}`}>
-              <span className="text-sm">{emoji}</span>{info.count}
+              <span className="text-sm"><RetroText text={emoji} /></span>{info.count}
             </span>
           ))}
         </div>
