@@ -6657,6 +6657,38 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     return true;
   }
 
+  // ── ゲームデータ（コイン/スタンプ/背景/かけら/テーマ）のSupabase同期 ──
+  // 既存の book 列に __game として保存するため、SQL/テーブル追加は不要。
+  const gameSyncReady = useRef(false);
+  // 起動時：サーバーの __game を端末へ復元
+  useEffect(() => {
+    if (!dbReady()) { gameSyncReady.current = true; return; }
+    let cancelled = false;
+    (async () => {
+      const p = await getMyProfile();
+      const g = (p?.book as any)?.__game;
+      if (!cancelled && g && typeof g === 'object') {
+        if (typeof g.coins === 'number') { setCoins(g.coins); localStorage.setItem('miri_coins', String(g.coins)); }
+        if (Array.isArray(g.packs)) { setOwnedPackIds(g.packs); localStorage.setItem('miri_owned_packs', JSON.stringify(g.packs)); }
+        if (Array.isArray(g.gacha)) { setOwnedGachaStickers(g.gacha); localStorage.setItem('miri_gacha_stickers', JSON.stringify(g.gacha)); }
+        if (Array.isArray(g.bgs)) { setOwnedBgIds(g.bgs); localStorage.setItem('miri_owned_bgs', JSON.stringify(g.bgs)); }
+        if (Array.isArray(g.themes)) { setOwnedThemeIds(g.themes); localStorage.setItem('miri_owned_themes', JSON.stringify(g.themes)); }
+        if (typeof g.shards === 'number') { setBgShards(g.shards); localStorage.setItem('miri_bg_shards', String(g.shards)); }
+        if (g.bg !== undefined) { setEquippedBgId(g.bg); if (g.bg) localStorage.setItem('miri_equipped_bg', g.bg); else localStorage.removeItem('miri_equipped_bg'); }
+        if (g.appTheme) { setAppTheme(g.appTheme); localStorage.setItem('appTheme', g.appTheme); applyTheme(g.appTheme); }
+        if (g.freeGacha) { try { localStorage.setItem('miri_free_gacha_used', g.freeGacha); } catch {} }
+      }
+      gameSyncReady.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  // 変更時：デバウンスしてサーバーへ保存（初回復元後のみ）
+  useEffect(() => {
+    if (!gameSyncReady.current || !dbReady()) return;
+    const t = setTimeout(() => { persistBook(); }, 1500);
+    return () => clearTimeout(t);
+  }, [coins, ownedPackIds, ownedGachaStickers, ownedBgIds, equippedBgId, bgShards, ownedThemeIds, appTheme]);
+
   // ── 通知設定 ────────────────────────────────────────────────
   const [notifyOdai, setNotifyOdai] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -6883,6 +6915,20 @@ function persistBook() {
     if (b3) book.__best3 = JSON.parse(b3);
     if (mo) book.__monthly = JSON.parse(mo);
     if (qs) book.__questions = JSON.parse(qs);
+    // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
+    const num = (k: string) => Number(localStorage.getItem(k) || '0');
+    const arr = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
+    book.__game = {
+      coins: num('miri_coins'),
+      packs: arr('miri_owned_packs'),
+      gacha: arr('miri_gacha_stickers'),
+      bgs: arr('miri_owned_bgs'),
+      bg: localStorage.getItem('miri_equipped_bg') || null,
+      shards: num('miri_bg_shards'),
+      themes: arr('miri_owned_themes'),
+      appTheme: localStorage.getItem('appTheme') || 'default',
+      freeGacha: localStorage.getItem('miri_free_gacha_used') || null,
+    };
     void saveProfileBook(book);
   } catch {}
 }
