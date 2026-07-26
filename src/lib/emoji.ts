@@ -104,3 +104,110 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
     ],
   },
 ];
+
+// ============================================================
+// キーワード検索用のインデックス（絵文字 → 日本語/ローマ字キーワード）
+// よく使う絵文字を中心にタグ付け。ここに載っていない絵文字も、
+// カテゴリから選べば使えるため、検索の「取りこぼし」は問題にならない。
+// ============================================================
+const EMOJI_KEYWORDS: Record<string, string> = {
+  // 顔・気持ち
+  '😀': 'にこにこ わらい smile', '😃': 'わらい happy', '😄': 'わらい happy',
+  '😁': 'にっこり grin', '😆': 'わらい laugh', '😅': 'あせ わらい sweat',
+  '🤣': 'ばくしょう わらい lol', '😂': 'なみだ わらい lol cry',
+  '🙂': 'にっこり smile', '😉': 'ウインク wink', '😊': 'えがお にこ smile happy',
+  '😇': 'てんし angel', '🥰': 'すき ラブ love happy', '😍': 'すき ラブ love heart',
+  '🤩': 'きらきら star', '😘': 'キス love kiss', '😋': 'おいしい yum',
+  '😜': 'ぺろ てへ wink', '🤪': 'おかしい crazy', '🤗': 'ハグ hug',
+  '🤔': 'かんがえる think hmm', '😐': 'むひょうじょう neutral', '😏': 'にやり smirk',
+  '😌': 'ほっ relief', '😔': 'かなしい しょんぼり sad', '😪': 'ねむい sleepy',
+  '😴': 'ねる ねむい sleep zzz', '😷': 'マスク mask sick', '🤒': 'びょうき ねつ sick',
+  '🤢': 'きもちわるい sick', '🥵': 'あつい hot', '🥶': 'さむい cold',
+  '😵': 'めまい dizzy', '🤯': 'びっくり shock mind blown', '🥳': 'おいわい party',
+  '😎': 'かっこいい サングラス cool', '🤓': 'メガネ nerd', '😕': 'こまった confused',
+  '😟': 'しんぱい worried', '🙁': 'かなしい sad', '😮': 'びっくり wow',
+  '😲': 'びっくり shock', '😳': 'はずかしい あか面 blush', '🥺': 'うるうる おねがい plead cute',
+  '🥹': 'かんげき うれしなき', '😢': 'なみだ かなしい cry sad', '😭': 'なく おおなき cry',
+  '😱': 'びっくり さけぶ scream', '😖': 'こまる', '😞': 'がっかり sad',
+  '😩': 'つかれた weary', '😫': 'つかれた tired', '🥱': 'あくび yawn',
+  '😤': 'ふんがい プンプン', '😡': 'おこ いかり angry mad', '😠': 'おこ angry',
+  '🤬': 'ぶちぎれ angry', '😈': 'あくま devil', '💀': 'がいこつ しぬ skull',
+  '💩': 'うんち poop', '🤡': 'ピエロ clown', '👻': 'おばけ ghost',
+  '👽': 'うちゅうじん alien', '👾': 'インベーダー ゲーム game', '🤖': 'ロボット robot',
+  // ハート
+  '❤️': 'ハート あか love heart', '🧡': 'ハート オレンジ heart', '💛': 'ハート きいろ heart',
+  '💚': 'ハート みどり heart', '💙': 'ハート あお heart', '💜': 'ハート むらさき heart',
+  '🖤': 'ハート くろ heart', '🤍': 'ハート しろ heart', '🩷': 'ハート ピンク heart',
+  '💔': 'しつれん こわれた broken heart', '💕': 'ハート love', '💖': 'きらきらハート sparkle heart',
+  '💗': 'ハート love', '💘': 'キューピッド love', '💝': 'プレゼントハート gift heart',
+  '💞': 'ハート love', '💓': 'ハート love',
+  // ジェスチャー
+  '👍': 'いいね グッド good like thumbs up', '👎': 'だめ bad', '👌': 'オッケー ok',
+  '✌️': 'ピース peace', '🤞': 'いのる ゆびクロス', '🙏': 'おねがい かんしゃ pray thanks',
+  '👏': 'はくしゅ clap', '🙌': 'ばんざい yay', '💪': 'ちから きんにく muscle strong',
+  '🤝': 'あくしゅ handshake', '🫶': 'ハートハンド love', '✋': 'て hand',
+  '👋': 'てをふる ばいばい wave hi bye', '🫰': 'ゆびハート finger heart',
+  // どうぶつ
+  '🐶': 'いぬ dog', '🐱': 'ねこ cat', '🐭': 'ねずみ mouse', '🐰': 'うさぎ rabbit',
+  '🦊': 'きつね fox', '🐻': 'くま bear', '🐼': 'ぱんだ panda', '🐨': 'こあら koala',
+  '🐯': 'とら tiger', '🦁': 'らいおん lion', '🐮': 'うし cow', '🐷': 'ぶた pig',
+  '🐸': 'かえる frog', '🐵': 'さる monkey', '🐔': 'にわとり chicken', '🐧': 'ぺんぎん penguin',
+  '🐦': 'とり bird', '🦆': 'あひる duck', '🦅': 'わし eagle', '🦉': 'ふくろう owl',
+  '🐴': 'うま horse', '🦄': 'ユニコーン unicorn', '🐝': 'はち bee', '🦋': 'ちょうちょ butterfly',
+  '🐌': 'かたつむり snail', '🐞': 'てんとうむし ladybug', '🐢': 'かめ turtle', '🐍': 'へび snake',
+  '🐙': 'たこ octopus', '🦑': 'いか squid', '🦐': 'えび shrimp', '🦀': 'かに crab',
+  '🐠': 'さかな fish', '🐬': 'いるか dolphin', '🐳': 'くじら whale', '🦈': 'さめ shark',
+  '🐘': 'ぞう elephant', '🐕': 'いぬ dog', '🐈': 'ねこ cat',
+  // しぜん・そら
+  '🌸': 'さくら はな flower cherry', '🌺': 'はな flower', '🌻': 'ひまわり sunflower',
+  '🌹': 'ばら rose flower', '🌷': 'チューリップ tulip flower', '🌱': 'めばえ seedling',
+  '🌲': 'き tree', '🌳': 'き tree', '🌴': 'やしのき palm', '🍀': 'よつば クローバー clover luck',
+  '🍁': 'もみじ maple', '🍂': 'おちば leaves', '🌿': 'はっぱ leaf', '💐': 'はなたば bouquet',
+  '🌈': 'にじ rainbow', '⭐️': 'ほし star', '🌟': 'きらきらほし star', '✨': 'きらきら sparkle',
+  '⚡️': 'かみなり lightning', '🔥': 'ほのお ファイヤー fire', '🌙': 'つき moon',
+  '☀️': 'たいよう はれ sun', '☁️': 'くも cloud', '🌧️': 'あめ rain', '❄️': 'ゆき snow',
+  '⛄️': 'ゆきだるま snowman', '🌊': 'なみ うみ wave sea',
+  // たべもの
+  '🍎': 'りんご apple', '🍌': 'ばなな banana', '🍓': 'いちご strawberry', '🍇': 'ぶどう grape',
+  '🍉': 'すいか watermelon', '🍑': 'もも peach', '🍒': 'さくらんぼ cherry', '🍍': 'ぱいなっぷる pineapple',
+  '🍅': 'とまと tomato', '🥑': 'あぼかど avocado', '🌽': 'とうもろこし corn', '🥕': 'にんじん carrot',
+  '🍞': 'ぱん bread', '🧀': 'ちーず cheese', '🥚': 'たまご egg', '🍳': 'めだまやき egg',
+  '🍔': 'はんばーがー burger', '🍟': 'ぽてと fries', '🍕': 'ぴざ pizza', '🌭': 'ほっとどっぐ hotdog',
+  '🍜': 'らーめん ramen noodle', '🍣': 'すし sushi', '🍙': 'おにぎり rice ball', '🍚': 'ごはん rice',
+  '🍰': 'けーき cake', '🎂': 'たんじょうびケーキ birthday cake', '🍩': 'どーなつ donut',
+  '🍪': 'くっきー cookie', '🍫': 'ちょこ chocolate', '🍬': 'あめ candy', '🍭': 'ぺろぺろ candy',
+  '🍦': 'あいす ソフトクリーム icecream', '🍨': 'あいす icecream', '☕️': 'こーひー coffee',
+  '🍵': 'おちゃ tea', '🍺': 'びーる beer', '🍷': 'わいん wine', '🥂': 'かんぱい cheers',
+  // アクティビティ・モノ
+  '⚽️': 'さっかー soccer ball', '🏀': 'ばすけ basketball', '⚾️': 'やきゅう baseball',
+  '🎾': 'てにす tennis', '🏆': 'とろふぃー trophy', '🥇': 'きんめだる medal gold',
+  '🎮': 'げーむ game', '🎲': 'さいころ dice', '🎯': 'まと ダーツ target',
+  '🎵': 'おんぷ music note', '🎶': 'おんぷ music', '🎤': 'まいく mic', '🎧': 'へっどほん headphone',
+  '🎸': 'ぎたー guitar', '🎹': 'ぴあの piano', '🥁': 'どらむ drum',
+  '🎉': 'クラッカー おいわい party', '🎊': 'くすだま party', '🎈': 'ふうせん balloon',
+  '🎁': 'ぷれぜんと present gift', '🎀': 'りぼん ribbon', '👑': 'おうかん かんむり crown',
+  '💎': 'だいや ほうせき diamond gem', '💰': 'おかね money', '💡': 'でんきゅう ひらめき idea light',
+  '📱': 'すまほ phone', '💻': 'ぱそこん pc laptop', '📷': 'かめら camera', '📚': 'ほん book',
+  '✏️': 'えんぴつ pencil', '📝': 'めも memo note', '🔑': 'かぎ key', '🔒': 'かぎ ロック lock',
+  // マーク
+  '💯': 'ひゃくてん hundred perfect', '✅': 'チェック ok check', '❌': 'ばつ ダメ x',
+  '⭕️': 'まる circle ok', '❗️': 'びっくり exclamation', '❓': 'はてな question',
+  '💢': 'いかり anger', '💥': 'ばくはつ explosion', '💫': 'めまい star', '💦': 'あせ みず sweat',
+  '💨': 'いそぐ けむり dash', '💤': 'ねむい zzz sleep', '➕': 'ぷらす plus', '❤️‍🔥': 'もえるハート',
+};
+
+/** クエリにマッチする絵文字を全カテゴリから検索（重複除去） */
+export function searchEmojis(query: string): string[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const cat of EMOJI_CATEGORIES) {
+    for (const e of cat.emojis) {
+      if (seen.has(e)) continue;
+      const kw = EMOJI_KEYWORDS[e] ?? '';
+      if (e === q || kw.toLowerCase().includes(q)) { seen.add(e); result.push(e); }
+    }
+  }
+  return result;
+}

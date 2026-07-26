@@ -51,7 +51,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }> }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions, onLike }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }>; onLike?: () => void }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   // 絵文字スタンプ（like以外）を件数の多い順に。詳細画面はリアクションバーがあるので非表示。
@@ -96,10 +96,22 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
           </span>
         </span>
         <div className="flex gap-3 text-xs font-bold text-muted">
-          <span className={`flex items-center gap-1 ${liked ? 'text-pink' : ''}`}>
-            <Heart size={15} fill={liked ? 'currentColor' : 'none'} className={liked ? 'heart-pop' : ''} />
-            {answer.reactions.like}
-          </span>
+          {onLike ? (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e: MouseEvent) => { e.stopPropagation(); onLike(); }}
+              className={`flex items-center gap-1 rounded-full -m-1 p-1 transition active:scale-90 hover:bg-pink/5 cursor-pointer ${liked ? 'text-pink' : ''}`}
+            >
+              <Heart size={15} fill={liked ? 'currentColor' : 'none'} className={liked ? 'heart-pop' : ''} />
+              {(reactions?.like?.count ?? answer.reactions.like)}
+            </span>
+          ) : (
+            <span className={`flex items-center gap-1 ${liked ? 'text-pink' : ''}`}>
+              <Heart size={15} fill={liked ? 'currentColor' : 'none'} className={liked ? 'heart-pop' : ''} />
+              {(reactions?.like?.count ?? answer.reactions.like)}
+            </span>
+          )}
         </div>
       </div>
     </article>

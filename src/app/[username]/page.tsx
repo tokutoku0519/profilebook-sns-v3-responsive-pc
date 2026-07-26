@@ -22,7 +22,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
 import { ArrowLeft, Bell, Bookmark, Heart, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
-import { EMOJI_CATEGORIES } from '@/lib/emoji';
+import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
@@ -831,6 +831,9 @@ const initialCirclePosts: CirclePost[] = isDev ? [
 // 装備中の背景テーマ（ガチャ背景）をヘッダー/タブの色合わせに使うためのコンテキスト
 const ChromeThemeContext = createContext<BgTheme | null>(null);
 
+// 他人のプロフ帳では未入力の項目を隠す（自分のときは空欄も見せて入力を促す）
+const HideEmptyProfileContext = createContext<boolean>(false);
+
 function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'search') return 'search';
   if (screen === 'create') return 'create';
@@ -982,6 +985,7 @@ function HomeScreen({
   isTranslating,
   likedIds,
   reactionsMap,
+  onLike,
   unread = 0,
   lang = 'ja',
 }: {
@@ -999,6 +1003,7 @@ function HomeScreen({
   isTranslating: boolean;
   likedIds?: Set<string>;
   reactionsMap?: Record<string, Record<string, { count: number; mine: boolean }>>;
+  onLike?: (answerId: string) => void;
   unread?: number;
   lang?: Lang;
 }) {
@@ -1114,7 +1119,7 @@ function HomeScreen({
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onLike={onLike ? () => onLike(answer.id) : undefined} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
               </button>
             ))}
           </div>
@@ -1917,7 +1922,14 @@ function ProfileBookContent({
   const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
 
+  // 他人のプロフ帳では、全項目が空のセクションごと非表示にする（自分は入力促進のため常に表示）
+  const has = (...keys: (keyof typeof info)[]) => keys.some((k) => ((info[k] as string) ?? '').trim());
+  const showBasic = isSelf || has('name', 'nickname', 'birthday', 'bloodType', 'gender', 'mbti', 'hometown');
+  const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
+  const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream');
+
   return (
+    <HideEmptyProfileContext.Provider value={!isSelf}>
     <div className="space-y-4 px-4 pt-3 pb-32">
 
       {/* ── 表紙カード ── */}
@@ -1956,6 +1968,7 @@ function ProfileBookContent({
       </section>
 
       {/* ── きほんじょうほう ── */}
+      {showBasic && (
       <section className="rounded-[28px] bg-white p-5 shadow-card">
         <ProfSectionHeader icon="☆" title={t('sec_basic', lang)} theme={themeColor} />
         <ProfileLine label={t('field_name', lang)} value={info.name} />
@@ -1966,8 +1979,10 @@ function ProfileBookContent({
         <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
         <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />
       </section>
+      )}
 
       {/* ── すきなもの ── */}
+      {showLikes && (
       <section className="rounded-[28px] bg-white p-5 shadow-card">
         <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
         <ProfileLine label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
@@ -1986,8 +2001,10 @@ function ProfileBookContent({
         <ProfileLine label={t('field_favoriteManga', lang)} value={translatedInfo.favoriteManga ?? info.favoriteManga} />
         <ProfileLine label={t('field_favoriteGame', lang)} value={translatedInfo.favoriteGame ?? info.favoriteGame} />
       </section>
+      )}
 
       {/* ── わたしのこと ── */}
+      {showAbout && (
       <section className="rounded-[28px] bg-white p-5 shadow-card">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
         <ProfileLine label={t('field_hobby', lang)} value={translatedInfo.hobby ?? info.hobby} />
@@ -1997,6 +2014,7 @@ function ProfileBookContent({
         <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
         <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
       </section>
+      )}
 
       {/* ── ライフステージ専用セクション ── */}
       {lifeStageDef && lifeStageDef.fields.some((f) => customFields[f.key]) && (
@@ -2119,6 +2137,7 @@ function ProfileBookContent({
       )}
 
     </div>
+    </HideEmptyProfileContext.Provider>
   );
 }
 
@@ -3920,44 +3939,54 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const [input, setInput] = useState('');
   const current = categories.find((c) => c.id === cat) ?? categories[0];
   const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
+  // 入力があればキーワード検索（例:「ハート」「ねこ」「わらい」）。ヒットしなければ直接入力扱い。
+  const q = input.trim();
+  const searchHits = q ? searchEmojis(q) : [];
+  const searching = q.length > 0;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
-      {/* 自由入力（端末キーボードからでも） */}
+      {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
       <div className="flex items-center gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
-          placeholder="😊 絵文字を入力"
+          placeholder="🔍 絵文字か言葉で検索（例:ハート）"
           className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base outline-none"
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
-      {/* カテゴリタブ */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setCat(c.id)}
-            aria-label={c.label}
-            className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xl transition ${cat === c.id ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}
-          >
-            {c.icon}
-          </button>
-        ))}
-      </div>
-      {/* 絵文字一覧 */}
-      <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
-        {current.emojis.map((emoji, i) => (
-          <button
-            key={emoji + i}
-            onClick={() => onPick(emoji)}
-            className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
-          >
-            <RetroText text={emoji} />
-          </button>
-        ))}
-      </div>
+      {/* カテゴリタブ（検索中は隠す） */}
+      {!searching && (
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCat(c.id)}
+              aria-label={c.label}
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xl transition ${cat === c.id ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}
+            >
+              {c.icon}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* 絵文字一覧（検索中は検索結果、そうでなければカテゴリ） */}
+      {searching && searchHits.length === 0 ? (
+        <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
+      ) : (
+        <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
+          {(searching ? searchHits : current.emojis).map((emoji, i) => (
+            <button
+              key={emoji + i}
+              onClick={() => onPick(emoji)}
+              className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
+            >
+              <RetroText text={emoji} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -4128,6 +4157,16 @@ function DetailScreen({
 function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount, coins, lang, onLogout }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number; coins: number; lang: Lang; onLogout: () => void }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
+  // 本番はフォロー中/フォロワー数をSupabaseから取得。デモ(①)はダミー件数。
+  const [followCounts, setFollowCounts] = useState<{ following: number; followers: number }>(
+    () => (isDev ? { following: followers.length, followers: followers.length } : { following: 0, followers: 0 }),
+  );
+  useEffect(() => {
+    if (isDev || !dbReady()) return;
+    let cancelled = false;
+    getFollowCounts().then((c) => { if (!cancelled) setFollowCounts(c); });
+    return () => { cancelled = true; };
+  }, []);
   return (
     <>
       <AppHeader title={t('header_mypage', lang)} onBell={() => go('notifications')} />
@@ -4162,7 +4201,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       }}
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
-      <p className="text-xl">{followers.length}</p>
+      <p className="text-xl">{followCounts.following}</p>
       <p className="text-[11px]">{t('btn_following', lang)}</p>
     </button>
     <button
@@ -4173,7 +4212,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
       }}
       className="rounded-2xl transition hover:bg-white/70 active:scale-[0.98]"
     >
-      <p className="text-xl">{followers.length}</p>
+      <p className="text-xl">{followCounts.followers}</p>
       <p className="text-[11px]">{t('label_followers_count', lang)}</p>
     </button>
     <button
@@ -4249,6 +4288,9 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
 }
 
 function ProfileLine({ label, value }: { label: string; value: string }) {
+  const hideEmpty = useContext(HideEmptyProfileContext);
+  // 他人のプロフ帳では未入力（空欄）の項目は表示しない
+  if (hideEmpty && !(value ?? '').trim()) return null;
   return (
     <div className="flex items-center gap-3 border-b border-dashed border-purple/25 py-2">
       <div className="w-28 shrink-0 text-sm font-black text-ink">
@@ -7481,6 +7523,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       isTranslating={isTranslating}
       likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))}
       reactionsMap={reactState}
+      onLike={(id) => react(id, 'like')}
       unread={unreadCount}
       lang={lang}
     />

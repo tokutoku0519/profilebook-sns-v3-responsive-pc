@@ -168,10 +168,16 @@ export const STICKER_PACKS: StickerPack[] = [
       { id: 'lg-n4', name: '音符',      emoji: '[♪]', rarity: 'N' },
       { id: 'lg-n5', name: 'クローバー', emoji: '[🍀]', rarity: 'N' },
       { id: 'lg-n6', name: 'スマイル',  emoji: '[😊]', rarity: 'N' },
+      { id: 'lg-n7', name: 'ねこ',      emoji: '[🐱]', rarity: 'N' },
+      { id: 'lg-n8', name: 'コーヒー',  emoji: '[☕]', rarity: 'N' },
+      { id: 'lg-n9', name: 'アイス',    emoji: '[🍦]', rarity: 'N' },
       // R
       { id: 'lg-r1', name: 'にじ',      emoji: '[🌈]', rarity: 'R' },
       { id: 'lg-r2', name: 'つき',      emoji: '[🌙]', rarity: 'R' },
       { id: 'lg-r3', name: 'リボン',    emoji: '[🎀]', rarity: 'R' },
+      { id: 'lg-r4', name: 'ほのお',    emoji: '[🔥]', rarity: 'R' },
+      { id: 'lg-r5', name: 'いなずま',  emoji: '[⚡]', rarity: 'R' },
+      { id: 'lg-r6', name: 'ゲーム',    emoji: '[🎮]', rarity: 'R' },
       // SR
       { id: 'lg-sr1', name: 'ダイヤ',   emoji: '[💎]', rarity: 'SR' },
       { id: 'lg-sr2', name: 'おうかん', emoji: '[👑]', rarity: 'SR' },

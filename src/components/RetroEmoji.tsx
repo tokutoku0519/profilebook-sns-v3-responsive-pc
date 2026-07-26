@@ -214,6 +214,76 @@ YYYYYYY`,
   { Y: '#FFC93A', R: '#FF5A7A' }
 );
 
+// ほのお 7×7（炎）
+const FIRE_PX = parseMap(
+  `...R...
+..ROR..
+.ROYOR.
+ROYYYOR
+ROYWYOR
+.ROYOR.
+..ROR..`,
+  { R: '#FF5A2A', O: '#FF9A2A', Y: '#FFD24A', W: '#FFF3C0' }
+);
+
+// いなずま 7×7（稲妻）
+const BOLT_PX = parseMap(
+  `....YY.
+...YY..
+..YYY..
+.YYYYY.
+...YY..
+..YY...
+.YY....`,
+  { Y: '#FFD400' }
+);
+
+// ねこ 7×7（猫の顔）
+const CAT_PX = parseMap(
+  `E.....E
+EE...EE
+EEEEEEE
+EKEEEKE
+EEEPEEE
+EEEEEEE
+.EEEEE.`,
+  { E: '#E0A25A', K: '#3A2A1A', P: '#FF88AA' }
+);
+
+// コーヒー 7×7（マグカップ + 湯気）
+const COFFEE_PX = parseMap(
+  `..s.s..
+..s.s..
+WWWWWH.
+WCCCWH.
+WCCCWH.
+WWWWW..
+.WWW...`,
+  { s: '#C9C9C9', W: '#EFE4D0', C: '#8A5A2A', H: '#EFE4D0' }
+);
+
+// ソフトクリーム 7×7
+const ICECREAM_PX = parseMap(
+  `..WWW..
+.WWWWW.
+WWWWWWW
+.WWWWW.
+..CCC..
+..CCC..
+...C...`,
+  { W: '#FFD6E6', C: '#E0A85A' }
+);
+
+// ゲーム 7×5（コントローラー）
+const GAME_PX = parseMap(
+  `.GGGGG.
+GGGGGGG
+GWGGGWG
+GGGGGGG
+.G...G.`,
+  { G: '#6A5AD0', W: '#FFFFFF' }
+);
+
 // ── エクスポートコンポーネント ───────────────────────────────
 
 export function RetroStar({ scale = 1 }: { scale?: number }) {
@@ -286,6 +356,12 @@ export function RetroMoon({ scale = 1 }: { scale?: number }) { return <span clas
 export function RetroClover({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CLOVER_PX} w={7} h={7} scale={scale} /></span>; }
 export function RetroGem({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={GEM_PX} w={7} h={7} scale={scale} /></span>; }
 export function RetroCrown({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CROWN_PX} w={7} h={6} scale={scale} /></span>; }
+export function RetroFire({ scale = 1 }: { scale?: number }) { return <span className="retro-heartbeat" style={{ display: 'inline-block' }}><PixelSprite px={FIRE_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroBolt({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={BOLT_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroCat({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={CAT_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroCoffee({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={COFFEE_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroIcecream({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={ICECREAM_PX} w={7} h={7} scale={scale} /></span>; }
+export function RetroGame({ scale = 1 }: { scale?: number }) { return <span className="retro-bounce" style={{ display: 'inline-block' }}><PixelSprite px={GAME_PX} w={7} h={5} scale={scale} /></span>; }
 
 // ── ショートコードシステム ─────────────────────────────────
 
@@ -305,6 +381,12 @@ const CODE_RENDER: Record<string, () => React.ReactElement> = {
   '[🍀]': () => <RetroClover scale={0.85} />,
   '[💎]': () => <RetroGem scale={0.85} />,
   '[👑]': () => <RetroCrown scale={0.85} />,
+  '[🔥]': () => <RetroFire scale={0.85} />,
+  '[⚡]': () => <RetroBolt scale={0.85} />,
+  '[🐱]': () => <RetroCat scale={0.85} />,
+  '[☕]': () => <RetroCoffee scale={0.85} />,
+  '[🍦]': () => <RetroIcecream scale={0.85} />,
+  '[🎮]': () => <RetroGame scale={0.85} />,
 };
 
 // ピッカーに表示する順番・ラベル
@@ -323,6 +405,12 @@ export const RETRO_CODES: { code: string; label: string }[] = [
   { code: '[🍀]', label: 'クローバー' },
   { code: '[💎]', label: 'ダイヤ'   },
   { code: '[👑]', label: 'おうかん' },
+  { code: '[🔥]', label: 'ほのお'   },
+  { code: '[⚡]', label: 'いなずま' },
+  { code: '[🐱]', label: 'ねこ'     },
+  { code: '[☕]', label: 'コーヒー' },
+  { code: '[🍦]', label: 'アイス'   },
+  { code: '[🎮]', label: 'ゲーム'   },
 ];
 
 // ショートコードを検索する正規表現（RETRO_CODES から自動生成）
