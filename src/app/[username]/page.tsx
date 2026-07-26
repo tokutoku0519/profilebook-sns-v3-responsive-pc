@@ -5327,7 +5327,7 @@ function ShopScreen({
   const pendingRevealRef = useRef<(() => void) | null>(null);
 
   // 被り1個あたりのかけら（レアいほど多い）
-  const SHARD_BY_RARITY: Record<string, number> = { N: 1, R: 2, SR: 3 };
+  const SHARD_BY_RARITY: Record<string, number> = { N: 2, R: 3, SR: 5 };
 
   /** カプセル演出を挟んでから結果を表示する */
   function playGacha(reveal: () => void) {
@@ -5546,7 +5546,7 @@ function ShopScreen({
               <span className="rounded-full bg-purple/10 px-2.5 py-1 text-[11px] font-black text-purple"><ShardIcon size={13} /> {bgShards}</span>
             </div>
             <p className="mb-3 text-[11px] font-bold text-muted">
-              ガチャの被りでかけらGET（N=1・R=2・SR=3）。{SHARD_EXCHANGE_COST}個で好きな世界観背景と交換できるよ！
+              ガチャの被りでかけらGET（N=2・R=3・SR=5）。{SHARD_EXCHANGE_COST}個で好きな世界観背景と交換できるよ！
             </p>
             <div className="grid grid-cols-2 gap-3">
               {BG_THEMES.filter((t) => !ownedBgIds.includes(t.id)).map((t) => (

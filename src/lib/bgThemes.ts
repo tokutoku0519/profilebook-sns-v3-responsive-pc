@@ -41,7 +41,7 @@ export type BgTheme = {
 export const BG_GACHA_COST = 150;
 
 /** かけら交換所：この個数で好きな世界観背景と交換できる */
-export const SHARD_EXCHANGE_COST = 5;
+export const SHARD_EXCHANGE_COST = 3;
 
 export const BG_THEMES: BgTheme[] = [
   {
