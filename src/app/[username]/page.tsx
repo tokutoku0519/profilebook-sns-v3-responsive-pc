@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: any) { super(props); this.state = { error: null }; }
@@ -828,6 +828,9 @@ const initialCirclePosts: CirclePost[] = isDev ? [
   },
 ] : [];
 
+// 装備中の背景テーマ（ガチャ背景）をヘッダー/タブの色合わせに使うためのコンテキスト
+const ChromeThemeContext = createContext<BgTheme | null>(null);
+
 function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'search') return 'search';
   if (screen === 'create') return 'create';
@@ -848,8 +851,10 @@ function Phone({ children, active, go, lang, bgTheme = null, unread = 0 }: { chi
           <div className="absolute inset-0 bg-white/40" />
         </div>
       )}
-      <div className="relative z-10 h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
-      <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} unread={unread} /></div>
+      <ChromeThemeContext.Provider value={bgTheme}>
+        <div className="relative z-10 h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
+        <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} unread={unread} themeGradient={bgTheme?.gradient} /></div>
+      </ChromeThemeContext.Provider>
     </main>
   );
 }
@@ -940,8 +945,11 @@ function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl,
 }
 
 function AppHeader({ title = 'Miri', back = false, onBack, onBell, unread = 0 }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void; unread?: number }) {
+  const chromeTheme = useContext(ChromeThemeContext);
+  // ガチャ背景を装備中は、その背景グラデーションでヘッダーも色合わせ
+  const headerBg = chromeTheme ? `bg-gradient-to-b ${chromeTheme.gradient}` : 'bg-base/90';
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between bg-base/90 px-4 pt-2 backdrop-blur">
+    <header className={`sticky top-0 z-20 flex h-16 items-center justify-between px-4 pt-2 backdrop-blur ${headerBg}`}>
       <button onClick={back ? onBack : undefined} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
         {back ? <ArrowLeft size={20} /> : <img src="/icon.png" alt="Miri" className="h-8 w-8 rounded-xl object-cover" />}
       </button>

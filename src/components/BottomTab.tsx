@@ -11,9 +11,11 @@ const items: { key: TabKey; labelKey: string; icon: any; center?: boolean }[] = 
   { key: 'mypage', labelKey: 'tab_mypage', icon: UserRound }
 ];
 
-export function BottomTab({ active, onChange, lang = 'ja', unread = 0 }: { active: TabKey; onChange: (key: TabKey) => void; lang?: Lang; unread?: number }) {
+export function BottomTab({ active, onChange, lang = 'ja', unread = 0, themeGradient }: { active: TabKey; onChange: (key: TabKey) => void; lang?: Lang; unread?: number; themeGradient?: string }) {
+  // ガチャ背景を装備中は、その背景グラデーションでタブバーも色合わせ
+  const navBg = themeGradient ? `bg-gradient-to-t ${themeGradient}` : 'bg-white/95';
   return (
-    <nav className="absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border border-purple-100 bg-white/95 px-4 pt-2 shadow-floating backdrop-blur" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
+    <nav className={`absolute bottom-0 left-0 right-0 z-30 rounded-t-[28px] border border-purple-100 px-4 pt-2 shadow-floating backdrop-blur ${navBg}`} style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
       <div className="grid grid-cols-5 items-end gap-1">
         {items.map((item) => {
           const Icon = item.icon;
