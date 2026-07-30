@@ -51,7 +51,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
   );
 }
 
-export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions, onLike }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }>; onLike?: () => void }) {
+export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions, onLike, onSticker }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }>; onLike?: () => void; onSticker?: () => void }) {
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   // 絵文字スタンプ（like以外）を件数の多い順に。詳細画面はリアクションバーがあるので非表示。
@@ -95,7 +95,18 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
             <span className="block text-[11px] text-muted">{answer.user.id}</span>
           </span>
         </span>
-        <div className="flex gap-3 text-xs font-bold text-muted">
+        <div className="flex items-center gap-2 text-xs font-bold text-muted">
+          {onSticker && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e: MouseEvent) => { e.stopPropagation(); onSticker(); }}
+              className="grid h-7 w-7 place-items-center rounded-full bg-base text-sm transition active:scale-90 hover:bg-pink/10 cursor-pointer"
+              aria-label="スタンプでリアクション"
+            >
+              😊<span className="ml-[-2px] text-[10px]">＋</span>
+            </span>
+          )}
           {onLike ? (
             <span
               role="button"

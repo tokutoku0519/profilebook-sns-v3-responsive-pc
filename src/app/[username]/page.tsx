@@ -986,6 +986,8 @@ function HomeScreen({
   likedIds,
   reactionsMap,
   onLike,
+  onReact,
+  myStickers = [],
   unread = 0,
   lang = 'ja',
 }: {
@@ -1004,9 +1006,13 @@ function HomeScreen({
   likedIds?: Set<string>;
   reactionsMap?: Record<string, Record<string, { count: number; mine: boolean }>>;
   onLike?: (answerId: string) => void;
+  onReact?: (answerId: string, type: string) => void;
+  myStickers?: string[];
   unread?: number;
   lang?: Lang;
 }) {
+  // フィードのカードから直接スタンプでリアクションするためのピッカー対象
+  const [stickerPickerFor, setStickerPickerFor] = useState<string | null>(null);
   return (
     <>
       <AppHeader onBell={() => go('notifications')} unread={unread} />
@@ -1113,13 +1119,21 @@ function HomeScreen({
         <section className="relative">
           <span className="pointer-events-none absolute right-20 -top-2 z-10"><RetroNote /></span>
           <SectionHeader title={t('sec_trending', lang)} action={t('btn_see_more', lang)} onAction={() => go('search')} />
+          {!isTranslating && answers.length === 0 && (
+            <button onClick={() => go('create')} className="flex w-full flex-col items-center gap-2 rounded-[28px] border border-dashed border-pink/40 bg-white/70 px-6 py-8 text-center shadow-card transition active:scale-[0.99]">
+              <span className="text-3xl">🌱</span>
+              <p className="text-sm font-black text-ink">まだ回答がありません</p>
+              <p className="text-xs font-bold text-muted">最初のお題に答えて、みんなの一番乗りになろう！</p>
+              <span className="mt-1 rounded-full bg-pink px-4 py-1.5 text-xs font-black text-white">お題に答える</span>
+            </button>
+          )}
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {isTranslating && (
               <p className="w-full text-center text-xs font-bold text-muted py-2">🌐 翻訳中...</p>
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
-                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onLike={onLike ? () => onLike(answer.id) : undefined} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+                <AnswerCard answer={answer} translatedBody={translatedAnswerBodies[answer.id]} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onLike={onLike ? () => onLike(answer.id) : undefined} onSticker={onReact ? () => setStickerPickerFor(answer.id) : undefined} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
               </button>
             ))}
           </div>
@@ -1186,6 +1200,17 @@ function HomeScreen({
         </section>
         )}
       </div>
+
+      {/* フィードのカードから直接スタンプでリアクション（ボトムシート） */}
+      {stickerPickerFor && onReact && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
+            <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -4154,6 +4179,47 @@ function DetailScreen({
   );
 }
 
+// 自分のデータ（プロフ帳・回答・コイン・所持デコ等）を JSON でダウンロード＝万一の保険バックアップ
+function exportMyData(): void {
+  if (typeof window === 'undefined') return;
+  const ls = (k: string) => localStorage.getItem(k);
+  const json = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+  const data = {
+    _meta: { app: 'Miri', kind: 'backup', version: 1, exportedAt: new Date().toISOString() },
+    profile: {
+      info: json('profileBookInfo'),
+      best3: json('best3'),
+      monthly: json('miri_monthly_best3'),
+      questions: json('profileQuestions'),
+      customFields: json('profileCustomFields'),
+    },
+    answers: json('profilebook_answers_v2'),
+    game: {
+      coins: Number(ls('miri_coins') || '0'),
+      ownedPacks: json('miri_owned_packs'),
+      gachaStickers: json('miri_gacha_stickers'),
+      ownedBgs: json('miri_owned_bgs'),
+      equippedBg: ls('miri_equipped_bg'),
+      shards: Number(ls('miri_bg_shards') || '0'),
+      ownedThemes: json('miri_owned_themes'),
+      appTheme: ls('appTheme'),
+      coinHistory: json('miri_coin_history'),
+    },
+    bookmarks: json('miri_bookmarks'),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  a.href = url;
+  a.download = `miri-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount, coins, lang, onLogout }: { go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; onGoBookmarks: () => void; ownedStickerCount: number; coins: number; lang: Lang; onLogout: () => void }) {
   const [tab, setTab] = useState<'answers' | 'saved' | 'drafts'>('answers');
   const myAnswers = answers.filter((a) => a.user.id === me.id);
@@ -4281,6 +4347,21 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
             </div>
           </button>
         </div>
+
+        {/* データバックアップ（JSONで手元に保存＝万一の保険） */}
+        <button
+          onClick={exportMyData}
+          className="flex w-full items-center justify-between rounded-[24px] border-2 border-mint bg-white px-5 py-4 shadow-card transition active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-mint/40 text-xl">💾</span>
+            <div className="text-left">
+              <p className="text-sm font-black text-ink">データをバックアップ</p>
+              <p className="text-xs font-bold text-muted">プロフ帳・回答・コイン・所持デコをJSON保存</p>
+            </div>
+          </div>
+          <span className="text-xs font-black text-muted">↓</span>
+        </button>
 
       </div>
     </>
@@ -6828,20 +6909,24 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifyOdai, dailyQuestion]);
 
-  // デイリーログインボーナス
+  // デイリーログインボーナス（連続日数は「前日にログインしていたか」で判定。1日でも空くとリセット）
   useEffect(() => {
-    const today = new Date().toDateString();
+    const now = new Date();
+    const today = now.toDateString();
     const last = localStorage.getItem('miri_daily_login');
     if (last === today) return;
+    const yesterday = new Date(now.getTime() - 86400000).toDateString();
+    const prevStreak = parseInt(localStorage.getItem('miri_streak') || '0');
+    const streak = last === yesterday ? prevStreak + 1 : 1; // 昨日ログイン→継続、そうでなければ1日目
     localStorage.setItem('miri_daily_login', today);
-    const streak = parseInt(localStorage.getItem('miri_streak') || '0') + 1;
     localStorage.setItem('miri_streak', String(streak));
-    const bonus = streak >= 7 ? 20 : 0;
+    // 7日ごとに連続ボーナス（7,14,21…日目）。それ以外の日はデイリー分のみ。
+    const bonus = streak > 0 && streak % 7 === 0 ? 20 : 0;
     const total = 3 + bonus;
-    addCoins(total, streak >= 7 ? `7日連続ログイン（${streak}日目）` : 'デイリーログイン');
+    addCoins(total, bonus ? `${streak}日連続ログインボーナス` : 'デイリーログイン');
     setTimeout(() => {
-      showToast(`🎁 +${total}コイン デイリーログインボーナス！${streak >= 7 ? `（${streak}日連続！）` : ''}`);
-      addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${streak >= 7 ? `（${streak}日連続！）` : ''}`);
+      showToast(`🎁 +${total}コイン デイリーログインボーナス！${bonus ? `（${streak}日連続！）` : ''}`);
+      addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${bonus ? `（${streak}日連続！）` : ''}`);
     }, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -7615,6 +7700,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))}
       reactionsMap={reactState}
       onLike={(id) => react(id, 'like')}
+      onReact={react}
+      myStickers={getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers)}
       unread={unreadCount}
       lang={lang}
     />
