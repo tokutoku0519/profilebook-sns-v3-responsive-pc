@@ -595,3 +595,23 @@ export async function markNotificationsRead(): Promise<void> {
   if (!uid) return;
   try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false); } catch {}
 }
+
+/**
+ * 自分宛ての新着通知をリアルタイム購読する。返り値は購読解除関数。
+ * ※ Supabase 側で notifications テーブルを Realtime publication に追加しておくと
+ *   即時に届く（未設定でも購読自体は失敗せず、フォールバックの再取得で拾える）。
+ */
+export async function subscribeNotifications(onInsert: (row: NotificationRow) => void): Promise<() => void> {
+  if (!supabase) return () => {};
+  const uid = await getCurrentUserId();
+  if (!uid) return () => {};
+  const channel = supabase
+    .channel(`notif:${uid}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
+      (payload: any) => { try { onInsert(payload.new as NotificationRow); } catch {} }
+    )
+    .subscribe();
+  return () => { try { supabase!.removeChannel(channel); } catch {} };
+}

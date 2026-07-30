@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -4311,10 +4311,12 @@ function closenessOf(uid: string, opts: { friendIds: Set<string>; followingIds: 
 }
 
 function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) => void; lang?: Lang }) {
-  const [tab, setTab] = useState<'following' | 'followers'>('following');
+  const [tab, setTab] = useState<'following' | 'followers' | 'requests'>('following');
   const [following, setFollowing] = useState<ProfileRow[]>([]);
   const [followerList, setFollowerList] = useState<ProfileRow[]>([]);
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
+  const [incoming, setIncoming] = useState<ProfileRow[]>([]);
+  const [accepting, setAccepting] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -4328,18 +4330,31 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
       setFollowerList([...rows].reverse());
       // 先頭2人を「なかよし」、残りは相互フォロー扱い（デモ用）
       setFriendIds(new Set(rows.slice(0, 2).map((r) => r.id)));
+      // デモでは受信申請サンプルを1件表示
+      setIncoming(rows.slice(2, 3));
       setLoading(false);
       return;
     }
     if (!dbReady()) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
-      const [fg, fl, fr] = await Promise.all([getFollowing(), getFollowers(), getFriendIds()]);
+      const [fg, fl, fr, inc] = await Promise.all([getFollowing(), getFollowers(), getFriendIds(), getIncomingFriendRequests()]);
       if (cancelled) return;
-      setFollowing(fg); setFollowerList(fl); setFriendIds(new Set(fr)); setLoading(false);
+      setFollowing(fg); setFollowerList(fl); setFriendIds(new Set(fr)); setIncoming(inc); setLoading(false);
     })();
     return () => { cancelled = true; };
   }, []);
+
+  async function accept(person: ProfileRow) {
+    setAccepting(person.id);
+    if (!isDev && dbReady()) {
+      await acceptFriend(person.id);
+      void createNotification(person.id, 'friend_accept');
+    }
+    setIncoming((prev) => prev.filter((p) => p.id !== person.id));
+    setFriendIds((prev) => new Set(prev).add(person.id));
+    setAccepting(null);
+  }
 
   const followingIds = new Set(following.map((p) => p.id));
   const followerIds = new Set(followerList.map((p) => p.id));
@@ -4349,7 +4364,7 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
     <>
       <AppHeader title={t('header_follow', lang)} back onBack={() => go('mypage')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3">
-        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-base p-1">
           <button onClick={() => setTab('following')}
             className={`rounded-xl py-2 text-sm font-black transition ${tab === 'following' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>
             {t('btn_following', lang)} {following.length}
@@ -4358,8 +4373,49 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
             className={`rounded-xl py-2 text-sm font-black transition ${tab === 'followers' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>
             {t('label_followers_tab', lang)} {followerList.length}
           </button>
+          <button onClick={() => setTab('requests')}
+            className={`relative rounded-xl py-2 text-sm font-black transition ${tab === 'requests' ? 'bg-white shadow-card text-purple' : 'text-muted'}`}>
+            申請 {incoming.length}
+            {incoming.length > 0 && tab !== 'requests' && (
+              <span className="absolute right-1.5 top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-purple px-1 text-[9px] font-black text-white">{incoming.length}</span>
+            )}
+          </button>
         </div>
 
+        {/* なかよし申請（受信） */}
+        {tab === 'requests' && (
+          <section className="space-y-3">
+            {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">読み込み中…</div>}
+            {!loading && incoming.length === 0 && (
+              <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">
+                届いているなかよし申請はありません
+              </div>
+            )}
+            {incoming.map((person) => (
+              <div key={person.id} className="flex items-center gap-3 rounded-[24px] bg-white p-4 shadow-card">
+                <button onClick={() => go('profile', '@' + person.username)}
+                  className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-purple/10 text-2xl">
+                  {person.avatar_url && person.avatar_url.startsWith('http')
+                    ? <img src={person.avatar_url} alt="" className="h-full w-full object-cover" />
+                    : (person.avatar_url || '📷')}
+                </button>
+                <button onClick={() => go('profile', '@' + person.username)} className="min-w-0 flex-1 text-left">
+                  <p className="font-black">{person.display_name || person.username}</p>
+                  <p className="text-xs font-bold text-muted">📖 プロフ帳を交換したいそうです</p>
+                </button>
+                <button
+                  onClick={() => accept(person)}
+                  disabled={accepting === person.id}
+                  className="shrink-0 rounded-full bg-purple px-4 py-2 text-[12px] font-black text-white transition active:scale-95 disabled:opacity-50"
+                >
+                  {accepting === person.id ? '…' : '✅ 承認'}
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {tab !== 'requests' && (
         <section className="space-y-3">
           {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">読み込み中…</div>}
           {!loading && list.length === 0 && (
@@ -4397,6 +4453,7 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
             );
           })}
         </section>
+        )}
       </div>
     </>
   );
@@ -7178,6 +7235,26 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
+  // リアルタイム購読（新着通知を即反映）＋フォールバック（タブ復帰時に再取得）。
+  // Realtime が未有効でも focus/visibility の再取得でバッジは追従する。
+  useEffect(() => {
+    if (!dbReady()) return;
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+    subscribeNotifications(() => { void refreshNotifications(); }).then((fn) => {
+      if (cancelled) fn(); else cleanup = fn;
+    });
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshNotifications(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      cancelled = true;
+      cleanup?.();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── ブックマーク ──────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
