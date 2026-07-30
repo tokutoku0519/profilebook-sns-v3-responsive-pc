@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -6725,9 +6725,12 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     return () => { cancelled = true; };
   }, []);
   // 変更時：デバウンスしてサーバーへ保存（初回復元後のみ）
+  // ※ ゲームデータ専用の read-merge-write を使う。book 全体を localStorage から
+  //    組み直す persistBook を使うと、別端末ログイン直後（プロフ本文がまだ
+  //    localStorage に無い状態）にサーバーのプロフ帳を空で上書きしてしまうため。
   useEffect(() => {
     if (!gameSyncReady.current || !dbReady()) return;
-    const t = setTimeout(() => { persistBook(); }, 1500);
+    const t = setTimeout(() => { persistGame(); }, 1500);
     return () => clearTimeout(t);
   }, [coins, ownedPackIds, ownedGachaStickers, ownedBgIds, equippedBgId, bgShards, ownedThemeIds, appTheme]);
 
@@ -6946,6 +6949,29 @@ function createCommunityQuestion(title: string, description: string, answerType:
 // プロフ帳一式（info＋BEST3＋今月のBEST3＋ひとことしつもん）を Supabase の book にまとめて保存。
 // 各 update 関数は localStorage を先に更新してから呼ぶので、ここでは localStorage を正として組み立てる。
 // （state はバッチ更新で直後は古い可能性があるため localStorage を参照する）
+// ゲームデータ（コイン/所持スタンプ/背景/かけら/テーマ）を localStorage から組み立てる
+function composeGameData(): Record<string, any> {
+  const num = (k: string) => Number(localStorage.getItem(k) || '0');
+  const arr = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
+  return {
+    coins: num('miri_coins'),
+    packs: arr('miri_owned_packs'),
+    gacha: arr('miri_gacha_stickers'),
+    bgs: arr('miri_owned_bgs'),
+    bg: localStorage.getItem('miri_equipped_bg') || null,
+    shards: num('miri_bg_shards'),
+    themes: arr('miri_owned_themes'),
+    appTheme: localStorage.getItem('appTheme') || 'default',
+    freeGacha: localStorage.getItem('miri_free_gacha_used') || null,
+  };
+}
+
+// ゲームデータだけを保存（read-merge-write）。プロフ本文などは触らない。
+function persistGame() {
+  if (!dbReady()) return;
+  try { void saveGameData(composeGameData()); } catch {}
+}
+
 function persistBook() {
   if (!dbReady()) return;
   try {
@@ -6958,19 +6984,7 @@ function persistBook() {
     if (mo) book.__monthly = JSON.parse(mo);
     if (qs) book.__questions = JSON.parse(qs);
     // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
-    const num = (k: string) => Number(localStorage.getItem(k) || '0');
-    const arr = (k: string) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
-    book.__game = {
-      coins: num('miri_coins'),
-      packs: arr('miri_owned_packs'),
-      gacha: arr('miri_gacha_stickers'),
-      bgs: arr('miri_owned_bgs'),
-      bg: localStorage.getItem('miri_equipped_bg') || null,
-      shards: num('miri_bg_shards'),
-      themes: arr('miri_owned_themes'),
-      appTheme: localStorage.getItem('appTheme') || 'default',
-      freeGacha: localStorage.getItem('miri_free_gacha_used') || null,
-    };
+    book.__game = composeGameData();
     void saveProfileBook(book);
   } catch {}
 }
