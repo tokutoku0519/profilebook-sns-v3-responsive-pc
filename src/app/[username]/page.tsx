@@ -87,15 +87,30 @@ type CirclePost = {
   votes?: { userId: string; targetId: string }[];
 };
 
-type DiaryEntry = {
+type DiaryComment = {
   id: string;
   authorId: string;
   authorName: string;
   authorAvatar: string;
   body: string;
+  postedAt: string;
+};
+
+type DiaryEntry = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  title?: string;      // 記事タイトル（アメブロ風）
+  mood?: string;       // 今日の気分（絵文字）
+  weather?: string;    // 今日の天気（絵文字）
+  body: string;
   photoUrl?: string;
   font?: string;
-  textColor?: string;
+  textColor?: string;  // タイトルの見出し色（デコ）
+  likes?: number;
+  likedByMe?: boolean;
+  comments?: DiaryComment[];
   postedAt: string;
 };
 
@@ -4540,6 +4555,18 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
   );
 }
 
+// アメブロ風：今日の気分・天気・見出し色の選択肢
+const DIARY_MOODS = ['😊', '🥰', '😆', '😌', '😴', '😢', '😤', '🤔', '😳', '😑'];
+const DIARY_WEATHERS = ['☀️', '⛅', '☁️', '🌧️', '⛈️', '❄️', '🌈', '🌙'];
+const DIARY_TITLE_COLORS: { label: string; value: string; cls: string }[] = [
+  { label: 'ピンク', value: '#EC4899', cls: 'text-pink' },
+  { label: 'むらさき', value: '#8B5CF6', cls: 'text-purple' },
+  { label: 'あお', value: '#3B82F6', cls: 'text-blue-500' },
+  { label: 'みどり', value: '#10B981', cls: 'text-emerald-500' },
+  { label: 'オレンジ', value: '#F59E0B', cls: 'text-amber-500' },
+  { label: 'こげ茶', value: '#78350F', cls: 'text-amber-900' },
+];
+
 function DiaryListScreen({
   go,
   diaryPages,
@@ -4577,9 +4604,20 @@ function DiaryListScreen({
                 <p className="mt-1 text-xs font-bold leading-5 text-muted">{page.description}</p>
               </div>
               <span className="shrink-0 rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
-                {page.entries.length}件
+                {page.entries.length}記事
               </span>
             </div>
+            {page.entries.length > 0 && (() => {
+              const latest = page.entries[page.entries.length - 1];
+              return (
+                <div className="mt-3 rounded-2xl bg-cream/30 px-3 py-2">
+                  <p className="text-[10px] font-black text-muted">最新の記事</p>
+                  <p className="mt-0.5 line-clamp-1 text-xs font-black text-ink">
+                    {latest.weather}{latest.mood} {latest.title || latest.body.slice(0, 20)}
+                  </p>
+                </div>
+              );
+            })()}
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-base">{page.createdByAvatar}</span>
@@ -4607,19 +4645,29 @@ function DiaryDetailScreen({
   onEditEntry,
   onDeleteEntry,
   onReportEntry,
+  onToggleLike,
+  onAddComment,
 }: {
   go: (s: Screen) => void;
   page: DiaryPage;
-  onAddEntry: (pageId: string, body: string, photoUrl?: string) => void;
-  onEditEntry: (pageId: string, entryId: string, body: string, photoUrl?: string) => void;
+  onAddEntry: (pageId: string, data: { body: string; photoUrl?: string; title?: string; mood?: string; weather?: string; textColor?: string }) => void;
+  onEditEntry: (pageId: string, entryId: string, data: { body: string; photoUrl?: string; title?: string; mood?: string; weather?: string; textColor?: string }) => void;
   onDeleteEntry: (pageId: string, entryId: string) => void;
   onReportEntry: (pageId: string, entryId: string) => void;
+  onToggleLike: (pageId: string, entryId: string) => void;
+  onAddComment: (pageId: string, entryId: string, body: string) => void;
 }) {
+  const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [mood, setMood] = useState<string>('');
+  const [weather, setWeather] = useState<string>('');
+  const [titleColor, setTitleColor] = useState<string>(DIARY_TITLE_COLORS[0].value);
   const [ngError, setNgError] = useState(false);
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set());
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const diaryBodyRef = useRef<HTMLTextAreaElement>(null);
 
   const today = new Date().toDateString();
@@ -4629,14 +4677,36 @@ function DiaryDetailScreen({
 
   useEffect(() => {
     if (todaysMyEntry) {
+      setTitle(todaysMyEntry.title ?? '');
       setBody(todaysMyEntry.body);
       setPhotoUrl(todaysMyEntry.photoUrl ?? '');
+      setMood(todaysMyEntry.mood ?? '');
+      setWeather(todaysMyEntry.weather ?? '');
+      setTitleColor(todaysMyEntry.textColor ?? DIARY_TITLE_COLORS[0].value);
     } else {
+      setTitle('');
       setBody('');
       setPhotoUrl('');
+      setMood('');
+      setWeather('');
+      setTitleColor(DIARY_TITLE_COLORS[0].value);
     }
     setNgError(false);
   }, [page.id]);
+
+  function toggleCommentsOpen(id: string) {
+    setOpenComments((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function submitComment(entryId: string) {
+    const text = (commentDraft[entryId] ?? '').trim();
+    if (!text || containsNgWord(text)) return;
+    onAddComment(page.id, entryId, text);
+    setCommentDraft((prev) => ({ ...prev, [entryId]: '' }));
+  }
 
   const canWrite =
     page.visibility === 'public' ||
@@ -4658,12 +4728,16 @@ function DiaryDetailScreen({
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
     if (!canWrite) return;
+    const data = { body: body.trim(), photoUrl: photoUrl || undefined, title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, textColor: titleColor };
     if (todaysMyEntry) {
-      onEditEntry(page.id, todaysMyEntry.id, body.trim(), photoUrl || undefined);
+      onEditEntry(page.id, todaysMyEntry.id, data);
     } else {
-      onAddEntry(page.id, body.trim(), photoUrl || undefined);
+      onAddEntry(page.id, data);
+      setTitle('');
       setBody('');
       setPhotoUrl('');
+      setMood('');
+      setWeather('');
     }
     setNgError(false);
   }
@@ -4699,53 +4773,110 @@ function DiaryDetailScreen({
             まだ書き込みがないよ。最初の一言を書いてみて！
           </div>
         )}
-        {page.entries.map((entry, index) => (
-          <section
-            key={entry.id}
-            className={`rounded-[28px] bg-white p-4 shadow-card ${index % 2 === 1 ? 'ml-6' : 'mr-6'}`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{entry.authorAvatar}</span>
-                <div>
-                  <p className="text-sm font-black text-ink">{entry.authorName}</p>
-                  <p className="text-[10px] font-bold text-muted">
-                    {new Date(entry.postedAt).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-1">
-                {canDeleteEntry(entry) && (
-                  <button
-                    onClick={() => setConfirmDeleteId(entry.id)}
-                    className="rounded-full bg-pink/10 px-2 py-1 text-[10px] font-black text-pink"
-                  >
-                    削除
-                  </button>
-                )}
-                {reportedIds.has(entry.id) ? (
-                  <span className="rounded-full bg-base px-2 py-1 text-[10px] font-bold text-muted">報告済</span>
-                ) : (
-                  <button
-                    onClick={() => {
-                      onReportEntry(page.id, entry.id);
-                      setReportedIds((prev) => new Set([...prev, entry.id]));
-                    }}
-                    className="rounded-full bg-base px-2 py-1 text-[10px] font-black text-muted"
-                  >
-                    報告
-                  </button>
-                )}
+        {page.entries.map((entry) => {
+          const d = new Date(entry.postedAt);
+          const dateStr = d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+          const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+          const commentsOpen = openComments.has(entry.id);
+          const commentCount = entry.comments?.length ?? 0;
+          return (
+          <article key={entry.id} className="overflow-hidden rounded-[28px] bg-white shadow-card">
+            {/* 記事ヘッダー（日付＋気分・天気） */}
+            <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
+              <p className="text-[11px] font-black text-muted">🗓 {dateStr} {timeStr}</p>
+              <div className="flex items-center gap-1 text-base">
+                {entry.weather && <span title="天気">{entry.weather}</span>}
+                {entry.mood && <span title="気分">{entry.mood}</span>}
               </div>
             </div>
-            <p className="mt-3 text-sm font-bold leading-6 text-ink"><RetroText text={entry.body} /></p>
-            {entry.photoUrl && (
-              <div className="mt-3 overflow-hidden rounded-2xl">
-                <img src={entry.photoUrl} alt="entry photo" className="w-full object-cover" />
+
+            <div className="p-4">
+              {/* 記事タイトル（大きく・カラフル） */}
+              {entry.title && (
+                <h3 className="mb-2 text-lg font-black leading-snug" style={{ color: entry.textColor || '#EC4899' }}>
+                  <span className="mr-1">✿</span><RetroText text={entry.title} />
+                </h3>
+              )}
+              {/* 本文 */}
+              <p className="text-sm font-bold leading-7 text-ink"><RetroText text={entry.body} /></p>
+              {entry.photoUrl && (
+                <div className="mt-3 overflow-hidden rounded-2xl">
+                  <img src={entry.photoUrl} alt="entry photo" className="w-full object-cover" />
+                </div>
+              )}
+
+              {/* 署名 */}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-pink/10 text-lg">{entry.authorAvatar}</span>
+                  <p className="text-xs font-black text-ink">{entry.authorName}</p>
+                </div>
+                <div className="flex gap-1">
+                  {canDeleteEntry(entry) && (
+                    <button onClick={() => setConfirmDeleteId(entry.id)} className="rounded-full bg-pink/10 px-2 py-1 text-[10px] font-black text-pink">削除</button>
+                  )}
+                  {reportedIds.has(entry.id) ? (
+                    <span className="rounded-full bg-base px-2 py-1 text-[10px] font-bold text-muted">報告済</span>
+                  ) : (
+                    <button
+                      onClick={() => { onReportEntry(page.id, entry.id); setReportedIds((prev) => new Set([...prev, entry.id])); }}
+                      className="rounded-full bg-base px-2 py-1 text-[10px] font-black text-muted"
+                    >報告</button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* いいね・コメントバー（アメブロ風フッター） */}
+            <div className="flex items-center gap-2 border-t border-pink/10 px-4 py-2.5">
+              <button
+                onClick={() => onToggleLike(page.id, entry.id)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition active:scale-95 ${entry.likedByMe ? 'bg-pink/15 text-pink' : 'bg-base text-muted'}`}
+              >
+                <Heart size={15} fill={entry.likedByMe ? 'currentColor' : 'none'} className={entry.likedByMe ? 'heart-pop' : ''} />
+                いいね {entry.likes ?? 0}
+              </button>
+              <button
+                onClick={() => toggleCommentsOpen(entry.id)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition active:scale-95 ${commentsOpen ? 'bg-purple/15 text-purple' : 'bg-base text-muted'}`}
+              >
+                💬 コメント {commentCount}
+              </button>
+            </div>
+
+            {/* コメント欄 */}
+            {commentsOpen && (
+              <div className="space-y-2 border-t border-pink/10 bg-cream/20 px-4 py-3">
+                {commentCount === 0 && <p className="text-[11px] font-bold text-muted">まだコメントはありません。最初のコメントを送ってみよう！</p>}
+                {entry.comments?.map((c) => (
+                  <div key={c.id} className="flex items-start gap-2">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-sm shadow-sm">{c.authorAvatar}</span>
+                    <div className="min-w-0 flex-1 rounded-2xl bg-white px-3 py-2 shadow-sm">
+                      <p className="text-[11px] font-black text-ink">{c.authorName}</p>
+                      <p className="text-xs font-bold leading-5 text-ink"><RetroText text={c.body} /></p>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    value={commentDraft[entry.id] ?? ''}
+                    onChange={(e) => setCommentDraft((prev) => ({ ...prev, [entry.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitComment(entry.id); }}
+                    maxLength={100}
+                    placeholder="コメントを書く…"
+                    className="min-w-0 flex-1 rounded-full border border-purple/15 bg-white px-4 py-2 text-xs font-bold text-ink outline-none focus:border-pink"
+                  />
+                  <button
+                    onClick={() => submitComment(entry.id)}
+                    disabled={!(commentDraft[entry.id] ?? '').trim()}
+                    className="shrink-0 rounded-full bg-purple px-4 py-2 text-[11px] font-black text-white disabled:opacity-40"
+                  >送信</button>
+                </div>
               </div>
             )}
-          </section>
-        ))}
+          </article>
+          );
+        })}
 
         {/* 書き込みフォーム or 権限なし表示 */}
         {canWrite ? (
@@ -4763,6 +4894,41 @@ function DiaryDetailScreen({
                 不適切な言葉が含まれています。書き直してね。
               </p>
             )}
+            {/* 記事タイトル */}
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={40}
+              placeholder="タイトル（例：今日のできごと♪）"
+              className="mb-2 w-full rounded-2xl border border-purple/15 bg-white px-4 py-2.5 text-base font-black outline-none focus:border-pink"
+              style={{ color: titleColor }}
+            />
+            {/* タイトル色（デコ） */}
+            <div className="mb-3 flex items-center gap-1.5">
+              <span className="text-[10px] font-black text-muted">見出し色</span>
+              {DIARY_TITLE_COLORS.map((c) => (
+                <button key={c.value} type="button" aria-label={c.label} onClick={() => setTitleColor(c.value)}
+                  className={`h-6 w-6 rounded-full transition ${titleColor === c.value ? 'ring-2 ring-offset-1 ring-ink/40 scale-110' : ''}`}
+                  style={{ backgroundColor: c.value }} />
+              ))}
+            </div>
+            {/* 今日の気分・天気 */}
+            <div className="mb-3 space-y-2 rounded-2xl bg-cream/30 p-3">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <span className="shrink-0 text-[10px] font-black text-muted">気分</span>
+                {DIARY_MOODS.map((m) => (
+                  <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${mood === m ? 'bg-pink/20 ring-1 ring-pink' : 'hover:bg-white'}`}>{m}</button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <span className="shrink-0 text-[10px] font-black text-muted">天気</span>
+                {DIARY_WEATHERS.map((w) => (
+                  <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-white'}`}>{w}</button>
+                ))}
+              </div>
+            </div>
             {photoUrl && (
               <div className="relative mb-3 inline-block">
                 <img src={photoUrl} alt="preview" className="h-24 w-24 rounded-2xl object-cover" />
@@ -7583,16 +7749,23 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     return id;
   }
 
-  function addDiaryEntry(pageId: string, body: string, photoUrl?: string, font?: string, textColor?: string) {
+  type DiaryEntryInput = { body: string; photoUrl?: string; title?: string; mood?: string; weather?: string; textColor?: string };
+
+  function addDiaryEntry(pageId: string, data: DiaryEntryInput) {
     const entry: DiaryEntry = {
       id: `entry-${Date.now()}`,
       authorId: me.id,
       authorName: me.name,
       authorAvatar: me.avatar,
-      body,
-      photoUrl: photoUrl || undefined,
-      font,
-      textColor,
+      title: data.title?.trim() || undefined,
+      mood: data.mood,
+      weather: data.weather,
+      body: data.body,
+      photoUrl: data.photoUrl || undefined,
+      textColor: data.textColor,
+      likes: 0,
+      likedByMe: false,
+      comments: [],
       postedAt: new Date().toISOString(),
     };
     setDiaryPages((prev) =>
@@ -7600,10 +7773,42 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
   }
 
-  function editDiaryEntry(pageId: string, entryId: string, body: string, photoUrl?: string) {
+  function editDiaryEntry(pageId: string, entryId: string, data: DiaryEntryInput) {
     setDiaryPages((prev) =>
       prev.map((p) => p.id === pageId
-        ? { ...p, entries: p.entries.map((e) => e.id === entryId ? { ...e, body, photoUrl: photoUrl || undefined } : e) }
+        ? { ...p, entries: p.entries.map((e) => e.id === entryId
+            ? { ...e, title: data.title?.trim() || undefined, mood: data.mood, weather: data.weather, body: data.body, photoUrl: data.photoUrl || undefined, textColor: data.textColor }
+            : e) }
+        : p
+      )
+    );
+  }
+
+  function toggleDiaryLike(pageId: string, entryId: string) {
+    setDiaryPages((prev) =>
+      prev.map((p) => p.id === pageId
+        ? { ...p, entries: p.entries.map((e) => {
+            if (e.id !== entryId) return e;
+            const liked = !e.likedByMe;
+            return { ...e, likedByMe: liked, likes: Math.max(0, (e.likes ?? 0) + (liked ? 1 : -1)) };
+          }) }
+        : p
+      )
+    );
+  }
+
+  function addDiaryComment(pageId: string, entryId: string, body: string) {
+    const comment: DiaryComment = {
+      id: `dc-${Date.now()}`,
+      authorId: me.id,
+      authorName: me.name,
+      authorAvatar: me.avatar,
+      body: body.trim(),
+      postedAt: new Date().toISOString(),
+    };
+    setDiaryPages((prev) =>
+      prev.map((p) => p.id === pageId
+        ? { ...p, entries: p.entries.map((e) => e.id === entryId ? { ...e, comments: [...(e.comments ?? []), comment] } : e) }
         : p
       )
     );
@@ -7717,6 +7922,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           onEditEntry={editDiaryEntry}
           onDeleteEntry={deleteDiaryEntry}
           onReportEntry={reportDiaryEntry}
+          onToggleLike={toggleDiaryLike}
+          onAddComment={addDiaryComment}
         />
       );
     if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} />;
