@@ -4641,6 +4641,7 @@ const DIARY_TITLE_COLORS: { label: string; value: string; cls: string }[] = [
 function DiaryComposer({
   title, setTitle, body, setBody, mood, setMood, weather, setWeather,
   titleColor, setTitleColor, photoUrl, setPhotoUrl, bodyRef, ngError, onBodyChange,
+  simple = false, bodyPlaceholder,
 }: {
   title: string; setTitle: (v: string) => void;
   body: string; setBody: (v: string) => void;
@@ -4651,6 +4652,9 @@ function DiaryComposer({
   bodyRef: React.RefObject<HTMLTextAreaElement | null>;
   ngError?: boolean;
   onBodyChange?: (v: string) => void;
+  // simple=交換日記（タイトル/気分/天気/見出し色なしの「書き込み」）／false=ブログ（記事）
+  simple?: boolean;
+  bodyPlaceholder?: string;
 }) {
   function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -4663,7 +4667,9 @@ function DiaryComposer({
   const hasPreview = title.trim() || body.trim() || mood || weather || photoUrl;
   return (
     <>
-      {/* 記事タイトル */}
+      {/* 記事タイトル・見出し色・気分・天気（ブログのみ。交換日記=simpleでは非表示） */}
+      {!simple && (
+      <>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -4698,6 +4704,8 @@ function DiaryComposer({
           ))}
         </div>
       </div>
+      </>
+      )}
       {photoUrl && (
         <div className="relative mb-3 inline-block">
           <img src={photoUrl} alt="preview" className="h-24 w-24 rounded-2xl object-cover" />
@@ -4712,31 +4720,32 @@ function DiaryComposer({
         onChange={(e) => { setBody(e.target.value); onBodyChange?.(e.target.value); }}
         maxLength={200}
         rows={3}
-        placeholder="あの頃の思い出を書いてね（200文字以内）"
+        placeholder={bodyPlaceholder ?? 'あの頃の思い出を書いてね（200文字以内）'}
         className="mt-2 w-full resize-none rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
       />
       <div className="mt-2 flex items-center gap-3">
         <span className="text-xs font-bold text-muted">{body.length}/200</span>
-        <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
-          📷 写真
+        <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-1.5 text-xs font-black text-pink">
+          📷 写真をつける
           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
         </label>
       </div>
       {ngError && (
         <p className="mt-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">不適切な言葉が含まれています。書き直してね。</p>
       )}
-      {/* 記事プレビュー（アメブロ風にどう見えるか） */}
+      {/* プレビュー */}
       {hasPreview && (
         <div className="mt-3 overflow-hidden rounded-2xl border border-purple/20">
           <div className="flex items-center justify-between bg-gradient-to-r from-pink/10 to-purple/10 px-3 py-1.5">
             <span className="text-[10px] font-black text-muted">プレビュー</span>
-            <span className="text-base">{weather}{mood}</span>
+            {!simple && <span className="text-base">{weather}{mood}</span>}
           </div>
           <div className="bg-white px-4 py-3">
-            {title.trim() && (
+            {!simple && title.trim() && (
               <p className="mb-1 text-base font-black leading-snug" style={{ color: titleColor }}>✿ <RetroText text={title} /></p>
             )}
             <p className="min-h-[1.5rem] text-sm font-bold leading-7 text-ink"><RetroText text={body} /></p>
+            {photoUrl && <img src={photoUrl} alt="" className="mt-2 w-full rounded-xl object-cover" />}
           </div>
         </div>
       )}
@@ -4788,9 +4797,9 @@ function DiaryListScreen({
               const latest = page.entries[page.entries.length - 1];
               return (
                 <div className="mt-3 rounded-2xl bg-cream/30 px-3 py-2">
-                  <p className="text-[10px] font-black text-muted">最新の記事</p>
+                  <p className="text-[10px] font-black text-muted">最新の書き込み</p>
                   <p className="mt-0.5 line-clamp-1 text-xs font-black text-ink">
-                    {latest.weather}{latest.mood} {latest.title || latest.body.slice(0, 20)}
+                    {latest.body.slice(0, 24) || '（写真）'}
                   </p>
                 </div>
               );
@@ -5058,6 +5067,8 @@ function DiaryDetailScreen({
               </p>
             )}
             <DiaryComposer
+              simple
+              bodyPlaceholder="このテーマへのひとことを書いてね（200文字以内）"
               title={title} setTitle={setTitle}
               body={body} setBody={setBody}
               mood={mood} setMood={setMood}
@@ -5237,11 +5248,13 @@ function DiaryCreateScreen({
           )}
         </section>
 
-        {/* 最初の記事（任意）— 詳細画面と同じ、タイトル・気分・天気つきの記事エディタ */}
+        {/* 最初の書き込み（任意）— 交換日記はシンプルな書き込み（本文＋写真） */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 font-black text-ink">最初の記事 <span className="text-xs font-bold text-muted">（任意）</span></p>
-          <p className="mb-3 text-xs font-bold text-muted">タイトル・気分・天気をつけて、アメブロ風の記事を最初に投稿できます（あとから詳細画面でも書けます）</p>
+          <p className="mb-1 font-black text-ink">最初の書き込み <span className="text-xs font-bold text-muted">（任意）</span></p>
+          <p className="mb-3 text-xs font-bold text-muted">日記を作ったあと、最初のひとことを残せます（あとから詳細画面でも書けます）</p>
           <DiaryComposer
+            simple
+            bodyPlaceholder="最初のひとことを書いてもいいよ（200文字以内）"
             title={firstTitle} setTitle={setFirstTitle}
             body={firstEntryBody} setBody={setFirstEntryBody}
             mood={firstMood} setMood={setFirstMood}
