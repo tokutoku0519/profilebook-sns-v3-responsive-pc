@@ -5161,6 +5161,13 @@ function DiaryCreateScreen({
     return () => { cancelled = true; };
   }, []);
 
+  const [mentionSearch, setMentionSearch] = useState('');
+  const mq = mentionSearch.trim().toLowerCase();
+  // 検索語（名前 or @ユーザー名）で絞り込み。選択済みの人は絞り込んでも常に表示する。
+  const shownInvitees = mq
+    ? inviteList.filter((f) => mentionedUserIds.includes(f.id) || f.name.toLowerCase().includes(mq) || f.id.toLowerCase().includes(mq))
+    : inviteList;
+
   function toggleMention(userId: string) {
     setMentionedUserIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
@@ -5225,10 +5232,20 @@ function DiaryCreateScreen({
           {visibility === 'mentioned' && (
             <div className="mt-4 space-y-2">
               <p className="text-xs font-black text-muted">招待するフォロワーを選んでね（{mentionedUserIds.length}人選択中）</p>
+              {/* ユーザー名で検索 */}
+              <input
+                value={mentionSearch}
+                onChange={(e) => setMentionSearch(e.target.value)}
+                placeholder="🔍 名前・@ユーザー名で検索"
+                className="w-full rounded-full border border-purple/15 bg-base px-4 py-2 text-sm font-bold text-ink placeholder:text-muted placeholder:font-normal outline-none focus:border-pink"
+              />
               {inviteList.length === 0 && (
                 <p className="rounded-2xl bg-base px-3 py-3 text-xs font-bold text-muted">まだフォロワーがいません。フォロワーが増えると、ここから招待できます。</p>
               )}
-              {inviteList.map((f) => {
+              {inviteList.length > 0 && shownInvitees.length === 0 && (
+                <p className="rounded-2xl bg-base px-3 py-3 text-xs font-bold text-muted">「{mentionSearch}」に一致するフォロワーはいません。</p>
+              )}
+              {shownInvitees.map((f) => {
                 const selected = mentionedUserIds.includes(f.id);
                 return (
                   <button
@@ -5237,8 +5254,11 @@ function DiaryCreateScreen({
                     className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition ${selected ? 'bg-purple/10' : 'bg-base'}`}
                   >
                     <span className="text-xl">{f.avatar}</span>
-                    <span className="flex-1 text-sm font-black text-ink">{f.name}</span>
-                    <span className={`text-xs font-black ${selected ? 'text-purple' : 'text-muted'}`}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-black text-ink">{f.name}</span>
+                      <span className="block truncate text-[11px] font-bold text-muted">{f.id}</span>
+                    </span>
+                    <span className={`shrink-0 text-xs font-black ${selected ? 'text-purple' : 'text-muted'}`}>
                       {selected ? '✓ 招待中' : '招待する'}
                     </span>
                   </button>
