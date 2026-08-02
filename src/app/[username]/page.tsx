@@ -1230,13 +1230,19 @@ function HomeScreen({
   );
 }
 
-function SearchScreen({ go, answers, myProfile, questionList }: {
+function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, likedIds, onLike, onReact, myStickers = [] }: {
   go: (s: Screen, payload?: any) => void;
   answers: Answer[];
   myProfile: typeof defaultProfileBookInfo;
   questionList: Question[];
+  reactionsMap?: Record<string, Record<string, { count: number; mine: boolean }>>;
+  likedIds?: Set<string>;
+  onLike?: (answerId: string) => void;
+  onReact?: (answerId: string, type: string) => void;
+  myStickers?: string[];
 }) {
   const [query, setQuery] = useState('');
+  const [stickerPickerFor, setStickerPickerFor] = useState<string | null>(null);
   const [mode, setMode] = useState<'answer' | 'person' | 'question' | 'match'>('answer');
   // 回答タブでお題を選んで絞り込むためのお題ID（'' = すべてのお題）
   const [selectedOdaiId, setSelectedOdaiId] = useState('');
@@ -1356,7 +1362,7 @@ function SearchScreen({ go, answers, myProfile, questionList }: {
 
             <section className="mt-6 space-y-3">
               <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
-              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} /></button>)}
+              {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onLike={onLike ? () => onLike(answer.id) : undefined} onSticker={onReact ? () => setStickerPickerFor(answer.id) : undefined} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
@@ -1366,6 +1372,17 @@ function SearchScreen({ go, answers, myProfile, questionList }: {
           </>
         )}
       </div>
+
+      {/* さがすのカードから直接スタンプでリアクション（ボトムシート） */}
+      {stickerPickerFor && onReact && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
+            <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -5070,6 +5087,24 @@ function DiaryCreateScreen({
 
   const canCreate = theme.trim().length > 0 && (visibility === 'followers' || mentionedUserIds.length > 0);
 
+  // 招待できる相手＝自分のフォロワー。デモ(①)はダミー、本番はSupabaseから取得。
+  const [inviteList, setInviteList] = useState<{ id: string; name: string; avatar: string }[]>(
+    () => (isDev ? followers.map((f) => ({ id: f.id, name: f.name, avatar: f.avatar })) : []),
+  );
+  useEffect(() => {
+    if (isDev || !dbReady()) return;
+    let cancelled = false;
+    getFollowers().then((rows) => {
+      if (cancelled) return;
+      setInviteList(rows.map((r) => ({
+        id: '@' + r.username,
+        name: r.display_name || r.username,
+        avatar: r.avatar_url && !r.avatar_url.startsWith('http') ? r.avatar_url : '📷',
+      })));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   function toggleMention(userId: string) {
     setMentionedUserIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
@@ -5134,7 +5169,10 @@ function DiaryCreateScreen({
           {visibility === 'mentioned' && (
             <div className="mt-4 space-y-2">
               <p className="text-xs font-black text-muted">招待するフォロワーを選んでね（{mentionedUserIds.length}人選択中）</p>
-              {followers.map((f) => {
+              {inviteList.length === 0 && (
+                <p className="rounded-2xl bg-base px-3 py-3 text-xs font-bold text-muted">まだフォロワーがいません。フォロワーが増えると、ここから招待できます。</p>
+              )}
+              {inviteList.map((f) => {
                 const selected = mentionedUserIds.includes(f.id);
                 return (
                   <button
@@ -7026,12 +7064,19 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   // 既存の book 列に __game として保存するため、SQL/テーブル追加は不要。
   const gameSyncReady = useRef(false);
   // 起動時：サーバーの __game を端末へ復元
+  // ※ 自動保存(persistGame)は「復元が成功してから」のみ有効化する。
+  //   セッション未確立で getMyProfile が null のときに保存を有効化すると、
+  //   空データでサーバーを上書きしてしまうため、成功するまでリトライする。
   useEffect(() => {
     if (!dbReady()) { gameSyncReady.current = true; return; }
     let cancelled = false;
-    (async () => {
+    let tries = 0;
+    async function loadOnce(): Promise<boolean> {
+      const uid = await getCurrentUserId();
+      if (!uid) return false;            // セッション未確立 → まだ有効化しない
       const p = await getMyProfile();
-      const g = (p?.book as any)?.__game;
+      if (!p) return false;              // プロフィール取得失敗 → リトライ
+      const g = (p.book as any)?.__game;
       if (!cancelled && g && typeof g === 'object') {
         if (typeof g.coins === 'number') { setCoins(g.coins); localStorage.setItem('miri_coins', String(g.coins)); }
         if (Array.isArray(g.packs)) { setOwnedPackIds(g.packs); localStorage.setItem('miri_owned_packs', JSON.stringify(g.packs)); }
@@ -7043,7 +7088,17 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
         if (g.appTheme) { setAppTheme(g.appTheme); localStorage.setItem('appTheme', g.appTheme); applyTheme(g.appTheme); }
         if (g.freeGacha) { try { localStorage.setItem('miri_free_gacha_used', g.freeGacha); } catch {} }
       }
-      gameSyncReady.current = true;
+      return true;                       // 取得できた（__game が無い新規アカウントも成功扱い）
+    }
+    (async () => {
+      // 成功するまで最大5回リトライ（セッション復元待ち）。それでもダメなら
+      // 保存を有効化しない＝サーバーを空で上書きしない安全側に倒す。
+      while (!cancelled && tries < 5) {
+        const ok = await loadOnce();
+        if (ok) { gameSyncReady.current = true; return; }
+        tries++;
+        await new Promise((r) => setTimeout(r, 600));
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -7454,8 +7509,27 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         }
         rs[r.id] = m;
       }
-      setReactState(rs);
-      setAnswerAuthorUid(authors);
+      // サーバーを正としつつ、直前に付けた楽観的リアクション（mine）がまだ
+      // サーバーに反映されていない場合は消えないようマージする。
+      setReactState((prev) => {
+        const merged: Record<string, Record<string, { count: number; mine: boolean }>> = {};
+        const ids = new Set([...Object.keys(rs), ...Object.keys(prev)]);
+        ids.forEach((id) => {
+          const server = rs[id] ?? {};
+          const local = prev[id] ?? {};
+          const types = new Set([...Object.keys(server), ...Object.keys(local)]);
+          const m: Record<string, { count: number; mine: boolean }> = {};
+          types.forEach((t) => {
+            const s = server[t];
+            const l = local[t];
+            if (s) m[t] = { count: s.count, mine: s.mine || !!l?.mine };
+            else if (l?.mine) m[t] = { count: Math.max(1, l.count), mine: true }; // 未反映の楽観更新を保持
+          });
+          if (Object.keys(m).length) merged[id] = m;
+        });
+        return merged;
+      });
+      setAnswerAuthorUid((prev) => ({ ...prev, ...authors }));
     } catch { /* ネットワーク等は無視（ローカル表示を維持） */ }
   }
   useEffect(() => { void reloadFeed(); }, []);
@@ -7952,7 +8026,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           onAddComment={addDiaryComment}
         />
       );
-    if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} />;
+    if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} reactionsMap={reactState} likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))} onLike={(id) => react(id, 'like')} onReact={react} myStickers={getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers)} />;
     if (screen === 'create')
   return (
     <CreateScreen

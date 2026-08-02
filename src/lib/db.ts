@@ -141,12 +141,27 @@ export async function saveProfileBook(book: Record<string, any>): Promise<boolea
  * サーバーの現在の book を読んでから __game のみ差し替えるので、
  * プロフィール本文や BEST3 など他の項目を消してしまう心配がない。
  */
+// ゲームデータが「実質空（コイン0・所持なし）」か判定
+function isEmptyGame(g: any): boolean {
+  if (!g || typeof g !== 'object') return true;
+  return (g.coins ?? 0) === 0
+    && (g.shards ?? 0) === 0
+    && !(Array.isArray(g.packs) && g.packs.length)
+    && !(Array.isArray(g.gacha) && g.gacha.length)
+    && !(Array.isArray(g.bgs) && g.bgs.length)
+    && !(Array.isArray(g.themes) && g.themes.length)
+    && !g.bg;
+}
+
 export async function saveGameData(game: Record<string, any>): Promise<boolean> {
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
   const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
   const book: Record<string, any> = (data?.book && typeof data.book === 'object') ? data.book : {};
+  // 安全網：ローカルが「空」なのにサーバーに中身がある場合は上書きしない。
+  // （再ログイン直後などに復元前の空データで誤って消してしまう事故を防ぐ）
+  if (isEmptyGame(game) && !isEmptyGame(book.__game)) return false;
   book.__game = game;
   const { error } = await supabase
     .from('profiles')
