@@ -150,12 +150,17 @@ const questionsTh: LocaleQuestion[] = [
 ];
 
 export function getQuestionsForLang(lang: Lang): LocaleQuestion[] {
-  switch (lang) {
-    case 'ja': return questionsJa;
-    case 'ko': return questionsKo;
-    case 'zh': return questionsZh;
-    case 'zh-tw': return questionsZhTw;
-    case 'th': return questionsTh;
-    default: return questionsEn;
-  }
+  const all = (() => {
+    switch (lang) {
+      case 'ja': return questionsJa;
+      case 'ko': return questionsKo;
+      case 'zh': return questionsZh;
+      case 'zh-tw': return questionsZhTw;
+      case 'th': return questionsTh;
+      default: return questionsEn;
+    }
+  })();
+  // スポンサー付き（PR/コラボのサンプル）は通常のお題一覧には出さない。
+  // データ自体は残してあるので、正式なPR案件を扱うときに再利用できる。
+  return all.filter((q) => !q.sponsor);
 }
