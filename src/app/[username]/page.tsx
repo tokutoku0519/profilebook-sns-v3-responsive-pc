@@ -861,7 +861,7 @@ function tabFromScreen(screen: Screen): TabKey {
 
 function Phone({ children, active, go, lang, bgTheme = null, unread = 0 }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang; bgTheme?: BgTheme | null; unread?: number }) {
   return (
-    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:rounded-[36px] sm:border sm:border-white/70 lg:mx-0 lg:h-[calc(100vh-48px)] lg:max-h-none lg:max-w-none lg:rounded-[32px]">
+    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:max-w-[520px] sm:rounded-[36px] sm:border sm:border-white/70 md:mx-0 md:h-[calc(100vh-48px)] md:max-h-none md:max-w-none md:rounded-[32px]">
       {/* 装備中テーマをアプリ全体の背景に敷く（上に薄い白で読みやすさを確保） */}
       {bgTheme && (
         <div className="pointer-events-none absolute inset-0" aria-hidden>
@@ -870,8 +870,8 @@ function Phone({ children, active, go, lang, bgTheme = null, unread = 0 }: { chi
         </div>
       )}
       <ChromeThemeContext.Provider value={bgTheme}>
-        <div className="relative z-10 h-full overflow-y-auto pb-32 lg:pb-8">{children}</div>
-        <div className="relative z-20 lg:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} unread={unread} themeGradient={bgTheme?.gradient} /></div>
+        <div className="relative z-10 h-full overflow-y-auto pb-32 md:pb-8">{children}</div>
+        <div className="relative z-20 md:hidden"><BottomTab active={active} onChange={(key) => go(key === 'notifications' ? 'notifications' : key)} lang={lang} unread={unread} themeGradient={bgTheme?.gradient} /></div>
       </ChromeThemeContext.Provider>
     </main>
   );
@@ -888,7 +888,7 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
     { key: 'mypage', labelKey: 'tab_mypage', icon: UserRound, screen: 'mypage' }
   ];
   return (
-    <aside className="hidden h-[calc(100vh-48px)] w-[260px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur lg:block">
+    <aside className="hidden h-[calc(100vh-48px)] w-[220px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur md:block lg:w-[260px]">
       <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card overflow-hidden"><img src="/icon.png" alt="Miri" className="h-full w-full object-cover" /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
       <nav className="space-y-2">
         {items.map((item) => { const Icon = item.icon; const isActive = !inSecondary && active === item.key; return (
@@ -952,7 +952,7 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
 
 function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {}, unread = 0 }: { children: React.ReactNode; active: TabKey; currentScreen?: Screen; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string>; unread?: number }) {
   return (
-    <div className="min-h-screen bg-purple/25 p-0 sm:p-8 lg:p-6">
+    <div className="min-h-screen bg-purple/25 p-0 sm:p-8 md:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} lang={lang} currentScreen={currentScreen} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme} unread={unread}>{children}</Phone></div>
