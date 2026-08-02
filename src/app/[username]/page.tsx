@@ -2125,21 +2125,29 @@ function ProfileBookContent({
         </section>
       )}
 
-      {/* ── ひとことしつもん ── */}
-      <section className="rounded-[28px] bg-white p-5 shadow-card">
-        <ProfSectionHeader icon="💬" title={t('sec_qa', lang)} theme={themeColor} />
-        {translatedQA === null && lang !== 'ja' && (
-          <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
-        )}
-        <div className="space-y-0">
-          {(translatedQA ?? questions).map((item, i) => (
-            <div key={i} className={`py-3 ${i < questions.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
-              <p className={`text-[11px] font-black ${accent}`}>Q{i + 1}. {item.q}</p>
-              <p className="mt-1 text-sm font-bold text-ink leading-relaxed">➜ {item.a}</p>
+      {/* ── ひとことしつもん ──（他人のプロフ帳では未回答の質問は隠す） */}
+      {(() => {
+        const qaSource = translatedQA ?? questions;
+        // 他人が見るときは回答済み（a が空でない）だけを表示。自分は入力促進のため全部表示。
+        const visibleQA = isSelf ? qaSource : qaSource.filter((item) => (item.a ?? '').trim());
+        if (visibleQA.length === 0) return null; // 全部未回答なら section ごと非表示
+        return (
+          <section className="rounded-[28px] bg-white p-5 shadow-card">
+            <ProfSectionHeader icon="💬" title={t('sec_qa', lang)} theme={themeColor} />
+            {translatedQA === null && lang !== 'ja' && (
+              <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
+            )}
+            <div className="space-y-0">
+              {visibleQA.map((item, i) => (
+                <div key={i} className={`py-3 ${i < visibleQA.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
+                  <p className={`text-[11px] font-black ${accent}`}>Q{i + 1}. {item.q}</p>
+                  <p className="mt-1 text-sm font-bold text-ink leading-relaxed">➜ {item.a}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
+        );
+      })()}
 
       {/* ── お気に入り写真 ── */}
       {favoritePhotos && favoritePhotos.length > 0 && (
@@ -3992,7 +4000,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
           placeholder="🔍 絵文字か言葉で検索（例:ハート）"
-          className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base outline-none"
+          className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base font-bold text-ink placeholder:text-muted placeholder:font-normal outline-none"
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
@@ -4567,6 +4575,113 @@ const DIARY_TITLE_COLORS: { label: string; value: string; cls: string }[] = [
   { label: 'こげ茶', value: '#78350F', cls: 'text-amber-900' },
 ];
 
+// 記事の書き込みフォーム（タイトル・気分・天気・見出し色・本文・写真・プレビュー）を共通化
+function DiaryComposer({
+  title, setTitle, body, setBody, mood, setMood, weather, setWeather,
+  titleColor, setTitleColor, photoUrl, setPhotoUrl, bodyRef, ngError, onBodyChange,
+}: {
+  title: string; setTitle: (v: string) => void;
+  body: string; setBody: (v: string) => void;
+  mood: string; setMood: (v: string) => void;
+  weather: string; setWeather: (v: string) => void;
+  titleColor: string; setTitleColor: (v: string) => void;
+  photoUrl: string; setPhotoUrl: (v: string) => void;
+  bodyRef: React.RefObject<HTMLTextAreaElement | null>;
+  ngError?: boolean;
+  onBodyChange?: (v: string) => void;
+}) {
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+  const hasPreview = title.trim() || body.trim() || mood || weather || photoUrl;
+  return (
+    <>
+      {/* 記事タイトル */}
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        maxLength={40}
+        placeholder="タイトル（例：今日のできごと♪）"
+        className="mb-2 w-full rounded-2xl border border-purple/15 bg-white px-4 py-2.5 text-base font-black outline-none focus:border-pink"
+        style={{ color: titleColor }}
+      />
+      {/* タイトル色（デコ） */}
+      <div className="mb-3 flex items-center gap-1.5">
+        <span className="text-[10px] font-black text-muted">見出し色</span>
+        {DIARY_TITLE_COLORS.map((c) => (
+          <button key={c.value} type="button" aria-label={c.label} onClick={() => setTitleColor(c.value)}
+            className={`h-6 w-6 rounded-full transition ${titleColor === c.value ? 'ring-2 ring-offset-1 ring-ink/40 scale-110' : ''}`}
+            style={{ backgroundColor: c.value }} />
+        ))}
+      </div>
+      {/* 今日の気分・天気 */}
+      <div className="mb-3 space-y-2 rounded-2xl bg-cream/30 p-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="shrink-0 text-[10px] font-black text-muted">気分</span>
+          {DIARY_MOODS.map((m) => (
+            <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${mood === m ? 'bg-pink/20 ring-1 ring-pink' : 'hover:bg-white'}`}>{m}</button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="shrink-0 text-[10px] font-black text-muted">天気</span>
+          {DIARY_WEATHERS.map((w) => (
+            <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-white'}`}>{w}</button>
+          ))}
+        </div>
+      </div>
+      {photoUrl && (
+        <div className="relative mb-3 inline-block">
+          <img src={photoUrl} alt="preview" className="h-24 w-24 rounded-2xl object-cover" />
+          <button type="button" onClick={() => setPhotoUrl('')}
+            className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-pink text-[10px] font-black text-white shadow">✕</button>
+        </div>
+      )}
+      <RetroEmojiPicker onInsert={(code) => insertRetroCode(bodyRef, code, setBody)} />
+      <textarea
+        ref={bodyRef}
+        value={body}
+        onChange={(e) => { setBody(e.target.value); onBodyChange?.(e.target.value); }}
+        maxLength={200}
+        rows={3}
+        placeholder="あの頃の思い出を書いてね（200文字以内）"
+        className="mt-2 w-full resize-none rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <span className="text-xs font-bold text-muted">{body.length}/200</span>
+        <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
+          📷 写真
+          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+        </label>
+      </div>
+      {ngError && (
+        <p className="mt-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">不適切な言葉が含まれています。書き直してね。</p>
+      )}
+      {/* 記事プレビュー（アメブロ風にどう見えるか） */}
+      {hasPreview && (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-purple/20">
+          <div className="flex items-center justify-between bg-gradient-to-r from-pink/10 to-purple/10 px-3 py-1.5">
+            <span className="text-[10px] font-black text-muted">プレビュー</span>
+            <span className="text-base">{weather}{mood}</span>
+          </div>
+          <div className="bg-white px-4 py-3">
+            {title.trim() && (
+              <p className="mb-1 text-base font-black leading-snug" style={{ color: titleColor }}>✿ <RetroText text={title} /></p>
+            )}
+            <p className="min-h-[1.5rem] text-sm font-bold leading-7 text-ink"><RetroText text={body} /></p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function DiaryListScreen({
   go,
   diaryPages,
@@ -4715,15 +4830,6 @@ function DiaryDetailScreen({
     page.mentionedUserIds.includes(me.id);
 
   const canSubmit = canWrite && body.trim().length > 0 && !containsNgWord(body);
-
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setPhotoUrl(ev.target?.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
 
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
@@ -4889,82 +4995,17 @@ function DiaryDetailScreen({
                 今日はすでに書き込み済みです。内容を修正できます。
               </p>
             )}
-            {ngError && (
-              <p className="mb-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">
-                不適切な言葉が含まれています。書き直してね。
-              </p>
-            )}
-            {/* 記事タイトル */}
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={40}
-              placeholder="タイトル（例：今日のできごと♪）"
-              className="mb-2 w-full rounded-2xl border border-purple/15 bg-white px-4 py-2.5 text-base font-black outline-none focus:border-pink"
-              style={{ color: titleColor }}
+            <DiaryComposer
+              title={title} setTitle={setTitle}
+              body={body} setBody={setBody}
+              mood={mood} setMood={setMood}
+              weather={weather} setWeather={setWeather}
+              titleColor={titleColor} setTitleColor={setTitleColor}
+              photoUrl={photoUrl} setPhotoUrl={setPhotoUrl}
+              bodyRef={diaryBodyRef} ngError={ngError}
+              onBodyChange={() => { if (ngError) setNgError(false); }}
             />
-            {/* タイトル色（デコ） */}
-            <div className="mb-3 flex items-center gap-1.5">
-              <span className="text-[10px] font-black text-muted">見出し色</span>
-              {DIARY_TITLE_COLORS.map((c) => (
-                <button key={c.value} type="button" aria-label={c.label} onClick={() => setTitleColor(c.value)}
-                  className={`h-6 w-6 rounded-full transition ${titleColor === c.value ? 'ring-2 ring-offset-1 ring-ink/40 scale-110' : ''}`}
-                  style={{ backgroundColor: c.value }} />
-              ))}
-            </div>
-            {/* 今日の気分・天気 */}
-            <div className="mb-3 space-y-2 rounded-2xl bg-cream/30 p-3">
-              <div className="flex items-center gap-1.5 overflow-x-auto">
-                <span className="shrink-0 text-[10px] font-black text-muted">気分</span>
-                {DIARY_MOODS.map((m) => (
-                  <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${mood === m ? 'bg-pink/20 ring-1 ring-pink' : 'hover:bg-white'}`}>{m}</button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5 overflow-x-auto">
-                <span className="shrink-0 text-[10px] font-black text-muted">天気</span>
-                {DIARY_WEATHERS.map((w) => (
-                  <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-white'}`}>{w}</button>
-                ))}
-              </div>
-            </div>
-            {photoUrl && (
-              <div className="relative mb-3 inline-block">
-                <img src={photoUrl} alt="preview" className="h-24 w-24 rounded-2xl object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setPhotoUrl('')}
-                  className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-pink text-[10px] font-black text-white shadow"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-            <RetroEmojiPicker onInsert={(code) => insertRetroCode(diaryBodyRef, code, setBody)} />
-            <textarea
-              ref={diaryBodyRef}
-              value={body}
-              onChange={(e) => { setBody(e.target.value); if (ngError) setNgError(false); }}
-              maxLength={200}
-              rows={3}
-              placeholder="あの頃の思い出を書いてね（200文字以内）"
-              className="mt-2 w-full resize-none rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
-            />
-            {body && (
-              <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
-                <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
-                <p className="min-h-[1.5rem] text-sm font-bold leading-7 text-ink"><RetroText text={body} /></p>
-              </div>
-            )}
-            <div className="mt-2 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-muted">{body.length}/200</span>
-                <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
-                  📷
-                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                </label>
-              </div>
+            <div className="mt-3 flex justify-end">
               <button
                 onClick={submit}
                 disabled={!canSubmit}
@@ -5013,25 +5054,21 @@ function DiaryCreateScreen({
   onCreate,
 }: {
   go: (s: Screen, payload?: any) => void;
-  onCreate: (theme: string, description: string, firstEntryBody: string, firstPhotoUrl: string, visibility: 'public' | 'followers' | 'mentioned', mentionedUserIds: string[]) => string;
+  onCreate: (theme: string, description: string, firstEntryBody: string, firstPhotoUrl: string, visibility: 'public' | 'followers' | 'mentioned', mentionedUserIds: string[], firstMeta?: { title?: string; mood?: string; weather?: string; textColor?: string }) => string;
 }) {
   const [theme, setTheme] = useState('');
   const [description, setDescription] = useState('');
   const [firstEntryBody, setFirstEntryBody] = useState('');
   const [firstPhotoUrl, setFirstPhotoUrl] = useState('');
+  const [firstTitle, setFirstTitle] = useState('');
+  const [firstMood, setFirstMood] = useState('');
+  const [firstWeather, setFirstWeather] = useState('');
+  const [firstTitleColor, setFirstTitleColor] = useState(DIARY_TITLE_COLORS[0].value);
   const [visibility, setVisibility] = useState<'public' | 'followers' | 'mentioned'>('followers');
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const firstBodyRef = useRef<HTMLTextAreaElement>(null);
 
   const canCreate = theme.trim().length > 0 && (visibility === 'followers' || mentionedUserIds.length > 0);
-
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setFirstPhotoUrl(ev.target?.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  }
 
   function toggleMention(userId: string) {
     setMentionedUserIds((prev) =>
@@ -5117,37 +5154,19 @@ function DiaryCreateScreen({
           )}
         </section>
 
-        {/* 最初の書き込み（任意） */}
+        {/* 最初の記事（任意）— 詳細画面と同じ、タイトル・気分・天気つきの記事エディタ */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 font-black text-ink">最初の書き込み <span className="text-xs font-bold text-muted">（任意）</span></p>
-          <p className="mb-3 text-xs font-bold text-muted">日記を作ったあと、自分の思い出を最初に残せます</p>
-          <textarea
-            value={firstEntryBody}
-            onChange={(e) => setFirstEntryBody(e.target.value)}
-            maxLength={200}
-            rows={3}
-            placeholder="最初のひとことを書いてもいいよ（200文字以内）"
-            className="w-full resize-none rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
+          <p className="mb-1 font-black text-ink">最初の記事 <span className="text-xs font-bold text-muted">（任意）</span></p>
+          <p className="mb-3 text-xs font-bold text-muted">タイトル・気分・天気をつけて、アメブロ風の記事を最初に投稿できます（あとから詳細画面でも書けます）</p>
+          <DiaryComposer
+            title={firstTitle} setTitle={setFirstTitle}
+            body={firstEntryBody} setBody={setFirstEntryBody}
+            mood={firstMood} setMood={setFirstMood}
+            weather={firstWeather} setWeather={setFirstWeather}
+            titleColor={firstTitleColor} setTitleColor={setFirstTitleColor}
+            photoUrl={firstPhotoUrl} setPhotoUrl={setFirstPhotoUrl}
+            bodyRef={firstBodyRef}
           />
-          <div className="mt-3">
-            {firstPhotoUrl ? (
-              <div className="relative inline-block">
-                <img src={firstPhotoUrl} alt="preview" className="h-24 w-24 rounded-2xl object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setFirstPhotoUrl('')}
-                  className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-pink text-[10px] font-black text-white shadow"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <label className="cursor-pointer rounded-2xl bg-pink/10 px-4 py-2 text-xs font-black text-pink active:scale-[0.99]">
-                📷 写真を追加する
-                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-              </label>
-            )}
-          </div>
         </section>
 
         <div className="rounded-2xl bg-purple/5 px-4 py-3 text-xs font-bold leading-5 text-muted">
@@ -5157,7 +5176,7 @@ function DiaryCreateScreen({
         <button
           disabled={!canCreate}
           onClick={() => {
-            const id = onCreate(theme.trim(), description.trim(), firstEntryBody, firstPhotoUrl, visibility, mentionedUserIds);
+            const id = onCreate(theme.trim(), description.trim(), firstEntryBody, firstPhotoUrl, visibility, mentionedUserIds, { title: firstTitle, mood: firstMood, weather: firstWeather, textColor: firstTitleColor });
             go('diary-detail', id);
           }}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]"
@@ -7726,12 +7745,19 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     firstPhotoUrl: string,
     visibility: 'public' | 'followers' | 'mentioned',
     mentionedUserIds: string[],
-    font?: string,
-    textColor?: string
+    firstMeta?: { title?: string; mood?: string; weather?: string; textColor?: string }
   ): string {
     const id = `diary-${Date.now()}`;
     const firstEntry: DiaryEntry | null = firstEntryBody.trim() || firstPhotoUrl
-      ? { id: `entry-${Date.now()}`, authorId: me.id, authorName: me.name, authorAvatar: me.avatar, body: firstEntryBody.trim(), photoUrl: firstPhotoUrl || undefined, font, textColor, postedAt: new Date().toISOString() }
+      ? {
+          id: `entry-${Date.now()}`, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
+          title: firstMeta?.title?.trim() || undefined,
+          mood: firstMeta?.mood, weather: firstMeta?.weather,
+          body: firstEntryBody.trim(), photoUrl: firstPhotoUrl || undefined,
+          textColor: firstMeta?.textColor,
+          likes: 0, likedByMe: false, comments: [],
+          postedAt: new Date().toISOString(),
+        }
       : null;
     const newPage: DiaryPage = {
       id,
@@ -7934,8 +7960,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onPost={postAnswer}
       question={selectedQuestion}
       questionList={[...communityQuestions, ...localizedQuestions].filter((q) => !myAnsweredQids.has(q.id) || q.id === selectedQuestion?.id)}
-      onCreateDiary={(caption, photoUrl, font, textColor, visibility, mentionedUserIds) =>
-        createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, font, textColor)
+      onCreateDiary={(caption, photoUrl, _font, textColor, visibility, mentionedUserIds) =>
+        createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, { textColor })
       }
       ownedPackIds={ownedPackIds}
       ownedGachaStickers={ownedGachaStickers}
