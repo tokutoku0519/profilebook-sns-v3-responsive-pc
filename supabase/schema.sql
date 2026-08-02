@@ -228,3 +228,112 @@ begin
 exception
   when others then null;  -- 既に追加済みなどの場合は何もしない
 end $$;
+
+-- ============================================================
+-- コミュニティ（サークル）＝共有コミュニティ
+-- 参加制（誰でも参加＝メンバー）。投稿は「トーク」と「メンバー投票」。
+-- すべて create table if not exists なので再実行してもデータは消えない。
+-- ============================================================
+create table if not exists public.circles (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  emoji text default '🔒',
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  is_official boolean default false,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.circle_members (
+  circle_id uuid not null references public.circles(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (circle_id, user_id)
+);
+
+create table if not exists public.circle_posts (
+  id uuid primary key default gen_random_uuid(),
+  circle_id uuid not null references public.circles(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null,
+  kind text not null default 'talk',   -- talk / vote
+  created_at timestamptz default now()
+);
+create index if not exists circle_posts_circle_idx on public.circle_posts (circle_id, created_at desc);
+
+create table if not exists public.circle_replies (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.circle_posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null,
+  created_at timestamptz default now()
+);
+create index if not exists circle_replies_post_idx on public.circle_replies (post_id, created_at);
+
+create table if not exists public.circle_votes (
+  post_id uuid not null references public.circle_posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  target_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)   -- 1人1票
+);
+
+alter table public.circles         enable row level security;
+alter table public.circle_members  enable row level security;
+alter table public.circle_posts    enable row level security;
+alter table public.circle_replies  enable row level security;
+alter table public.circle_votes    enable row level security;
+
+-- circles：誰でも発見できる。作成・編集・削除は作成者のみ。
+drop policy if exists "circles readable"   on public.circles;
+drop policy if exists "circles insert own" on public.circles;
+drop policy if exists "circles update own" on public.circles;
+drop policy if exists "circles delete own" on public.circles;
+create policy "circles readable"   on public.circles for select using (true);
+create policy "circles insert own" on public.circles for insert with check (auth.uid() = created_by);
+create policy "circles update own" on public.circles for update using (auth.uid() = created_by);
+create policy "circles delete own" on public.circles for delete using (auth.uid() = created_by);
+
+-- circle_members：一覧は誰でも見える。参加・退会は本人のみ。
+drop policy if exists "circle_members readable" on public.circle_members;
+drop policy if exists "circle_members join"     on public.circle_members;
+drop policy if exists "circle_members leave"    on public.circle_members;
+create policy "circle_members readable" on public.circle_members for select using (true);
+create policy "circle_members join"     on public.circle_members for insert with check (auth.uid() = user_id);
+create policy "circle_members leave"    on public.circle_members for delete using (auth.uid() = user_id);
+
+-- circle_posts：閲覧・投稿ともメンバーのみ（🔒 メンバー限定）。削除は本人。
+drop policy if exists "circle_posts readable" on public.circle_posts;
+drop policy if exists "circle_posts insert"   on public.circle_posts;
+drop policy if exists "circle_posts delete"   on public.circle_posts;
+create policy "circle_posts readable" on public.circle_posts for select using (
+  exists (select 1 from public.circle_members m where m.circle_id = circle_posts.circle_id and m.user_id = auth.uid())
+);
+create policy "circle_posts insert" on public.circle_posts for insert with check (
+  auth.uid() = user_id
+  and exists (select 1 from public.circle_members m where m.circle_id = circle_posts.circle_id and m.user_id = auth.uid())
+);
+create policy "circle_posts delete" on public.circle_posts for delete using (auth.uid() = user_id);
+
+-- circle_replies：メンバーのみ閲覧・投稿。
+drop policy if exists "circle_replies readable" on public.circle_replies;
+drop policy if exists "circle_replies insert"   on public.circle_replies;
+create policy "circle_replies readable" on public.circle_replies for select using (
+  exists (
+    select 1 from public.circle_posts p
+    join public.circle_members m on m.circle_id = p.circle_id
+    where p.id = circle_replies.post_id and m.user_id = auth.uid()
+  )
+);
+create policy "circle_replies insert" on public.circle_replies for insert with check (auth.uid() = user_id);
+
+-- circle_votes：メンバーのみ閲覧・投票（1人1票）。
+drop policy if exists "circle_votes readable" on public.circle_votes;
+drop policy if exists "circle_votes insert"   on public.circle_votes;
+create policy "circle_votes readable" on public.circle_votes for select using (
+  exists (
+    select 1 from public.circle_posts p
+    join public.circle_members m on m.circle_id = p.circle_id
+    where p.id = circle_votes.post_id and m.user_id = auth.uid()
+  )
+);
+create policy "circle_votes insert" on public.circle_votes for insert with check (auth.uid() = user_id);

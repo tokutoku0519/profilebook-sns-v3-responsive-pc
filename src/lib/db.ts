@@ -630,3 +630,137 @@ export async function subscribeNotifications(onInsert: (row: NotificationRow) =>
     .subscribe();
   return () => { try { supabase!.removeChannel(channel); } catch {} };
 }
+
+// ── コミュニティ（サークル）＝共有 ─────────────────────────────
+// アプリ内では従来どおり id を '@username' で扱うため、uuid ⇔ @username を
+// このデータ層で相互変換して、画面側の変更を最小限にする。
+async function profilesByIds(ids: string[]): Promise<Map<string, any>> {
+  if (!supabase || ids.length === 0) return new Map();
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (uniq.length === 0) return new Map();
+  const { data } = await supabase.from('profiles').select('id,username,display_name,avatar_url').in('id', uniq);
+  return new Map((data ?? []).map((p: any) => [p.id, p]));
+}
+const atName = (p?: any) => (p ? '@' + p.username : '@unknown');
+const avatarOf = (p?: any) => (p?.avatar_url && !String(p.avatar_url).startsWith('http') ? p.avatar_url : '📷');
+
+/** 全サークル（発見用）。memberIds/members は '@username' 形式。 */
+export async function getCirclesShared(): Promise<any[]> {
+  if (!supabase) return [];
+  const { data: circles } = await supabase.from('circles').select('*').order('created_at', { ascending: false });
+  if (!circles || circles.length === 0) return [];
+  const { data: mems } = await supabase.from('circle_members').select('circle_id,user_id');
+  const profs = await profilesByIds([...(mems ?? []).map((m: any) => m.user_id), ...circles.map((c: any) => c.created_by)]);
+  return circles.map((c: any) => {
+    const memRows = (mems ?? []).filter((m: any) => m.circle_id === c.id);
+    const members = memRows.map((m: any) => {
+      const p = profs.get(m.user_id);
+      return { id: atName(p), name: p?.display_name || p?.username || 'ユーザー', avatar: avatarOf(p) };
+    });
+    return {
+      id: c.id,
+      name: c.name,
+      emoji: c.emoji || '🔒',
+      createdBy: atName(profs.get(c.created_by)),
+      isOfficial: !!c.is_official,
+      memberIds: members.map((x: any) => x.id),
+      members,
+    };
+  });
+}
+
+export async function createCircleShared(name: string, emoji: string, isOfficial: boolean): Promise<string | null> {
+  if (!supabase) return null;
+  const uid = await getCurrentUserId();
+  if (!uid) return null;
+  const { data, error } = await supabase.from('circles').insert({ name, emoji, created_by: uid, is_official: isOfficial }).select('id').single();
+  if (error || !data) return null;
+  await supabase.from('circle_members').insert({ circle_id: data.id, user_id: uid });
+  return data.id as string;
+}
+
+export async function joinCircle(circleId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('circle_members').insert({ circle_id: circleId, user_id: uid });
+  return !error;
+}
+
+export async function leaveCircle(circleId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('circle_members').delete().eq('circle_id', circleId).eq('user_id', uid);
+  return !error;
+}
+
+/** サークルの投稿（返信・投票つき）。id は '@username' 形式で返す。 */
+export async function getCirclePostsShared(circleId: string): Promise<any[]> {
+  if (!supabase) return [];
+  const { data: posts } = await supabase.from('circle_posts').select('*').eq('circle_id', circleId).order('created_at', { ascending: true });
+  if (!posts || posts.length === 0) return [];
+  const ids = posts.map((p: any) => p.id);
+  const [{ data: replies }, { data: votes }] = await Promise.all([
+    supabase.from('circle_replies').select('*').in('post_id', ids),
+    supabase.from('circle_votes').select('*').in('post_id', ids),
+  ]);
+  const uids = [
+    ...posts.map((p: any) => p.user_id),
+    ...(replies ?? []).map((r: any) => r.user_id),
+    ...(votes ?? []).flatMap((v: any) => [v.user_id, v.target_id]),
+  ];
+  const profs = await profilesByIds(uids);
+  return posts.map((p: any) => {
+    const pr = profs.get(p.user_id);
+    return {
+      id: p.id,
+      circleId: p.circle_id,
+      body: p.body,
+      kind: p.kind || 'talk',
+      audience: 'members' as const,
+      postedBy: atName(pr),
+      postedByName: pr?.display_name || 'ユーザー',
+      postedByAvatar: avatarOf(pr),
+      postedAt: p.created_at,
+      replies: (replies ?? [])
+        .filter((r: any) => r.post_id === p.id)
+        .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((r: any) => {
+          const rp = profs.get(r.user_id);
+          return { userId: atName(rp), userName: rp?.display_name || 'ユーザー', userAvatar: avatarOf(rp), body: r.body, postedAt: r.created_at };
+        }),
+      votes: (votes ?? [])
+        .filter((v: any) => v.post_id === p.id)
+        .map((v: any) => ({ userId: atName(profs.get(v.user_id)), targetId: atName(profs.get(v.target_id)) })),
+    };
+  });
+}
+
+export async function createCirclePostShared(circleId: string, body: string, kind: 'talk' | 'vote'): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('circle_posts').insert({ circle_id: circleId, user_id: uid, body, kind });
+  return !error;
+}
+
+export async function addCircleReplyShared(postId: string, body: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('circle_replies').insert({ post_id: postId, user_id: uid, body });
+  return !error;
+}
+
+/** 投票（1人1票）。target は '@username' で受け取り uuid に解決して保存。 */
+export async function voteCircleShared(postId: string, targetAtName: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const uname = targetAtName.replace(/^@/, '');
+  const { data: tp } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
+  if (!tp) return false;
+  const { error } = await supabase.from('circle_votes').insert({ post_id: postId, user_id: uid, target_id: (tp as any).id });
+  return !error;
+}
