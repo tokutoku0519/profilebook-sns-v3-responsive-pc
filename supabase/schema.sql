@@ -1,8 +1,16 @@
 -- ============================================================
--- Miri MVP スキーマ（共有SNS＋永続化）
+-- Miri MVP スキーマ（共有SNS＋永続化）＝【安全版・これだけを使うこと】
 -- Supabase の SQL Editor に貼り付けて実行してください。
 -- 何度でも再実行できるよう冪等（if not exists / drop ... if exists）に記述。
--- 対象: プロフィール / お題回答 / リアクション / コメント / フォロー
+-- 対象: プロフィール / お題回答 / リアクション / コメント / フォロー /
+--       なかよし / 通知 /（末尾）通知のリアルタイム配信
+--
+-- ⚠️⚠️ 絶対に守ること ⚠️⚠️
+--   このファイルには「drop table」は一切ありません。何度実行しても
+--   回答・リアクション・コメントは消えません。
+--   もし別の場所に "drop table ... cascade" が入った古いSQLがあっても、
+--   それは【使わない・実行しない】でください。データが全部消えます。
+--   SQLを流したいときは、必ずこのファイルの中身だけを使ってください。
 -- ============================================================
 
 -- ── profiles：ユーザー本体＋プロフィール帳 ─────────────────
@@ -208,3 +216,15 @@ drop policy if exists "notifications update"   on public.notifications;
 create policy "notifications readable" on public.notifications for select using (auth.uid() = user_id);
 create policy "notifications insert"   on public.notifications for insert with check (auth.uid() = actor_id);
 create policy "notifications update"   on public.notifications for update using (auth.uid() = user_id);
+
+-- ============================================================
+-- 通知のリアルタイム配信（バッジを即時更新）
+-- すでに追加済みでもエラーにならないよう DO ブロックで冪等化。
+-- ※ これはテーブルを配信対象に加えるだけで、データは一切消さない。
+-- ============================================================
+do $$
+begin
+  alter publication supabase_realtime add table public.notifications;
+exception
+  when others then null;  -- 既に追加済みなどの場合は何もしない
+end $$;
