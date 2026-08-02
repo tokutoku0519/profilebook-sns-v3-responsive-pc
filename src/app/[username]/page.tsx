@@ -6024,7 +6024,7 @@ function ShopScreen({
           <p className="text-[10px] font-black text-zinc-500">{t('label_coin_balance', lang)}</p>
           <p className="text-xl font-black text-amber-400"><CoinIcon size={18} /> {coins.toLocaleString()}</p>
         </div>
-        <button className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-zinc-900 shadow-card active:scale-[0.98]">
+        <button onClick={() => go('wallet')} className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black text-zinc-900 shadow-card active:scale-[0.98]">
           {t('btn_buy_coins', lang)}
         </button>
       </div>
