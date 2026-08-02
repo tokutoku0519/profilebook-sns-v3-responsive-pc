@@ -39,7 +39,7 @@ import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGach
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
 import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -125,6 +125,25 @@ type DiaryPage = {
   entries: DiaryEntry[];
   visibility: 'public' | 'followers' | 'mentioned';
   mentionedUserIds: string[];
+};
+
+// 個人ブログの記事（アメブロ風・1人1記事＝交換日記とは別機能）
+type BlogPost = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string;
+  title?: string;
+  mood?: string;
+  weather?: string;
+  body: string;
+  photoUrl?: string;
+  textColor?: string;
+  visibility: 'public' | 'followers';
+  likes: number;
+  likedByMe: boolean;
+  comments: DiaryComment[];
+  postedAt: string;
 };
 
 
@@ -855,6 +874,7 @@ function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'mypage' || screen === 'followers' || screen === 'settings' || screen === 'official-question-create' || screen === 'shop' || screen === 'wallet') return 'mypage';
   if (screen === 'notifications') return 'notifications';
   if (screen === 'diary-list' || screen === 'diary-detail' || screen === 'diary-create') return 'home';
+  if (screen === 'blog-list' || screen === 'blog-detail' || screen === 'blog-create') return 'home';
   if (screen === 'circles' || screen === 'circle-detail' || screen === 'circle-create') return 'home';
   return 'home';
 }
@@ -990,6 +1010,7 @@ function HomeScreen({
   answers,
   communityQuestions,
   diaryPages,
+  blogPosts = [],
   circles,
   circlePosts,
   dailyQuestion,
@@ -1010,6 +1031,7 @@ function HomeScreen({
   answers: Answer[];
   communityQuestions: any[];
   diaryPages: DiaryPage[];
+  blogPosts?: BlogPost[];
   circles: Circle[];
   circlePosts: CirclePost[];
   dailyQuestion: Question;
@@ -1155,9 +1177,10 @@ function HomeScreen({
         </section>
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />{t('sec_diary', lang)}</h2>
+            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />🤝 交換日記</h2>
             <button onClick={() => go('diary-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
           </div>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">みんなで1冊に書き込む、テーマ制の日記</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {diaryPages.slice(0, 5).map((page) => (
               <button key={page.id} onClick={() => go('diary-detail', page.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-pink/10 via-white to-purple/10 p-4 text-left shadow-card active:scale-[0.98]">
@@ -1168,6 +1191,28 @@ function HomeScreen({
             ))}
             <button onClick={() => go('diary-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
               {t('btn_create', lang)}
+            </button>
+          </div>
+        </section>
+
+        {/* ブログ（個人記事・交換日記とは別機能） */}
+        <section>
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink">📔 ブログ</h2>
+            <button onClick={() => go('blog-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
+          </div>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">タイトルをつけて書く、自分だけの記事</p>
+          <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
+            {[...blogPosts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()).slice(0, 5).map((p) => (
+              <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
+                <p className="text-sm">{p.weather}{p.mood}</p>
+                <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</p>
+                <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={p.body} /></p>
+                <p className="mt-3 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
+              </button>
+            ))}
+            <button onClick={() => go('blog-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-sm font-black text-purple shadow-card active:scale-[0.98]">
+              ＋ 記事を書く
             </button>
           </div>
         </section>
@@ -5226,6 +5271,195 @@ function DiaryCreateScreen({
   );
 }
 
+// ===================== ブログ画面（個人記事・交換日記とは別機能） =====================
+
+function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[] }) {
+  const sorted = [...posts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
+  return (
+    <>
+      <AppHeader title="ブログ" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <div className="space-y-4 px-4 pt-3 pb-32">
+        <button onClick={() => go('blog-create')}
+          className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
+          ＋ 記事を書く
+        </button>
+        <p className="px-1 text-xs font-bold text-muted">タイトル・気分・天気をつけて、自分だけのブログ記事を投稿できます。</p>
+        {sorted.length === 0 && (
+          <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
+            まだ記事がありません。最初の記事を書いてみて！
+          </div>
+        )}
+        {sorted.map((p) => {
+          const d = new Date(p.postedAt);
+          const dateStr = d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+          return (
+            <button key={p.id} onClick={() => go('blog-detail', p.id)}
+              className="block w-full overflow-hidden rounded-[28px] bg-white text-left shadow-card active:scale-[0.99]">
+              <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
+                <span className="text-[11px] font-black text-muted">🗓 {dateStr}</span>
+                <span className="text-base">{p.weather}{p.mood}</span>
+              </div>
+              <div className="p-4">
+                {p.title && <p className="mb-1 text-base font-black leading-snug" style={{ color: p.textColor || '#EC4899' }}>✿ <RetroText text={p.title} /></p>}
+                <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={p.body} /></p>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-pink/10 text-base">{p.authorAvatar}</span>
+                    <span className="text-xs font-black text-ink">{p.authorName}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] font-black text-muted">
+                    <span className="flex items-center gap-1"><Heart size={13} fill={p.likedByMe ? 'currentColor' : 'none'} className={p.likedByMe ? 'text-pink' : ''} />{p.likes}</span>
+                    <span>💬 {p.comments.length}</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => void; onCreate: (data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }) => string }) {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [mood, setMood] = useState('');
+  const [weather, setWeather] = useState('');
+  const [titleColor, setTitleColor] = useState(DIARY_TITLE_COLORS[0].value);
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
+  const [ngError, setNgError] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const canPost = body.trim().length > 0 && !containsNgWord(body);
+
+  function submit() {
+    if (containsNgWord(body)) { setNgError(true); return; }
+    if (!canPost) return;
+    const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: body.trim(), photoUrl: photoUrl || undefined, textColor: titleColor, visibility });
+    go('blog-detail', id);
+  }
+
+  return (
+    <>
+      <AppHeader title="記事を書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
+      <div className="space-y-4 px-4 pt-3 pb-32">
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <DiaryComposer
+            title={title} setTitle={setTitle}
+            body={body} setBody={setBody}
+            mood={mood} setMood={setMood}
+            weather={weather} setWeather={setWeather}
+            titleColor={titleColor} setTitleColor={setTitleColor}
+            photoUrl={photoUrl} setPhotoUrl={setPhotoUrl}
+            bodyRef={bodyRef} ngError={ngError}
+            onBodyChange={() => { if (ngError) setNgError(false); }}
+          />
+        </section>
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-3 font-black text-ink">公開範囲</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setVisibility('public')}
+              className={`rounded-2xl py-3 text-xs font-black transition ${visibility === 'public' ? 'bg-blue-400 text-white shadow-card' : 'bg-base text-muted'}`}>🌍 全体に公開</button>
+            <button onClick={() => setVisibility('followers')}
+              className={`rounded-2xl py-3 text-xs font-black transition ${visibility === 'followers' ? 'bg-pink text-white shadow-card' : 'bg-base text-muted'}`}>👥 フォロワー</button>
+          </div>
+        </section>
+        <button onClick={submit} disabled={!canPost}
+          className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
+          記事を投稿する ✿
+        </button>
+      </div>
+    </>
+  );
+}
+
+function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
+  go: (s: Screen, payload?: any) => void;
+  post: BlogPost;
+  onToggleLike: (postId: string) => void;
+  onAddComment: (postId: string, body: string) => void;
+  onDelete: (postId: string) => void;
+}) {
+  const [comment, setComment] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const d = new Date(post.postedAt);
+  const dateStr = d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+  const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  const isMine = post.authorId === me.id;
+  function submitComment() {
+    const text = comment.trim();
+    if (!text || containsNgWord(text)) return;
+    onAddComment(post.id, text);
+    setComment('');
+  }
+  return (
+    <>
+      <AppHeader title="ブログ記事" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
+      <div className="space-y-4 px-4 pt-3 pb-8">
+        <article className="overflow-hidden rounded-[28px] bg-white shadow-card">
+          <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
+            <p className="text-[11px] font-black text-muted">🗓 {dateStr} {timeStr}</p>
+            <div className="flex items-center gap-1 text-base">{post.weather}{post.mood}</div>
+          </div>
+          <div className="p-4">
+            {post.title && <h3 className="mb-2 text-xl font-black leading-snug" style={{ color: post.textColor || '#EC4899' }}>✿ <RetroText text={post.title} /></h3>}
+            <p className="text-base font-bold leading-8 text-ink"><RetroText text={post.body} /></p>
+            {post.photoUrl && <div className="mt-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-pink/10 text-lg">{post.authorAvatar}</span>
+                <p className="text-xs font-black text-ink">{post.authorName}</p>
+              </div>
+              {isMine && <button onClick={() => setConfirmDelete(true)} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">削除</button>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 border-t border-pink/10 px-4 py-2.5">
+            <button onClick={() => onToggleLike(post.id)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition active:scale-95 ${post.likedByMe ? 'bg-pink/15 text-pink' : 'bg-base text-muted'}`}>
+              <Heart size={15} fill={post.likedByMe ? 'currentColor' : 'none'} className={post.likedByMe ? 'heart-pop' : ''} />いいね {post.likes}
+            </button>
+            <span className="rounded-full bg-base px-3 py-1.5 text-xs font-black text-muted">💬 コメント {post.comments.length}</span>
+          </div>
+        </article>
+
+        <section className="space-y-2 rounded-[28px] bg-white p-4 shadow-card">
+          <p className="text-sm font-black text-ink">コメント</p>
+          {post.comments.length === 0 && <p className="text-[11px] font-bold text-muted">まだコメントはありません。</p>}
+          {post.comments.map((c) => (
+            <div key={c.id} className="flex items-start gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-base text-sm">{c.authorAvatar}</span>
+              <div className="min-w-0 flex-1 rounded-2xl bg-base px-3 py-2">
+                <p className="text-[11px] font-black text-ink">{c.authorName}</p>
+                <p className="text-xs font-bold leading-5 text-ink"><RetroText text={c.body} /></p>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-1">
+            <input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitComment(); }}
+              maxLength={100} placeholder="コメントを書く…"
+              className="min-w-0 flex-1 rounded-full border border-purple/15 bg-white px-4 py-2 text-xs font-bold text-ink outline-none focus:border-pink" />
+            <button onClick={submitComment} disabled={!comment.trim()}
+              className="shrink-0 rounded-full bg-purple px-4 py-2 text-[11px] font-black text-white disabled:opacity-40">送信</button>
+          </div>
+        </section>
+      </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6">
+          <div className="w-full max-w-xs rounded-[28px] bg-white p-6 shadow-2xl">
+            <p className="text-center text-sm font-black text-ink">この記事を削除しますか？</p>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setConfirmDelete(false)} className="flex-1 rounded-full border border-purple/20 py-3 text-sm font-black text-muted">キャンセル</button>
+              <button onClick={() => { onDelete(post.id); go('blog-list'); }} className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white">削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ===================== サークル画面 =====================
 
 const CIRCLE_EMOJIS = ['🔒','🎭','📸','⚾','🎸','📚','🎨','💃','🏃','🌙','🍕','🎮','🎵','🐾','🌸'];
@@ -7690,6 +7924,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setSelectedDiaryId(payload);
   }
 
+  if (next === 'blog-detail' && payload) {
+    setSelectedBlogId(payload);
+  }
+
   if (next === 'circle-detail' && payload) {
     setSelectedCircleId(payload);
   }
@@ -7809,6 +8047,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   const [diaryPages, setDiaryPages] = useState<DiaryPage[]>(initialDiaryPages);
   const [selectedDiaryId, setSelectedDiaryId] = useState<string>(initialDiaryPages[0]?.id ?? '');
+  const [selectedBlogId, setSelectedBlogId] = useState<string>('');
 
   const selectedDiary = diaryPages.find((p) => p.id === selectedDiaryId) ?? diaryPages[0];
 
@@ -7924,6 +8163,43 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     // 実装時はサーバーへ報告を送る。現状はUI側で「報告済み」表示のみ。
   }
 
+  // ── ブログ（個人記事）────────────────────────────────────────
+  // 交換日記とは別機能。まずは端末内保存（localStorage）で永続化リスクなし。
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { const s = localStorage.getItem('miri_blog_posts'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  function saveBlog(next: BlogPost[]) {
+    setBlogPosts(next);
+    try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {}
+  }
+  function createBlogPost(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): string {
+    const id = `blog-${Date.now()}`;
+    const post: BlogPost = {
+      id, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
+      title: data.title?.trim() || undefined, mood: data.mood, weather: data.weather,
+      body: data.body.trim(), photoUrl: data.photoUrl || undefined, textColor: data.textColor,
+      visibility: data.visibility, likes: 0, likedByMe: false, comments: [],
+      postedAt: new Date().toISOString(),
+    };
+    saveBlog([post, ...blogPosts]);
+    return id;
+  }
+  function toggleBlogLike(postId: string) {
+    saveBlog(blogPosts.map((p) => {
+      if (p.id !== postId) return p;
+      const liked = !p.likedByMe;
+      return { ...p, likedByMe: liked, likes: Math.max(0, p.likes + (liked ? 1 : -1)) };
+    }));
+  }
+  function addBlogComment(postId: string, body: string) {
+    const c: DiaryComment = { id: `bc-${Date.now()}`, authorId: me.id, authorName: me.name, authorAvatar: me.avatar, body: body.trim(), postedAt: new Date().toISOString() };
+    saveBlog(blogPosts.map((p) => p.id === postId ? { ...p, comments: [...p.comments, c] } : p));
+  }
+  function deleteBlogPost(postId: string) {
+    saveBlog(blogPosts.filter((p) => p.id !== postId));
+  }
+
   const current = useMemo(() => {
 
     if (screen === 'settings')
@@ -7994,6 +8270,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       answers={answers}
       communityQuestions={communityQuestions}
       diaryPages={diaryPages}
+      blogPosts={blogPosts}
       circles={circles}
       circlePosts={circlePosts}
       dailyQuestion={dailyQuestion}
@@ -8026,6 +8303,13 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           onAddComment={addDiaryComment}
         />
       );
+    if (screen === 'blog-list') return <BlogListScreen go={go} posts={blogPosts} />;
+    if (screen === 'blog-create') return <BlogCreateScreen go={go} onCreate={createBlogPost} />;
+    if (screen === 'blog-detail') {
+      const post = blogPosts.find((p) => p.id === selectedBlogId);
+      if (post) return <BlogDetailScreen go={go} post={post} onToggleLike={toggleBlogLike} onAddComment={addBlogComment} onDelete={deleteBlogPost} />;
+      return <BlogListScreen go={go} posts={blogPosts} />;
+    }
     if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} reactionsMap={reactState} likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))} onLike={(id) => react(id, 'like')} onReact={react} myStickers={getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers)} />;
     if (screen === 'create')
   return (
@@ -8132,6 +8416,8 @@ return <ProfileScreen
   favoritePhotos,
   diaryPages,
   selectedDiary,
+  blogPosts,
+  selectedBlogId,
   selectedProfileId,
   viewedProfile,
   viewedProfileBook,
