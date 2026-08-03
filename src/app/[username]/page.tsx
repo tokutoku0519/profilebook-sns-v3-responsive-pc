@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -5548,7 +5548,12 @@ function CirclesScreen({
                   {members.slice(0, 5).map((m, i) => (
                     <span key={i} className="text-base">{m.avatar}</span>
                   ))}
-                  {!iAmMember && <span className="ml-1 rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">タップで参加</span>}
+                  {!iAmMember && (() => {
+                    const st = (c as any).myStatus;
+                    const approval = ((c as any).joinPolicy ?? 'open') === 'approval';
+                    if (st === 'pending') return <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-600">⏳ 承認まち</span>;
+                    return <span className="ml-1 rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{approval ? '✋ 承認制' : 'タップで参加'}</span>;
+                  })()}
                 </div>
               </div>
             </button>
@@ -5561,7 +5566,7 @@ function CirclesScreen({
 }
 
 function CircleDetailScreen({
-  go, circle, posts, onPost, onReply, onVote, onApplyFan, onApproveFan, onRejectFan, onJoin, onLeave,
+  go, circle, posts, onPost, onReply, onVote, onApplyFan, onApproveFan, onRejectFan, onJoin, onLeave, onApprove, onReject,
 }: {
   go: (s: Screen, payload?: any) => void;
   circle: Circle;
@@ -5574,6 +5579,8 @@ function CircleDetailScreen({
   onRejectFan: (circleId: string, userId: string) => void;
   onJoin: (circleId: string) => void;
   onLeave: (circleId: string) => void;
+  onApprove: (circleId: string, atName: string) => void;
+  onReject: (circleId: string, atName: string) => void;
 }) {
   const [newQ, setNewQ] = useState('');
   const [newKind, setNewKind] = useState<'talk' | 'vote'>('talk');
@@ -5620,18 +5627,45 @@ function CircleDetailScreen({
               </div>
             ))}
           </div>
-          {/* 参加／退会（共有コミュニティ） */}
-          {!iAmMember ? (
-            <button onClick={() => onJoin(circle.id)}
-              className="mt-3 h-11 w-full rounded-full bg-pink text-sm font-black text-white shadow-card active:scale-[0.98]">
-              ＋ このサークルに参加する
-            </button>
-          ) : circle.createdBy !== me.id ? (
-            <button onClick={() => onLeave(circle.id)}
-              className="mt-3 h-9 w-full rounded-full border border-purple/20 text-xs font-black text-muted active:scale-[0.98]">
-              サークルを退会する
-            </button>
-          ) : null}
+          {/* 参加／リクエスト／退会（共有コミュニティ） */}
+          {(() => {
+            const joinPolicy = ((circle as any).joinPolicy ?? 'open') as 'open' | 'approval';
+            const myStatus = ((circle as any).myStatus ?? (iAmMember ? 'member' : 'none')) as 'member' | 'pending' | 'none';
+            if (myStatus === 'pending') {
+              return <div className="mt-3 rounded-full bg-amber-50 px-4 py-2.5 text-center text-xs font-black text-amber-600 ring-1 ring-amber-200">⏳ 承認まちです。作成者の承認をまってね</div>;
+            }
+            if (!iAmMember) {
+              return (
+                <button onClick={() => onJoin(circle.id)}
+                  className="mt-3 h-11 w-full rounded-full bg-pink text-sm font-black text-white shadow-card active:scale-[0.98]">
+                  {joinPolicy === 'approval' ? '✋ 参加をリクエストする（承認制）' : '＋ このサークルに参加する'}
+                </button>
+              );
+            }
+            if (circle.createdBy !== me.id) {
+              return (
+                <button onClick={() => onLeave(circle.id)}
+                  className="mt-3 h-9 w-full rounded-full border border-purple/20 text-xs font-black text-muted active:scale-[0.98]">
+                  サークルを退会する
+                </button>
+              );
+            }
+            return <span className="mt-3 inline-block rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">{joinPolicy === 'approval' ? '✋ 承認制サークル' : '🌍 誰でも参加OK'}</span>;
+          })()}
+          {/* 作成者：参加リクエストの承認 */}
+          {circle.createdBy === me.id && ((circle as any).pendingMembers?.length ?? 0) > 0 && (
+            <div className="mt-4 space-y-2 border-t border-dashed border-purple/15 pt-3">
+              <p className="text-xs font-black text-ink">🔔 参加リクエスト（{(circle as any).pendingMembers.length}）</p>
+              {((circle as any).pendingMembers as { id: string; name: string; avatar: string }[]).map((pm) => (
+                <div key={pm.id} className="flex items-center gap-3 rounded-2xl bg-base p-3">
+                  <span className="text-xl">{pm.avatar}</span>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-ink">{pm.name}</p><p className="truncate text-[10px] font-bold text-muted">{pm.id}</p></div>
+                  <button onClick={() => onApprove(circle.id, pm.id)} className="shrink-0 rounded-full bg-pink px-3 py-1.5 text-[11px] font-black text-white active:scale-95">承認</button>
+                  <button onClick={() => onReject(circle.id, pm.id)} className="shrink-0 rounded-full bg-base px-2 py-1.5 text-[11px] font-black text-muted ring-1 ring-purple/15">却下</button>
+                </div>
+              ))}
+            </div>
+          )}
           {iAmFan && (
             <p className="mt-3 rounded-2xl bg-pink/5 px-3 py-2 text-[10px] font-bold text-muted">
               🎫 ファンとして参加中。「ファンもOK」のお題に回答・投票できます
@@ -5846,13 +5880,14 @@ function CircleCreateScreen({
   go, onCreate,
 }: {
   go: (s: Screen, payload?: any) => void;
-  onCreate: (name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean }) => string;
+  onCreate: (name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval' }) => string;
 }) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('🔒');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isOfficial, setIsOfficial] = useState(false);
   const [allowFans, setAllowFans] = useState(false);
+  const [joinPolicy, setJoinPolicy] = useState<'open' | 'approval'>('open');
 
   return (
     <>
@@ -5903,6 +5938,23 @@ function CircleCreateScreen({
           </div>
         )}
 
+        {/* 参加方式（作成者が選ぶ） */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-3 font-black text-ink">参加方式</p>
+          <div className="grid grid-cols-1 gap-2">
+            <button type="button" onClick={() => setJoinPolicy('open')}
+              className={`rounded-2xl border-2 p-3 text-left transition ${joinPolicy === 'open' ? 'border-pink bg-pink/5' : 'border-transparent bg-base'}`}>
+              <p className="text-sm font-black text-ink">🌍 誰でも参加OK</p>
+              <p className="mt-0.5 text-[11px] font-bold text-muted">「さがす／サークル」から誰でもすぐ参加できます</p>
+            </button>
+            <button type="button" onClick={() => setJoinPolicy('approval')}
+              className={`rounded-2xl border-2 p-3 text-left transition ${joinPolicy === 'approval' ? 'border-purple bg-purple/5' : 'border-transparent bg-base'}`}>
+              <p className="text-sm font-black text-ink">✋ 承認制（招待が必要）</p>
+              <p className="mt-0.5 text-[11px] font-bold text-muted">参加は「リクエスト → 作成者が承認」。承認した人だけが中を見られます</p>
+            </button>
+          </div>
+        </section>
+
         {/* 公認ユーザーのみ：公認サークル＋ファン参加設定 */}
         {me.isOfficial && (
           <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -5936,7 +5988,7 @@ function CircleCreateScreen({
         </div>
 
         <button disabled={!name.trim()}
-          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers, { isOfficial, allowFans }); if (id) go('circle-detail', id); }}
+          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers, { isOfficial, allowFans, joinPolicy }); if (id) go('circle-detail', id); }}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
           {emoji} サークルを作る
         </button>
@@ -7533,11 +7585,11 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
-function createCircle(name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean }): string {
+function createCircle(name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval' }): string {
   if (circlesUseDb) {
     // サーバー作成後、本IDでサークル詳細へ遷移（作成画面側は空IDでは遷移しない）
     void (async () => {
-      const realId = await createCircleShared(name, emoji, opts?.isOfficial ?? false);
+      const realId = await createCircleShared(name, emoji, opts?.isOfficial ?? false, opts?.joinPolicy ?? 'open');
       await reloadCircles();
       if (realId) { void reloadCirclePosts(realId); go('circle-detail', realId); }
       else { showToast('サークルの作成に失敗しました。通信環境を確認してね'); }
@@ -7559,14 +7611,28 @@ function createCircle(name: string, emoji: string, memberIds: string[], opts?: {
 
 function joinCircleH(circleId: string) {
   if (circlesUseDb) {
-    void (async () => { await dbJoinCircle(circleId); await reloadCircles(); await reloadCirclePosts(circleId); })();
-    showToast('🎉 サークルに参加しました！');
+    const policy = ((circles.find((c) => c.id === circleId) as any)?.joinPolicy ?? 'open') as 'open' | 'approval';
+    void (async () => {
+      const res = await dbJoinCircle(circleId, policy);
+      await reloadCircles();
+      if (res === 'member') await reloadCirclePosts(circleId);
+      showToast(res === 'pending' ? '✋ 参加をリクエストしました。承認をまってね' : res === 'member' ? '🎉 サークルに参加しました！' : '参加に失敗しました');
+    })();
     return;
   }
   // デモ：ローカルで参加
   const next = circles.map((c) => c.id === circleId && !c.memberIds.includes(me.id) ? { ...c, memberIds: [...c.memberIds, me.id] } : c);
   setCircles(next); localStorage.setItem('circles', JSON.stringify(next));
   showToast('🎉 サークルに参加しました！');
+}
+
+function approveCircleMemberH(circleId: string, atName: string) {
+  void (async () => { await approveCircleMember(circleId, atName); await reloadCircles(); })();
+  showToast('✅ 参加を承認しました');
+}
+function rejectCircleMemberH(circleId: string, atName: string) {
+  void (async () => { await rejectCircleMember(circleId, atName); await reloadCircles(); })();
+  showToast('リクエストを見送りました');
 }
 
 function leaveCircleH(circleId: string) {
@@ -8385,7 +8451,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {
       const circle = circles.find((c) => c.id === selectedCircleId);
-      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} onReply={replyToCirclePost} onVote={voteInCirclePost} onApplyFan={applyAsFan} onApproveFan={approveFan} onRejectFan={rejectFan} onJoin={joinCircleH} onLeave={leaveCircleH} />;
+      if (circle) return <CircleDetailScreen go={go} circle={circle} posts={circlePosts.filter((p) => p.circleId === circle.id)} onPost={postToCircle} onReply={replyToCirclePost} onVote={voteInCirclePost} onApplyFan={applyAsFan} onApproveFan={approveFan} onRejectFan={rejectFan} onJoin={joinCircleH} onLeave={leaveCircleH} onApprove={approveCircleMemberH} onReject={rejectCircleMemberH} />;
     }
 
    if (screen === 'daily-question')

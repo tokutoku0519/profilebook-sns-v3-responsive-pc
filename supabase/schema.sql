@@ -337,3 +337,47 @@ create policy "circle_votes readable" on public.circle_votes for select using (
   )
 );
 create policy "circle_votes insert" on public.circle_votes for insert with check (auth.uid() = user_id);
+
+-- ── サークルの参加方式（公開／承認制）＋メンバー状態（member/pending） ──
+-- 追加カラム（非破壊）。既存行は join_policy='open' / status='member' 扱い。
+alter table public.circles add column if not exists join_policy text default 'open';   -- open / approval
+alter table public.circle_members add column if not exists status text default 'member'; -- member / pending
+
+-- 作成者は自分のサークルのメンバー行を承認（update）・却下（delete）できる
+drop policy if exists "circle_members owner update" on public.circle_members;
+drop policy if exists "circle_members owner delete" on public.circle_members;
+create policy "circle_members owner update" on public.circle_members for update using (
+  exists (select 1 from public.circles c where c.id = circle_members.circle_id and c.created_by = auth.uid())
+);
+create policy "circle_members owner delete" on public.circle_members for delete using (
+  exists (select 1 from public.circles c where c.id = circle_members.circle_id and c.created_by = auth.uid())
+);
+
+-- 投稿/返信/投票の「メンバー限定」判定を status='member' 限定に更新（承認待ちは閲覧不可）
+drop policy if exists "circle_posts readable" on public.circle_posts;
+drop policy if exists "circle_posts insert"   on public.circle_posts;
+create policy "circle_posts readable" on public.circle_posts for select using (
+  exists (select 1 from public.circle_members m where m.circle_id = circle_posts.circle_id and m.user_id = auth.uid() and coalesce(m.status,'member') = 'member')
+);
+create policy "circle_posts insert" on public.circle_posts for insert with check (
+  auth.uid() = user_id
+  and exists (select 1 from public.circle_members m where m.circle_id = circle_posts.circle_id and m.user_id = auth.uid() and coalesce(m.status,'member') = 'member')
+);
+
+drop policy if exists "circle_replies readable" on public.circle_replies;
+create policy "circle_replies readable" on public.circle_replies for select using (
+  exists (
+    select 1 from public.circle_posts p
+    join public.circle_members m on m.circle_id = p.circle_id
+    where p.id = circle_replies.post_id and m.user_id = auth.uid() and coalesce(m.status,'member') = 'member'
+  )
+);
+
+drop policy if exists "circle_votes readable" on public.circle_votes;
+create policy "circle_votes readable" on public.circle_votes for select using (
+  exists (
+    select 1 from public.circle_posts p
+    join public.circle_members m on m.circle_id = p.circle_id
+    where p.id = circle_votes.post_id and m.user_id = auth.uid() and coalesce(m.status,'member') = 'member'
+  )
+);

@@ -644,47 +644,55 @@ async function profilesByIds(ids: string[]): Promise<Map<string, any>> {
 const atName = (p?: any) => (p ? '@' + p.username : '@unknown');
 const avatarOf = (p?: any) => (p?.avatar_url && !String(p.avatar_url).startsWith('http') ? p.avatar_url : '📷');
 
-/** 全サークル（発見用）。memberIds/members は '@username' 形式。 */
+/** 全サークル（発見用）。memberIds/members は '@username' 形式。承認制の pending も含む。 */
 export async function getCirclesShared(): Promise<any[]> {
   if (!supabase) return [];
+  const myUid = await getCurrentUserId();
   const { data: circles } = await supabase.from('circles').select('*').order('created_at', { ascending: false });
   if (!circles || circles.length === 0) return [];
-  const { data: mems } = await supabase.from('circle_members').select('circle_id,user_id');
+  const { data: mems } = await supabase.from('circle_members').select('circle_id,user_id,status');
   const profs = await profilesByIds([...(mems ?? []).map((m: any) => m.user_id), ...circles.map((c: any) => c.created_by)]);
+  const isMember = (m: any) => (m.status ?? 'member') === 'member';
   return circles.map((c: any) => {
     const memRows = (mems ?? []).filter((m: any) => m.circle_id === c.id);
-    const members = memRows.map((m: any) => {
-      const p = profs.get(m.user_id);
-      return { id: atName(p), name: p?.display_name || p?.username || 'ユーザー', avatar: avatarOf(p) };
-    });
+    const toProfile = (m: any) => { const p = profs.get(m.user_id); return { id: atName(p), name: p?.display_name || p?.username || 'ユーザー', avatar: avatarOf(p) }; };
+    const members = memRows.filter(isMember).map(toProfile);
+    const pendingMembers = memRows.filter((m: any) => (m.status ?? 'member') === 'pending').map(toProfile);
+    const myRow = myUid ? memRows.find((m: any) => m.user_id === myUid) : undefined;
+    const myStatus = myRow ? (myRow.status ?? 'member') : 'none';   // member / pending / none
     return {
       id: c.id,
       name: c.name,
       emoji: c.emoji || '🔒',
       createdBy: atName(profs.get(c.created_by)),
       isOfficial: !!c.is_official,
+      joinPolicy: (c.join_policy === 'approval' ? 'approval' : 'open') as 'open' | 'approval',
       memberIds: members.map((x: any) => x.id),
       members,
+      pendingMembers,
+      myStatus,
     };
   });
 }
 
-export async function createCircleShared(name: string, emoji: string, isOfficial: boolean): Promise<string | null> {
+export async function createCircleShared(name: string, emoji: string, isOfficial: boolean, joinPolicy: 'open' | 'approval' = 'open'): Promise<string | null> {
   if (!supabase) return null;
   const uid = await getCurrentUserId();
   if (!uid) return null;
-  const { data, error } = await supabase.from('circles').insert({ name, emoji, created_by: uid, is_official: isOfficial }).select('id').single();
+  const { data, error } = await supabase.from('circles').insert({ name, emoji, created_by: uid, is_official: isOfficial, join_policy: joinPolicy }).select('id').single();
   if (error || !data) return null;
-  await supabase.from('circle_members').insert({ circle_id: data.id, user_id: uid });
+  await supabase.from('circle_members').insert({ circle_id: data.id, user_id: uid, status: 'member' });
   return data.id as string;
 }
 
-export async function joinCircle(circleId: string): Promise<boolean> {
-  if (!supabase) return false;
+/** 参加。open は即メンバー、approval は pending（承認待ち）で登録。返り値は登録した status。 */
+export async function joinCircle(circleId: string, policy: 'open' | 'approval' = 'open'): Promise<'member' | 'pending' | null> {
+  if (!supabase) return null;
   const uid = await getCurrentUserId();
-  if (!uid) return false;
-  const { error } = await supabase.from('circle_members').insert({ circle_id: circleId, user_id: uid });
-  return !error;
+  if (!uid) return null;
+  const status = policy === 'approval' ? 'pending' : 'member';
+  const { error } = await supabase.from('circle_members').insert({ circle_id: circleId, user_id: uid, status });
+  return error ? null : status;
 }
 
 export async function leaveCircle(circleId: string): Promise<boolean> {
@@ -692,6 +700,26 @@ export async function leaveCircle(circleId: string): Promise<boolean> {
   const uid = await getCurrentUserId();
   if (!uid) return false;
   const { error } = await supabase.from('circle_members').delete().eq('circle_id', circleId).eq('user_id', uid);
+  return !error;
+}
+
+/** 作成者：承認待ちを承認（status='member' に更新）。target は '@username'。 */
+export async function approveCircleMember(circleId: string, targetAtName: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uname = targetAtName.replace(/^@/, '');
+  const { data: tp } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
+  if (!tp) return false;
+  const { error } = await supabase.from('circle_members').update({ status: 'member' }).eq('circle_id', circleId).eq('user_id', (tp as any).id);
+  return !error;
+}
+
+/** 作成者：承認待ちを却下（行を削除）。target は '@username'。 */
+export async function rejectCircleMember(circleId: string, targetAtName: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uname = targetAtName.replace(/^@/, '');
+  const { data: tp } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
+  if (!tp) return false;
+  const { error } = await supabase.from('circle_members').delete().eq('circle_id', circleId).eq('user_id', (tp as any).id);
   return !error;
 }
 
