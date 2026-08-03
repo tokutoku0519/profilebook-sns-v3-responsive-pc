@@ -881,7 +881,7 @@ function tabFromScreen(screen: Screen): TabKey {
 
 function Phone({ children, active, go, lang, bgTheme = null, unread = 0 }: { children: React.ReactNode; active: TabKey; go: (s: Screen) => void; lang: Lang; bgTheme?: BgTheme | null; unread?: number }) {
   return (
-    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:h-[844px] sm:max-h-[calc(100dvh-4rem)] sm:max-w-[520px] sm:rounded-[36px] sm:border sm:border-white/70 md:mx-0 md:h-[calc(100vh-48px)] md:max-h-none md:max-w-none md:rounded-[32px]">
+    <main className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden bg-base text-ink shadow-2xl shadow-purple/10 sm:max-w-none md:mx-0 md:h-[calc(100vh-48px)] md:rounded-[32px]">
       {/* 装備中テーマをアプリ全体の背景に敷く（上に薄い白で読みやすさを確保） */}
       {bgTheme && (
         <div className="pointer-events-none absolute inset-0" aria-hidden>
@@ -972,7 +972,7 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
 
 function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl, ownedStickerCount, lang, bgTheme = null, translatedAnswerBodies = {}, unread = 0 }: { children: React.ReactNode; active: TabKey; currentScreen?: Screen; go: (s: Screen, answerId?: string) => void; answers: Answer[]; avatarUrl: string; ownedStickerCount: number; lang: Lang; bgTheme?: BgTheme | null; translatedAnswerBodies?: Record<string, string>; unread?: number }) {
   return (
-    <div className="min-h-screen bg-purple/25 p-0 sm:p-8 md:p-6">
+    <div className="min-h-screen bg-purple/25 p-0 md:p-6">
       <div className="mx-auto flex max-w-[1280px] gap-5">
         <DesktopNav active={active} go={go} lang={lang} currentScreen={currentScreen} />
         <div className="min-w-0 flex-1"><Phone active={active} go={go} lang={lang} bgTheme={bgTheme} unread={unread}>{children}</Phone></div>
@@ -1216,32 +1216,35 @@ function HomeScreen({
             </button>
           </div>
         </section>
-        {circles.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-ink">🔒 {t('nav_circles', lang)}</h2>
-              <button onClick={() => go('circles')} className="text-xs font-black text-pink">{t('btn_see_all', lang)}</button>
-            </div>
-            <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
-              {circles.map((c) => {
-                const latest = circlePosts.filter((p) => p.circleId === c.id).slice(-1)[0];
-                return (
-                  <button key={c.id} onClick={() => go('circle-detail', c.id)}
-                    className="min-w-[200px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
-                    <p className="text-2xl">{c.emoji}</p>
-                    <p className="mt-1 font-black text-ink">{c.name}</p>
-                    <p className="mt-0.5 text-[11px] font-bold text-muted">{c.memberIds.length}{t('label_members', lang)}</p>
-                    {latest && <p className="mt-2 line-clamp-1 text-xs font-bold text-muted">「{latest.body.slice(0, 18)}…」</p>}
-                  </button>
-                );
-              })}
-              <button onClick={() => go('circle-create')}
-                className="grid min-w-[100px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
-                {t('btn_create', lang)}
-              </button>
-            </div>
-          </section>
-        )}
+        <section>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black text-ink">🔒 {t('nav_circles', lang)}</h2>
+            <button onClick={() => go('circles')} className="text-xs font-black text-pink">さがす →</button>
+          </div>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">仲間だけのコミュニティ。作る／さがして参加できます</p>
+          <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
+            {circles.map((c) => {
+              const latest = circlePosts.filter((p) => p.circleId === c.id).slice(-1)[0];
+              return (
+                <button key={c.id} onClick={() => go('circle-detail', c.id)}
+                  className="min-w-[200px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
+                  <p className="text-2xl">{c.emoji}</p>
+                  <p className="mt-1 font-black text-ink">{c.name}</p>
+                  <p className="mt-0.5 text-[11px] font-bold text-muted">{c.memberIds.length}{t('label_members', lang)}</p>
+                  {latest && <p className="mt-2 line-clamp-1 text-xs font-bold text-muted">「{latest.body.slice(0, 18)}…」</p>}
+                </button>
+              );
+            })}
+            <button onClick={() => go('circles')}
+              className="grid min-w-[130px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-center text-sm font-black text-purple shadow-card active:scale-[0.98]">
+              🔍 サークルを<br />さがす
+            </button>
+            <button onClick={() => go('circle-create')}
+              className="grid min-w-[100px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
+              ＋ {t('btn_create', lang)}
+            </button>
+          </div>
+        </section>
         <section className="relative">
           <span className="pointer-events-none absolute -right-1 -top-3 z-10"><RetroFlower /></span>
           <SectionHeader title={t('sec_new_profiles', lang)} action={t('btn_see', lang)} onAction={() => go('search')} />
