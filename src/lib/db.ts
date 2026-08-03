@@ -693,7 +693,15 @@ export async function joinCircle(circleId: string, policy: 'open' | 'approval' =
   if (!uid) return null;
   const status = policy === 'approval' ? 'pending' : 'member';
   const { error } = await supabase.from('circle_members').insert({ circle_id: circleId, user_id: uid, status });
-  return error ? null : status;
+  if (error) return null;
+  // 作成者に通知（承認制＝リクエスト／公開＝参加）
+  try {
+    const { data: c } = await supabase.from('circles').select('created_by,name').eq('id', circleId).maybeSingle();
+    if (c && (c as any).created_by) {
+      await createNotification((c as any).created_by, status === 'pending' ? 'circle_request' : 'circle_join', { body: (c as any).name ?? null });
+    }
+  } catch {}
+  return status;
 }
 
 export async function leaveCircle(circleId: string): Promise<boolean> {
@@ -711,7 +719,13 @@ export async function approveCircleMember(circleId: string, targetAtName: string
   const { data: tp } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
   if (!tp) return false;
   const { error } = await supabase.from('circle_members').update({ status: 'member' }).eq('circle_id', circleId).eq('user_id', (tp as any).id);
-  return !error;
+  if (error) return false;
+  // 承認された本人へ通知
+  try {
+    const { data: c } = await supabase.from('circles').select('name').eq('id', circleId).maybeSingle();
+    await createNotification((tp as any).id, 'circle_accept', { body: (c as any)?.name ?? null });
+  } catch {}
+  return true;
 }
 
 /** 作成者：承認待ちを却下（行を削除）。target は '@username'。 */

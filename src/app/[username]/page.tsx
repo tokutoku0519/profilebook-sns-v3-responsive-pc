@@ -5170,6 +5170,25 @@ function DiaryCreateScreen({
   const shownInvitees = mq
     ? inviteList.filter((f) => mentionedUserIds.includes(f.id) || f.name.toLowerCase().includes(mq) || f.id.toLowerCase().includes(mq))
     : inviteList;
+  // フォロワー以外も全体検索して招待できる（本番のみ）
+  const [searchedUsers, setSearchedUsers] = useState<{ id: string; name: string; avatar: string }[]>([]);
+  useEffect(() => {
+    const q = mentionSearch.trim();
+    if (isDev || !dbReady() || q.length < 1) { setSearchedUsers([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const rows = await searchProfiles(q);
+      if (cancelled) return;
+      const followerIds = new Set(inviteList.map((f) => f.id));
+      setSearchedUsers(
+        rows
+          .map((r) => ({ id: '@' + r.username, name: r.display_name || r.username, avatar: r.avatar_url && !r.avatar_url.startsWith('http') ? r.avatar_url : '📷' }))
+          .filter((u) => u.id !== me.id && !followerIds.has(u.id)),
+      );
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentionSearch]);
 
   function toggleMention(userId: string) {
     setMentionedUserIds((prev) =>
@@ -5267,6 +5286,26 @@ function DiaryCreateScreen({
                   </button>
                 );
               })}
+              {/* フォロワー以外の全体検索結果 */}
+              {searchedUsers.length > 0 && (
+                <>
+                  <p className="pt-2 text-[10px] font-black text-muted">他のユーザー</p>
+                  {searchedUsers.map((u) => {
+                    const selected = mentionedUserIds.includes(u.id);
+                    return (
+                      <button key={u.id} onClick={() => toggleMention(u.id)}
+                        className={`flex w-full items-center gap-3 rounded-2xl p-3 text-left transition ${selected ? 'bg-purple/10' : 'bg-base'}`}>
+                        <span className="text-xl">{u.avatar}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-black text-ink">{u.name}</span>
+                          <span className="block truncate text-[11px] font-bold text-muted">{u.id}</span>
+                        </span>
+                        <span className={`shrink-0 text-xs font-black ${selected ? 'text-purple' : 'text-muted'}`}>{selected ? '✓ 招待中' : '招待する'}</span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
           )}
         </section>
@@ -6591,6 +6630,9 @@ function formatServerNotif(n: NotificationRow): { id: string; icon: string; text
     case 'follow':        return { ...base, icon: '🎀', text: `${who}さんがあなたをフォローしました`, onOpen: 'profile' };
     case 'friend_request':return { ...base, icon: '📖', text: `${who}さんからなかよし申請が届きました`, onOpen: 'profile' };
     case 'friend_accept': return { ...base, icon: '📖', text: `${who}さんがなかよし申請を承認しました`, onOpen: 'profile' };
+    case 'circle_request':return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」への参加をリクエストしました` };
+    case 'circle_join':   return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」に参加しました` };
+    case 'circle_accept': return { ...base, icon: '🎉', text: `「${n.body ?? 'サークル'}」への参加が承認されました` };
     default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };
   }
 }

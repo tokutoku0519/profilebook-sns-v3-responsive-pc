@@ -110,7 +110,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
 // よく使う絵文字を中心にタグ付け。ここに載っていない絵文字も、
 // カテゴリから選べば使えるため、検索の「取りこぼし」は問題にならない。
 // ============================================================
-const EMOJI_KEYWORDS: Record<string, string> = {
+const EMOJI_KEYWORDS_BASE: Record<string, string> = {
   // 顔・気持ち
   '😀': 'にこにこ わらい smile', '😃': 'わらい happy', '😄': 'わらい happy',
   '😁': 'にっこり grin', '😆': 'わらい laugh', '😅': 'あせ わらい sweat',
@@ -194,6 +194,54 @@ const EMOJI_KEYWORDS: Record<string, string> = {
   '⭕️': 'まる circle ok', '❗️': 'びっくり exclamation', '❓': 'はてな question',
   '💢': 'いかり anger', '💥': 'ばくはつ explosion', '💫': 'めまい star', '💦': 'あせ みず sweat',
   '💨': 'いそぐ けむり dash', '💤': 'ねむい zzz sleep', '➕': 'ぷらす plus', '❤️‍🔥': 'もえるハート',
+};
+
+// 追加分は spread でマージ（既存キーと重複してもこちらで上書き＝TSエラーにならない）
+const EMOJI_KEYWORDS: Record<string, string> = {
+  ...EMOJI_KEYWORDS_BASE,
+  '🥲': 'うれしなき わらいなき', '🙃': 'さかさ てへ', '😚': 'キス love', '😙': 'キス love',
+  '🤗': 'ハグ だきしめ hug', '🫶': 'ハート love ゆびハート', '🫡': 'けいれい salute',
+  '🤝': 'あくしゅ なかよし deal', '👊': 'ぱんち fist', '✊': 'こぶし fist', '🤛': 'こぶし', '🤜': 'こぶし',
+  '💪': 'きんにく ちから がんばる muscle', '🦵': 'あし leg', '👣': 'あしあと foot',
+  '👼': 'てんし あかちゃん angel baby', '🎅': 'サンタ santa', '🤶': 'サンタ',
+  '👸': 'おひめさま princess', '🤴': 'おうじ prince', '🦸': 'ヒーロー hero', '🦹': 'ヴィラン villain',
+  '🧚': 'ようせい fairy', '🧜': 'にんぎょ mermaid', '🧛': 'きゅうけつき vampire', '🧟': 'ゾンビ zombie',
+  '🐢': 'かめ turtle', '🦕': 'きょうりゅう dino', '🦖': 'きょうりゅう trex', '🦔': 'はりねずみ hedgehog',
+  '🦦': 'かわうそ otter', '🦥': 'なまけもの sloth', '🦭': 'あざらし seal', '🦩': 'フラミンゴ flamingo',
+  '🦚': 'くじゃく peacock', '🦜': 'いんこ parrot', '🦢': 'はくちょう swan', '🕊️': 'はと peace dove',
+  '🐿️': 'りす squirrel', '🦫': 'ビーバー beaver', '🦉': 'ふくろう owl',
+  '🍰': 'ケーキ cake', '🧁': 'カップケーキ cupcake', '🍮': 'ぷりん pudding', '🍯': 'はちみつ honey',
+  '🍡': 'だんご dango', '🍢': 'おでん', '🍘': 'せんべい', '🍥': 'なると', '🍚': 'ごはん rice',
+  '🍛': 'カレー curry', '🍲': 'なべ hotpot', '🥘': 'パエリア', '🍤': 'えびフライ tempura',
+  '🍦': 'ソフトクリーム icecream', '🧋': 'タピオカ bubble tea', '🍹': 'カクテル cocktail',
+  '🍫': 'チョコ chocolate', '🍿': 'ポップコーン popcorn', '🧃': 'ジュース juice', '🥤': 'ジュース soda',
+  '⚽️': 'サッカー soccer', '🏀': 'バスケ basket', '🎾': 'テニス tennis', '🏐': 'バレー volleyball',
+  '🏸': 'バドミントン', '🥊': 'ボクシング boxing', '🎳': 'ボウリング bowling', '🎯': 'ダーツ まと dart',
+  '🎮': 'ゲーム game', '🎲': 'サイコロ dice', '🧩': 'パズル puzzle', '🎨': 'アート え paint',
+  '🎤': 'カラオケ マイク mic', '🎧': 'ヘッドホン music', '🎹': 'ピアノ piano', '🎸': 'ギター guitar',
+  '🥁': 'ドラム drum', '🎺': 'トランペット', '🎻': 'バイオリン violin', '🎬': 'えいが movie',
+  '📷': 'カメラ camera photo', '📸': 'カメラ しゃしん photo', '🎥': 'えいが ビデオ video',
+  '✈️': 'ひこうき たび trip plane', '🚗': 'くるま car', '🚕': 'タクシー taxi', '🚌': 'バス bus',
+  '🚲': 'じてんしゃ bike', '🛵': 'バイク scooter', '🚄': 'しんかんせん train', '🚀': 'ロケット rocket',
+  '🏠': 'いえ home house', '🏫': 'がっこう school', '🏥': 'びょういん hospital', '🏦': 'ぎんこう bank',
+  '⛩️': 'じんじゃ shrine', '🗼': 'タワー tower', '🎡': 'かんらんしゃ ferris', '🎢': 'ジェットコースター',
+  '🎆': 'はなび fireworks', '🎇': 'はなび sparkler', '🎑': 'つきみ', '🎐': 'ふうりん',
+  '⛄️': 'ゆきだるま snowman', '☃️': 'ゆきだるま snowman', '🌊': 'なみ うみ wave sea', '🏖️': 'ビーチ beach',
+  '🗻': 'ふじさん mountain', '⛰️': 'やま mountain', '🌋': 'かざん volcano', '🏝️': 'しま island',
+  '💍': 'ゆびわ ダイヤ ring', '👑': 'かんむり おうかん crown', '💄': 'くちべに lipstick', '👗': 'ドレス dress',
+  '👠': 'ハイヒール heels', '👟': 'スニーカー shoes', '🎒': 'リュック bag', '👜': 'バッグ bag',
+  '🕶️': 'サングラス sunglasses', '👓': 'メガネ glasses', '🧢': 'キャップ ぼうし cap', '🎓': 'そつぎょう graduate',
+  '💰': 'おかね money', '💴': 'えん yen money', '💳': 'カード card', '🎁': 'プレゼント present gift',
+  '🎈': 'ふうせん balloon', '🎉': 'クラッカー おいわい party', '🎊': 'くすだま party', '🎀': 'リボン ribbon',
+  '🔔': 'ベル つうち bell', '📱': 'スマホ phone', '💻': 'パソコン pc', '⌚️': 'とけい watch',
+  '💡': 'ひらめき アイデア idea', '🔑': 'かぎ key', '🔒': 'かぎ ロック lock', '📚': 'ほん book べんきょう',
+  '✏️': 'えんぴつ pencil', '🖊️': 'ペン pen', '📝': 'メモ note かく', '📖': 'ほん book よむ',
+  '⭐️': 'ほし star', '🌟': 'きらきら star', '✨': 'きらきら sparkle', '💫': 'きらきら star',
+  '🌈': 'にじ rainbow', '☀️': 'たいよう はれ sun', '🌙': 'つき moon', '⚡️': 'かみなり lightning',
+  '🔥': 'ほのお fire もえる', '💧': 'しずく みず drop', '❄️': 'ゆき snow', '🌸': 'さくら flower',
+  '🌷': 'チューリップ tulip', '🌻': 'ひまわり sunflower', '🌹': 'ばら rose', '🍀': 'よつば clover luck',
+  '✅': 'チェック ok done', '❌': 'ばつ ダメ x', '⭕️': 'まる ok', '❗️': 'びっくり', '❓': 'はてな question',
+  '💯': 'ひゃくてん perfect', '🆗': 'オッケー ok', '🆕': 'しんちゃく new', '🔞': 'じゅうはち',
 };
 
 /** クエリにマッチする絵文字を全カテゴリから検索（重複除去） */
