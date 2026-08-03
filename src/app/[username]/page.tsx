@@ -5537,6 +5537,9 @@ function CirclesScreen({
                   ) : (
                     <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🔒</span>
                   )}
+                  {(c as any).visibility === 'followers' && (
+                    <span className="rounded-full bg-purple/10 px-2 py-0.5 text-[10px] font-black text-purple">👥 フォロワー限定</span>
+                  )}
                   {c.isOfficial && !iAmMember && c.fanIds?.includes(me.id) && (
                     <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 ファン参加中</span>
                   )}
@@ -5883,7 +5886,7 @@ function CircleCreateScreen({
   go, onCreate,
 }: {
   go: (s: Screen, payload?: any) => void;
-  onCreate: (name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval' }) => string;
+  onCreate: (name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval'; visibility?: 'public' | 'followers' }) => string;
 }) {
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('🔒');
@@ -5891,6 +5894,7 @@ function CircleCreateScreen({
   const [isOfficial, setIsOfficial] = useState(false);
   const [allowFans, setAllowFans] = useState(false);
   const [joinPolicy, setJoinPolicy] = useState<'open' | 'approval'>('open');
+  const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
 
   return (
     <>
@@ -5940,6 +5944,23 @@ function CircleCreateScreen({
             👥 作ったサークルは「さがす」から誰でも見つけて参加できます（参加制）。
           </div>
         )}
+
+        {/* 公開範囲（誰に見つけてもらえるか） */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-3 font-black text-ink">公開範囲</p>
+          <div className="grid grid-cols-1 gap-2">
+            <button type="button" onClick={() => setVisibility('public')}
+              className={`rounded-2xl border-2 p-3 text-left transition ${visibility === 'public' ? 'border-blue-400 bg-blue-50' : 'border-transparent bg-base'}`}>
+              <p className="text-sm font-black text-ink">🌍 全体に表示</p>
+              <p className="mt-0.5 text-[11px] font-bold text-muted">だれでも「さがす」から見つけられます</p>
+            </button>
+            <button type="button" onClick={() => setVisibility('followers')}
+              className={`rounded-2xl border-2 p-3 text-left transition ${visibility === 'followers' ? 'border-pink bg-pink/5' : 'border-transparent bg-base'}`}>
+              <p className="text-sm font-black text-ink">👥 フォロワーにだけ表示</p>
+              <p className="mt-0.5 text-[11px] font-bold text-muted">あなたをフォローしている人だけが見つけられます</p>
+            </button>
+          </div>
+        </section>
 
         {/* 参加方式（作成者が選ぶ） */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -5991,7 +6012,7 @@ function CircleCreateScreen({
         </div>
 
         <button disabled={!name.trim()}
-          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers, { isOfficial, allowFans, joinPolicy }); if (id) go('circle-detail', id); }}
+          onClick={() => { const id = onCreate(name.trim(), emoji, selectedMembers, { isOfficial, allowFans, joinPolicy, visibility }); if (id) go('circle-detail', id); }}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
           {emoji} サークルを作る
         </button>
@@ -7588,11 +7609,11 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
-function createCircle(name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval' }): string {
+function createCircle(name: string, emoji: string, memberIds: string[], opts?: { isOfficial?: boolean; allowFans?: boolean; joinPolicy?: 'open' | 'approval'; visibility?: 'public' | 'followers' }): string {
   if (circlesUseDb) {
     // サーバー作成後、本IDでサークル詳細へ遷移（作成画面側は空IDでは遷移しない）
     void (async () => {
-      const realId = await createCircleShared(name, emoji, opts?.isOfficial ?? false, opts?.joinPolicy ?? 'open');
+      const realId = await createCircleShared(name, emoji, opts?.isOfficial ?? false, opts?.joinPolicy ?? 'open', opts?.visibility ?? 'public');
       await reloadCircles();
       if (realId) { void reloadCirclePosts(realId); go('circle-detail', realId); }
       else { showToast('サークルの作成に失敗しました。通信環境を確認してね'); }

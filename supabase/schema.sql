@@ -381,3 +381,15 @@ create policy "circle_votes readable" on public.circle_votes for select using (
     where p.id = circle_votes.post_id and m.user_id = auth.uid() and coalesce(m.status,'member') = 'member'
   )
 );
+
+-- ── サークルの公開範囲（全体／フォロワー限定） ──────────────────
+-- visibility='followers' のサークルは「作成者をフォローしている人」だけが発見できる。
+alter table public.circles add column if not exists visibility text default 'public'; -- public / followers
+
+drop policy if exists "circles readable" on public.circles;
+create policy "circles readable" on public.circles for select using (
+  coalesce(visibility,'public') = 'public'
+  or created_by = auth.uid()
+  or exists (select 1 from public.follows f where f.following_id = circles.created_by and f.follower_id = auth.uid())
+  or exists (select 1 from public.circle_members m where m.circle_id = circles.id and m.user_id = auth.uid())
+);

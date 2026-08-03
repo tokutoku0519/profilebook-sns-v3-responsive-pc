@@ -667,6 +667,7 @@ export async function getCirclesShared(): Promise<any[]> {
       createdBy: atName(profs.get(c.created_by)),
       isOfficial: !!c.is_official,
       joinPolicy: (c.join_policy === 'approval' ? 'approval' : 'open') as 'open' | 'approval',
+      visibility: (c.visibility === 'followers' ? 'followers' : 'public') as 'public' | 'followers',
       memberIds: members.map((x: any) => x.id),
       members,
       pendingMembers,
@@ -675,11 +676,11 @@ export async function getCirclesShared(): Promise<any[]> {
   });
 }
 
-export async function createCircleShared(name: string, emoji: string, isOfficial: boolean, joinPolicy: 'open' | 'approval' = 'open'): Promise<string | null> {
+export async function createCircleShared(name: string, emoji: string, isOfficial: boolean, joinPolicy: 'open' | 'approval' = 'open', visibility: 'public' | 'followers' = 'public'): Promise<string | null> {
   if (!supabase) return null;
   const uid = await getCurrentUserId();
   if (!uid) return null;
-  const { data, error } = await supabase.from('circles').insert({ name, emoji, created_by: uid, is_official: isOfficial, join_policy: joinPolicy }).select('id').single();
+  const { data, error } = await supabase.from('circles').insert({ name, emoji, created_by: uid, is_official: isOfficial, join_policy: joinPolicy, visibility }).select('id').single();
   if (error || !data) return null;
   await supabase.from('circle_members').insert({ circle_id: data.id, user_id: uid, status: 'member' });
   return data.id as string;
