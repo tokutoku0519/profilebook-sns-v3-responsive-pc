@@ -807,3 +807,105 @@ export async function voteCircleShared(postId: string, targetAtName: string): Pr
   const { error } = await supabase.from('circle_votes').insert({ post_id: postId, user_id: uid, target_id: (tp as any).id });
   return !error;
 }
+
+// ── ブログ（個人記事）＝共有 ─────────────────────────────────
+/** ブログのフィード（自分＋公開＋フォロー先のフォロワー限定）。id は '@username' 形式。 */
+export async function getBlogFeedShared(limit = 100): Promise<any[]> {
+  if (!supabase) return [];
+  const myUid = await getCurrentUserId();
+  const { data: posts } = await supabase.from('blog_posts').select('*').order('created_at', { ascending: false }).limit(limit);
+  if (!posts || posts.length === 0) return [];
+  const ids = posts.map((p: any) => p.id);
+  const [{ data: likes }, { data: comments }] = await Promise.all([
+    supabase.from('blog_likes').select('post_id,user_id').in('post_id', ids),
+    supabase.from('blog_comments').select('*').in('post_id', ids),
+  ]);
+  const uids = [
+    ...posts.map((p: any) => p.user_id),
+    ...(comments ?? []).map((c: any) => c.user_id),
+  ];
+  const profs = await profilesByIds(uids);
+  return posts.map((p: any) => {
+    const pr = profs.get(p.user_id);
+    const postLikes = (likes ?? []).filter((l: any) => l.post_id === p.id);
+    return {
+      id: p.id,
+      authorId: atName(pr),
+      authorName: pr?.display_name || 'ユーザー',
+      authorAvatar: avatarOf(pr),
+      title: p.title || undefined,
+      mood: p.mood || undefined,
+      weather: p.weather || undefined,
+      body: p.body,
+      photoUrl: p.photo_url || undefined,
+      textColor: p.text_color || undefined,
+      visibility: (p.visibility === 'followers' ? 'followers' : 'public') as 'public' | 'followers',
+      likes: postLikes.length,
+      likedByMe: !!myUid && postLikes.some((l: any) => l.user_id === myUid),
+      comments: (comments ?? [])
+        .filter((c: any) => c.post_id === p.id)
+        .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((c: any) => { const cp = profs.get(c.user_id); return { id: c.id, authorId: atName(cp), authorName: cp?.display_name || 'ユーザー', authorAvatar: avatarOf(cp), body: c.body, postedAt: c.created_at }; }),
+      postedAt: p.created_at,
+    };
+  });
+}
+
+export async function createBlogPostShared(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): Promise<string | null> {
+  if (!supabase) return null;
+  const uid = await getCurrentUserId();
+  if (!uid) return null;
+  const { data: row, error } = await supabase.from('blog_posts').insert({
+    user_id: uid, title: data.title ?? null, mood: data.mood ?? null, weather: data.weather ?? null,
+    body: data.body, photo_url: data.photoUrl ?? null, text_color: data.textColor ?? null, visibility: data.visibility,
+  }).select('id').single();
+  if (error || !row) return null;
+  return (row as any).id as string;
+}
+
+/** いいねをトグル。付けたときは投稿者へ通知。返り値は「付けたか」。 */
+export async function toggleBlogLikeShared(postId: string, authorAtName?: string): Promise<boolean | null> {
+  if (!supabase) return null;
+  const uid = await getCurrentUserId();
+  if (!uid) return null;
+  const { data: existing } = await supabase.from('blog_likes').select('post_id').eq('post_id', postId).eq('user_id', uid).maybeSingle();
+  if (existing) {
+    await supabase.from('blog_likes').delete().eq('post_id', postId).eq('user_id', uid);
+    return false;
+  }
+  const { error } = await supabase.from('blog_likes').insert({ post_id: postId, user_id: uid });
+  if (error) return null;
+  // 投稿者へ通知
+  try {
+    const uname = (authorAtName ?? '').replace(/^@/, '');
+    if (uname) {
+      const { data: ap } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
+      if (ap) await createNotification((ap as any).id, 'blog_like', { answerId: postId });
+    }
+  } catch {}
+  return true;
+}
+
+export async function addBlogCommentShared(postId: string, body: string, authorAtName?: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('blog_comments').insert({ post_id: postId, user_id: uid, body });
+  if (error) return false;
+  try {
+    const uname = (authorAtName ?? '').replace(/^@/, '');
+    if (uname) {
+      const { data: ap } = await supabase.from('profiles').select('id').eq('username', uname).maybeSingle();
+      if (ap) await createNotification((ap as any).id, 'blog_comment', { answerId: postId, body });
+    }
+  } catch {}
+  return true;
+}
+
+export async function deleteBlogPostShared(postId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('blog_posts').delete().eq('id', postId).eq('user_id', uid);
+  return !error;
+}

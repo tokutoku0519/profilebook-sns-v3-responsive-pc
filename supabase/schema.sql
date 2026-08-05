@@ -393,3 +393,70 @@ create policy "circles readable" on public.circles for select using (
   or exists (select 1 from public.follows f where f.following_id = circles.created_by and f.follower_id = auth.uid())
   or exists (select 1 from public.circle_members m where m.circle_id = circles.id and m.user_id = auth.uid())
 );
+
+-- ============================================================
+-- ブログ（個人記事）＝共有。公開範囲: public / followers。
+-- すべて create table if not exists なので再実行しても消えない。
+-- ============================================================
+create table if not exists public.blog_posts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  title text,
+  mood text,
+  weather text,
+  body text not null,
+  photo_url text,
+  text_color text,
+  visibility text not null default 'public',   -- public / followers
+  created_at timestamptz default now()
+);
+create index if not exists blog_posts_created_idx on public.blog_posts (created_at desc);
+
+create table if not exists public.blog_likes (
+  post_id uuid not null references public.blog_posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (post_id, user_id)
+);
+
+create table if not exists public.blog_comments (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.blog_posts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  body text not null,
+  created_at timestamptz default now()
+);
+create index if not exists blog_comments_post_idx on public.blog_comments (post_id, created_at);
+
+alter table public.blog_posts    enable row level security;
+alter table public.blog_likes    enable row level security;
+alter table public.blog_comments enable row level security;
+
+-- posts: public は全員／followers は「作成者をフォローしている人」＋本人。書込は本人。
+drop policy if exists "blog_posts readable"   on public.blog_posts;
+drop policy if exists "blog_posts insert own" on public.blog_posts;
+drop policy if exists "blog_posts update own" on public.blog_posts;
+drop policy if exists "blog_posts delete own" on public.blog_posts;
+create policy "blog_posts readable" on public.blog_posts for select using (
+  coalesce(visibility,'public') = 'public'
+  or user_id = auth.uid()
+  or exists (select 1 from public.follows f where f.following_id = blog_posts.user_id and f.follower_id = auth.uid())
+);
+create policy "blog_posts insert own" on public.blog_posts for insert with check (auth.uid() = user_id);
+create policy "blog_posts update own" on public.blog_posts for update using (auth.uid() = user_id);
+create policy "blog_posts delete own" on public.blog_posts for delete using (auth.uid() = user_id);
+
+-- likes / comments: 閲覧は全員、書込は本人のみ。
+drop policy if exists "blog_likes readable"   on public.blog_likes;
+drop policy if exists "blog_likes insert own" on public.blog_likes;
+drop policy if exists "blog_likes delete own" on public.blog_likes;
+create policy "blog_likes readable"   on public.blog_likes for select using (true);
+create policy "blog_likes insert own" on public.blog_likes for insert with check (auth.uid() = user_id);
+create policy "blog_likes delete own" on public.blog_likes for delete using (auth.uid() = user_id);
+
+drop policy if exists "blog_comments readable"   on public.blog_comments;
+drop policy if exists "blog_comments insert own" on public.blog_comments;
+drop policy if exists "blog_comments delete own" on public.blog_comments;
+create policy "blog_comments readable"   on public.blog_comments for select using (true);
+create policy "blog_comments insert own" on public.blog_comments for insert with check (auth.uid() = user_id);
+create policy "blog_comments delete own" on public.blog_comments for delete using (auth.uid() = user_id);

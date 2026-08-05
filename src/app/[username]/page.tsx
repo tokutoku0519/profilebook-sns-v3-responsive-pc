@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -5358,7 +5358,7 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
           ＋ 記事を書く
         </button>
-        <p className="px-1 text-xs font-bold text-muted">タイトル・気分・天気をつけて、自分だけのブログ記事を投稿できます。</p>
+        <p className="px-1 text-xs font-bold text-muted">みんなのブログ記事。タイトル・気分・天気をつけて投稿でき、いいね・コメントで反応できます。</p>
         {sorted.length === 0 && (
           <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
             まだ記事がありません。最初の記事を書いてみて！
@@ -5412,7 +5412,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
     if (containsNgWord(body)) { setNgError(true); return; }
     if (!canPost) return;
     const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: body.trim(), photoUrl: photoUrl || undefined, textColor: titleColor, visibility });
-    go('blog-detail', id);
+    if (id) go('blog-detail', id);
   }
 
   return (
@@ -6633,6 +6633,8 @@ function formatServerNotif(n: NotificationRow): { id: string; icon: string; text
     case 'circle_request':return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」への参加をリクエストしました` };
     case 'circle_join':   return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」に参加しました` };
     case 'circle_accept': return { ...base, icon: '🎉', text: `「${n.body ?? 'サークル'}」への参加が承認されました` };
+    case 'blog_like':     return { ...base, icon: '💗', text: `${who}さんがあなたのブログ記事にいいねしました` };
+    case 'blog_comment':  return { ...base, icon: '💬', text: `${who}さんがブログにコメントしました${n.body ? '：' + n.body : ''}` };
     default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };
   }
 }
@@ -8193,6 +8195,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   if (next === 'blog-detail' && payload) {
     setSelectedBlogId(payload);
   }
+  if (next === 'blog-list' && blogUseDb) void reloadBlog();
 
   if (next === 'circle-detail' && payload) {
     setSelectedCircleId(payload);
@@ -8437,11 +8440,27 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (typeof window === 'undefined') return [];
     try { const s = localStorage.getItem('miri_blog_posts'); return s ? JSON.parse(s) : []; } catch { return []; }
   });
+  const blogUseDb = !isDev && dbReady();
   function saveBlog(next: BlogPost[]) {
     setBlogPosts(next);
     try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {}
   }
+  async function reloadBlog() {
+    if (!blogUseDb) return;
+    const rows = await getBlogFeedShared(100);
+    setBlogPosts(rows as BlogPost[]);
+  }
+  useEffect(() => { if (blogUseDb) void reloadBlog(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   function createBlogPost(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): string {
+    if (blogUseDb) {
+      void (async () => {
+        const realId = await createBlogPostShared(data);
+        await reloadBlog();
+        if (realId) go('blog-detail', realId);
+        else showToast('投稿に失敗しました。通信環境を確認してね');
+      })();
+      return '';
+    }
     const id = `blog-${Date.now()}`;
     const post: BlogPost = {
       id, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
@@ -8454,6 +8473,13 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     return id;
   }
   function toggleBlogLike(postId: string) {
+    if (blogUseDb) {
+      const author = blogPosts.find((p) => p.id === postId)?.authorId;
+      // 楽観更新
+      setBlogPosts((prev) => prev.map((p) => p.id === postId ? { ...p, likedByMe: !p.likedByMe, likes: Math.max(0, p.likes + (p.likedByMe ? -1 : 1)) } : p));
+      void (async () => { await toggleBlogLikeShared(postId, author); await reloadBlog(); })();
+      return;
+    }
     saveBlog(blogPosts.map((p) => {
       if (p.id !== postId) return p;
       const liked = !p.likedByMe;
@@ -8461,10 +8487,19 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     }));
   }
   function addBlogComment(postId: string, body: string) {
+    if (blogUseDb) {
+      const author = blogPosts.find((p) => p.id === postId)?.authorId;
+      void (async () => { await addBlogCommentShared(postId, body, author); await reloadBlog(); })();
+      return;
+    }
     const c: DiaryComment = { id: `bc-${Date.now()}`, authorId: me.id, authorName: me.name, authorAvatar: me.avatar, body: body.trim(), postedAt: new Date().toISOString() };
     saveBlog(blogPosts.map((p) => p.id === postId ? { ...p, comments: [...p.comments, c] } : p));
   }
   function deleteBlogPost(postId: string) {
+    if (blogUseDb) {
+      void (async () => { await deleteBlogPostShared(postId); await reloadBlog(); })();
+      return;
+    }
     saveBlog(blogPosts.filter((p) => p.id !== postId));
   }
 
