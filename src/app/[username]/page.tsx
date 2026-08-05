@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, PixelEmoji, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -4093,9 +4093,9 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
             <button
               key={emoji + i}
               onClick={() => onPick(emoji)}
-              className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
+              className="grid h-10 w-full place-items-center rounded-lg transition hover:bg-pink/10 active:scale-90"
             >
-              <RetroText text={emoji} />
+              {isRetroCode(emoji) ? <RetroText text={emoji} /> : <PixelEmoji emoji={emoji} size={26} />}
             </button>
           ))}
         </div>
@@ -4202,7 +4202,7 @@ function DetailScreen({
                 onClick={() => onReact(answer.id, emoji)}
                 className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-black shadow-card transition active:scale-95 ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-white text-ink'}`}
               >
-                <span className="text-base"><RetroText text={emoji} /></span>{info.count}
+                <span className="text-base">{isRetroCode(emoji) ? <RetroText text={emoji} /> : <PixelEmoji emoji={emoji} size={18} />}</span>{info.count}
               </button>
             ))}
 

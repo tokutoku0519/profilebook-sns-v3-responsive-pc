@@ -1,6 +1,50 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
+// ── 絵文字をガラケー風ピクセルに自動変換 ──────────────────────
+// どんな絵文字でも、低解像度キャンバスに描いてから粗く拡大＝ドット絵化する。
+// 生成した dataURL は emoji 文字＋解像度でキャッシュして使い回す。
+const pixelCache = new Map<string, string>();
+function emojiToPixelDataUrl(emoji: string, res: number): string {
+  const key = `${emoji}@${res}`;
+  const cached = pixelCache.get(key);
+  if (cached) return cached;
+  try {
+    const off = document.createElement('canvas');
+    off.width = res; off.height = res;
+    const octx = off.getContext('2d');
+    if (!octx) return '';
+    octx.clearRect(0, 0, res, res);
+    octx.textAlign = 'center';
+    octx.textBaseline = 'middle';
+    octx.font = `${Math.floor(res * 0.92)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    octx.fillText(emoji, res / 2, res / 2 + Math.floor(res * 0.06));
+    const url = off.toDataURL();
+    pixelCache.set(key, url);
+    return url;
+  } catch { return ''; }
+}
+
+/** 絵文字1つをガラケー風ドット絵で表示（res が小さいほど粗い） */
+export function PixelEmoji({ emoji, size = 22, res = 14, className }: { emoji: string; size?: number; res?: number; className?: string }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => { setUrl(emojiToPixelDataUrl(emoji, res)); }, [emoji, res]);
+  if (!url) {
+    // 生成前（SSR/初回）は通常の絵文字でフォールバック
+    return <span className={className} style={{ fontSize: size * 0.9, lineHeight: 1, display: 'inline-block', verticalAlign: 'middle' }}>{emoji}</span>;
+  }
+  return (
+    <img
+      src={url}
+      alt={emoji}
+      width={size}
+      height={size}
+      className={className}
+      style={{ width: size, height: size, imageRendering: 'pixelated', display: 'inline-block', verticalAlign: 'middle' }}
+    />
+  );
+}
 
 // 1 cell = 3 CSS px  (3px/cell × 7cells = 21px per sprite, ガラケーらしい小サイズ)
 const C = 3;
