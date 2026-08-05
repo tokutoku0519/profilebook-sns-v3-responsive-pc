@@ -909,3 +909,94 @@ export async function deleteBlogPostShared(postId: string): Promise<boolean> {
   const { error } = await supabase.from('blog_posts').delete().eq('id', postId).eq('user_id', uid);
   return !error;
 }
+
+// ── 交換日記（共有）─────────────────────────────────────────
+/** 見られる交換日記ページ一覧（エントリ・招待つき）。id は '@username' 形式。 */
+export async function getDiaryPagesShared(): Promise<any[]> {
+  if (!supabase) return [];
+  const { data: pages } = await supabase.from('diary_pages').select('*').order('created_at', { ascending: false });
+  if (!pages || pages.length === 0) return [];
+  const ids = pages.map((p: any) => p.id);
+  const [{ data: entries }, { data: mentions }] = await Promise.all([
+    supabase.from('diary_entries').select('*').in('page_id', ids),
+    supabase.from('diary_page_mentions').select('*').in('page_id', ids),
+  ]);
+  const uids = [
+    ...pages.map((p: any) => p.created_by),
+    ...(entries ?? []).map((e: any) => e.user_id),
+    ...(mentions ?? []).map((m: any) => m.user_id),
+  ];
+  const profs = await profilesByIds(uids);
+  return pages.map((p: any) => {
+    const owner = profs.get(p.created_by);
+    const pageEntries = (entries ?? [])
+      .filter((e: any) => e.page_id === p.id)
+      .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((e: any) => {
+        const ep = profs.get(e.user_id);
+        return { id: e.id, authorId: atName(ep), authorName: ep?.display_name || 'ユーザー', authorAvatar: avatarOf(ep), body: e.body || '', photoUrl: e.photo_url || undefined, postedAt: e.created_at, likes: 0, likedByMe: false, comments: [] };
+      });
+    const mentionIds = (mentions ?? []).filter((m: any) => m.page_id === p.id).map((m: any) => atName(profs.get(m.user_id)));
+    return {
+      id: p.id,
+      theme: p.theme,
+      description: p.description || '',
+      createdBy: atName(owner),
+      createdByName: owner?.display_name || 'ユーザー',
+      createdByAvatar: avatarOf(owner),
+      createdAt: p.created_at,
+      entries: pageEntries,
+      visibility: (['public', 'followers', 'mentioned'].includes(p.visibility) ? p.visibility : 'followers') as 'public' | 'followers' | 'mentioned',
+      mentionedUserIds: mentionIds,
+    };
+  });
+}
+
+export async function createDiaryPageShared(
+  theme: string, description: string,
+  visibility: 'public' | 'followers' | 'mentioned',
+  mentionAtNames: string[],
+  firstEntry?: { body: string; photoUrl?: string },
+): Promise<string | null> {
+  if (!supabase) return null;
+  const uid = await getCurrentUserId();
+  if (!uid) return null;
+  const { data: page, error } = await supabase.from('diary_pages').insert({ theme, description: description || null, created_by: uid, visibility }).select('id').single();
+  if (error || !page) return null;
+  const pageId = (page as any).id as string;
+  // 招待（'@username' → uuid）
+  if (visibility === 'mentioned' && mentionAtNames.length > 0) {
+    const unames = mentionAtNames.map((a) => a.replace(/^@/, ''));
+    const { data: profs } = await supabase.from('profiles').select('id,username').in('username', unames);
+    const rows = (profs ?? []).map((pr: any) => ({ page_id: pageId, user_id: pr.id }));
+    if (rows.length) await supabase.from('diary_page_mentions').insert(rows);
+    // 招待された人へ通知
+    try { for (const pr of (profs ?? [])) await createNotification((pr as any).id, 'diary_invite', { body: theme }); } catch {}
+  }
+  if (firstEntry && (firstEntry.body.trim() || firstEntry.photoUrl)) {
+    await supabase.from('diary_entries').insert({ page_id: pageId, user_id: uid, body: firstEntry.body.trim() || null, photo_url: firstEntry.photoUrl || null });
+  }
+  return pageId;
+}
+
+export async function addDiaryEntryShared(pageId: string, body: string, photoUrl?: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('diary_entries').insert({ page_id: pageId, user_id: uid, body: body.trim() || null, photo_url: photoUrl || null });
+  return !error;
+}
+
+export async function updateDiaryEntryShared(entryId: string, body: string, photoUrl?: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('diary_entries').update({ body: body.trim() || null, photo_url: photoUrl || null }).eq('id', entryId).eq('user_id', uid);
+  return !error;
+}
+
+export async function deleteDiaryEntryShared(entryId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from('diary_entries').delete().eq('id', entryId);
+  return !error;
+}

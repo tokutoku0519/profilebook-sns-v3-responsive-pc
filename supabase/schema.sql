@@ -460,3 +460,88 @@ drop policy if exists "blog_comments delete own" on public.blog_comments;
 create policy "blog_comments readable"   on public.blog_comments for select using (true);
 create policy "blog_comments insert own" on public.blog_comments for insert with check (auth.uid() = user_id);
 create policy "blog_comments delete own" on public.blog_comments for delete using (auth.uid() = user_id);
+
+-- ============================================================
+-- 交換日記（共有・複数人で1冊）＝Supabase化
+-- 公開範囲: public / followers / mentioned（特定の人）。
+-- 招待は diary_page_mentions。エントリはシンプル（本文＋写真）。
+-- すべて create table if not exists なので再実行しても消えない。
+-- ============================================================
+create table if not exists public.diary_pages (
+  id uuid primary key default gen_random_uuid(),
+  theme text not null,
+  description text,
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  visibility text not null default 'followers',   -- public / followers / mentioned
+  created_at timestamptz default now()
+);
+create index if not exists diary_pages_created_idx on public.diary_pages (created_at desc);
+
+create table if not exists public.diary_page_mentions (
+  page_id uuid not null references public.diary_pages(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  primary key (page_id, user_id)
+);
+
+create table if not exists public.diary_entries (
+  id uuid primary key default gen_random_uuid(),
+  page_id uuid not null references public.diary_pages(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  body text,
+  photo_url text,
+  created_at timestamptz default now()
+);
+create index if not exists diary_entries_page_idx on public.diary_entries (page_id, created_at);
+
+alter table public.diary_pages         enable row level security;
+alter table public.diary_page_mentions enable row level security;
+alter table public.diary_entries       enable row level security;
+
+-- 閲覧可否（このページを見られるか）を判定する関数（RLSの重複を避ける）
+create or replace function public.can_see_diary_page(pid uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.diary_pages p where p.id = pid and (
+      p.visibility = 'public'
+      or p.created_by = auth.uid()
+      or (p.visibility = 'followers' and exists (select 1 from public.follows f where f.following_id = p.created_by and f.follower_id = auth.uid()))
+      or (p.visibility = 'mentioned' and exists (select 1 from public.diary_page_mentions dm where dm.page_id = p.id and dm.user_id = auth.uid()))
+      or exists (select 1 from public.diary_entries e where e.page_id = p.id and e.user_id = auth.uid())
+    )
+  );
+$$;
+
+-- pages：閲覧は can_see_diary_page、作成/編集/削除は作成者。
+drop policy if exists "diary_pages readable"   on public.diary_pages;
+drop policy if exists "diary_pages insert own" on public.diary_pages;
+drop policy if exists "diary_pages update own" on public.diary_pages;
+drop policy if exists "diary_pages delete own" on public.diary_pages;
+create policy "diary_pages readable"   on public.diary_pages for select using (public.can_see_diary_page(id));
+create policy "diary_pages insert own" on public.diary_pages for insert with check (auth.uid() = created_by);
+create policy "diary_pages update own" on public.diary_pages for update using (auth.uid() = created_by);
+create policy "diary_pages delete own" on public.diary_pages for delete using (auth.uid() = created_by);
+
+-- mentions：閲覧は誰でも（誰が招待されたか）。追加/削除はページ作成者のみ。
+drop policy if exists "diary_mentions readable" on public.diary_page_mentions;
+drop policy if exists "diary_mentions insert"   on public.diary_page_mentions;
+drop policy if exists "diary_mentions delete"   on public.diary_page_mentions;
+create policy "diary_mentions readable" on public.diary_page_mentions for select using (true);
+create policy "diary_mentions insert"   on public.diary_page_mentions for insert with check (
+  exists (select 1 from public.diary_pages p where p.id = page_id and p.created_by = auth.uid())
+);
+create policy "diary_mentions delete"   on public.diary_page_mentions for delete using (
+  exists (select 1 from public.diary_pages p where p.id = page_id and p.created_by = auth.uid())
+);
+
+-- entries：ページを見られる人は閲覧可。書込は「見られる人」かつ本人。削除は本人orページ作成者。
+drop policy if exists "diary_entries readable" on public.diary_entries;
+drop policy if exists "diary_entries insert"   on public.diary_entries;
+drop policy if exists "diary_entries delete"   on public.diary_entries;
+create policy "diary_entries readable" on public.diary_entries for select using (public.can_see_diary_page(page_id));
+create policy "diary_entries insert"   on public.diary_entries for insert with check (
+  auth.uid() = user_id and public.can_see_diary_page(page_id)
+);
+create policy "diary_entries delete"   on public.diary_entries for delete using (
+  auth.uid() = user_id
+  or exists (select 1 from public.diary_pages p where p.id = page_id and p.created_by = auth.uid())
+);

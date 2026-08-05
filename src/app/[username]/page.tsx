@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -4836,6 +4836,7 @@ function DiaryDetailScreen({
   onReportEntry,
   onToggleLike,
   onAddComment,
+  sharedMode = false,
 }: {
   go: (s: Screen) => void;
   page: DiaryPage;
@@ -4845,6 +4846,7 @@ function DiaryDetailScreen({
   onReportEntry: (pageId: string, entryId: string) => void;
   onToggleLike: (pageId: string, entryId: string) => void;
   onAddComment: (pageId: string, entryId: string, body: string) => void;
+  sharedMode?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -4897,7 +4899,8 @@ function DiaryDetailScreen({
     setCommentDraft((prev) => ({ ...prev, [entryId]: '' }));
   }
 
-  const canWrite =
+  // 共有モードでは「見られている＝書き込み権あり」（RLSで read≒write のため）
+  const canWrite = sharedMode ||
     page.visibility === 'public' ||
     page.visibility === 'followers' ||
     page.createdBy === me.id ||
@@ -5007,7 +5010,8 @@ function DiaryDetailScreen({
               </div>
             </div>
 
-            {/* いいね・コメントバー（アメブロ風フッター） */}
+            {/* いいね・コメント（交換日記はシンプルなので共有モードでは非表示） */}
+            {!sharedMode && (<>
             <div className="flex items-center gap-2 border-t border-pink/10 px-4 py-2.5">
               <button
                 onClick={() => onToggleLike(page.id, entry.id)}
@@ -5054,6 +5058,7 @@ function DiaryDetailScreen({
                 </div>
               </div>
             )}
+            </>)}
           </article>
           );
         })}
@@ -5335,7 +5340,7 @@ function DiaryCreateScreen({
           disabled={!canCreate}
           onClick={() => {
             const id = onCreate(theme.trim(), description.trim(), firstEntryBody, firstPhotoUrl, visibility, mentionedUserIds, { title: firstTitle, mood: firstMood, weather: firstWeather, textColor: firstTitleColor });
-            go('diary-detail', id);
+            if (id) go('diary-detail', id);
           }}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]"
         >
@@ -6635,6 +6640,7 @@ function formatServerNotif(n: NotificationRow): { id: string; icon: string; text
     case 'circle_accept': return { ...base, icon: '🎉', text: `「${n.body ?? 'サークル'}」への参加が承認されました` };
     case 'blog_like':     return { ...base, icon: '💗', text: `${who}さんがあなたのブログ記事にいいねしました` };
     case 'blog_comment':  return { ...base, icon: '💬', text: `${who}さんがブログにコメントしました${n.body ? '：' + n.body : ''}` };
+    case 'diary_invite':  return { ...base, icon: '📔', text: `${who}さんが交換日記「${n.body ?? ''}」に招待しました` };
     default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };
   }
 }
@@ -8190,7 +8196,9 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   if (next === 'diary-detail' && payload) {
     setSelectedDiaryId(payload);
+    if (diaryUseDb) void reloadDiary();
   }
+  if (next === 'diary-list' && diaryUseDb) void reloadDiary();
 
   if (next === 'blog-detail' && payload) {
     setSelectedBlogId(payload);
@@ -8322,6 +8330,14 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   const selectedDiary = diaryPages.find((p) => p.id === selectedDiaryId) ?? diaryPages[0];
 
+  const diaryUseDb = !isDev && dbReady();
+  async function reloadDiary() {
+    if (!diaryUseDb) return;
+    const rows = await getDiaryPagesShared();
+    setDiaryPages(rows as DiaryPage[]);
+  }
+  useEffect(() => { if (diaryUseDb) void reloadDiary(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
   function createDiaryPage(
     theme: string,
     description: string,
@@ -8331,6 +8347,15 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     mentionedUserIds: string[],
     firstMeta?: { title?: string; mood?: string; weather?: string; textColor?: string }
   ): string {
+    if (diaryUseDb) {
+      void (async () => {
+        const realId = await createDiaryPageShared(theme, description, visibility, mentionedUserIds, (firstEntryBody.trim() || firstPhotoUrl) ? { body: firstEntryBody, photoUrl: firstPhotoUrl || undefined } : undefined);
+        await reloadDiary();
+        if (realId) go('diary-detail', realId);
+        else showToast('日記の作成に失敗しました。通信環境を確認してね');
+      })();
+      return '';
+    }
     const id = `diary-${Date.now()}`;
     const firstEntry: DiaryEntry | null = firstEntryBody.trim() || firstPhotoUrl
       ? {
@@ -8362,6 +8387,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   type DiaryEntryInput = { body: string; photoUrl?: string; title?: string; mood?: string; weather?: string; textColor?: string };
 
   function addDiaryEntry(pageId: string, data: DiaryEntryInput) {
+    if (diaryUseDb) {
+      void (async () => { await addDiaryEntryShared(pageId, data.body, data.photoUrl); await reloadDiary(); })();
+      return;
+    }
     const entry: DiaryEntry = {
       id: `entry-${Date.now()}`,
       authorId: me.id,
@@ -8384,6 +8413,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   function editDiaryEntry(pageId: string, entryId: string, data: DiaryEntryInput) {
+    if (diaryUseDb) {
+      void (async () => { await updateDiaryEntryShared(entryId, data.body, data.photoUrl); await reloadDiary(); })();
+      return;
+    }
     setDiaryPages((prev) =>
       prev.map((p) => p.id === pageId
         ? { ...p, entries: p.entries.map((e) => e.id === entryId
@@ -8425,6 +8458,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   function deleteDiaryEntry(pageId: string, entryId: string) {
+    if (diaryUseDb) {
+      void (async () => { await deleteDiaryEntryShared(entryId); await reloadDiary(); })();
+      return;
+    }
     setDiaryPages((prev) =>
       prev.map((p) => p.id === pageId ? { ...p, entries: p.entries.filter((e) => e.id !== entryId) } : p)
     );
@@ -8604,6 +8641,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           onReportEntry={reportDiaryEntry}
           onToggleLike={toggleDiaryLike}
           onAddComment={addDiaryComment}
+          sharedMode={diaryUseDb}
         />
       );
     if (screen === 'blog-list') return <BlogListScreen go={go} posts={blogPosts} />;
