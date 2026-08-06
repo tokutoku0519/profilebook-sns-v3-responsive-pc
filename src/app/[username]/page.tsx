@@ -1975,6 +1975,7 @@ function ProfileBookContent({
   customFields = {},
   onGoDetail,
   lang = 'ja',
+  bare = false,
 }: {
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
@@ -1991,6 +1992,8 @@ function ProfileBookContent({
   customFields?: Record<string, string>;
   onGoDetail?: (id: string) => void;
   lang?: Lang;
+  /** 画面側が背景を用意する場合は true（自前で背景を描かない＝トンマナ統一用） */
+  bare?: boolean;
 }) {
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
@@ -2053,10 +2056,10 @@ function ProfileBookContent({
     <HideEmptyProfileContext.Provider value={!isSelf}>
     <ProfThemeContext.Provider value={themeColor}>
     <div className="relative min-h-full">
-      {/* ── 背景：テーマありなら世界観、なければ中立の紙地 ── */}
-      {bgTheme
+      {/* ── 背景：テーマありなら世界観、なければ中立の紙地。bare のときは画面側が用意する ── */}
+      {!bare && (bgTheme
         ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={bgTheme} subtle /></div>
-        : <div className="pointer-events-none absolute inset-0 prof-paper" />}
+        : <div className="pointer-events-none absolute inset-0 prof-paper" />)}
 
       <div className="relative z-10 space-y-4 px-4 pt-4 pb-32">
       {/* ── デコシール（ふわふわ揺れる・タップ透過／テーマ非依存の中立キュート） ── */}
@@ -2465,6 +2468,10 @@ function OtherProfileScreen({
   return (
     <>
       <AppHeader title={`${profile.name}のプロフ帳`} back onBack={() => go('home')} onBell={() => go('notifications')} />
+      {/* 画面全体を1つの背景に統一（上のなかよし度〜下のプロフ帳まで同じトンマナ） */}
+      <div className="relative min-h-full">
+      <div className="pointer-events-none absolute inset-0 prof-paper" />
+      <div className="relative z-10">
       <div className="flex gap-2 px-4 pt-2">
         <button
           onClick={toggleFollow}
@@ -2486,7 +2493,7 @@ function OtherProfileScreen({
 
       {/* なかよし度 */}
       <div className="px-4 pt-3">
-        <section className="rounded-[24px] bg-white p-4 shadow-card">
+        <section className="prof-pill p-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-black text-ink">🍀 なかよし度</p>
             <p className="text-xs font-black text-pink">{FRIEND_LEVEL_LABELS[friendLevel]}</p>
@@ -2542,6 +2549,7 @@ function OtherProfileScreen({
       })()}
 
       <ProfileBookContent
+        bare
         info={info}
         best3={best3}
         monthlyBest3={otherMonthly}
@@ -2644,6 +2652,8 @@ function OtherProfileScreen({
           </div>
         </div>
       )}
+      </div>
+      </div>
     </>
   );
 }
@@ -2675,6 +2685,12 @@ function ProfileScreen({
   return (
     <>
       <AppHeader title={t('header_profile', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
+      {/* 画面全体を1つの背景に統一（上のボタン〜下のプロフ帳まで同じトンマナ） */}
+      <div className="relative min-h-full">
+      {equippedBg
+        ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={equippedBg} subtle /></div>
+        : <div className="pointer-events-none absolute inset-0 prof-paper" />}
+      <div className="relative z-10">
       <div className="flex gap-2 px-4 pt-2">
         <button
           onClick={() => go('settings')}
@@ -2710,6 +2726,7 @@ function ProfileScreen({
       })()}
 
       <ProfileBookContent
+        bare
         info={profileBookInfo}
         best3={best3}
         monthlyBest3={monthlyBest3}
@@ -2725,6 +2742,8 @@ function ProfileScreen({
         customFields={customFields}
         lang={lang}
       />
+      </div>
+      </div>
 
       {showShare && (
         <ProfileShareModal
