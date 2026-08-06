@@ -6,24 +6,46 @@ import React, { useEffect, useRef, useState } from 'react';
 // どんな絵文字でも、低解像度キャンバスに描いてから粗く拡大＝ドット絵化する。
 // 生成した dataURL は emoji 文字＋解像度でキャッシュして使い回す。
 const pixelCache = new Map<string, string>();
+// ① 大きいキャンバスに絵文字を「全体・中央」で描く → ② res×res に縮小（平均化）
+// → 表示側で imageRendering:pixelated により粗く拡大。これで切れ・変な拡大を防ぐ。
 function emojiToPixelDataUrl(emoji: string, res: number): string {
   const key = `${emoji}@${res}`;
   const cached = pixelCache.get(key);
   if (cached) return cached;
   try {
-    const off = document.createElement('canvas');
-    off.width = res; off.height = res;
-    const octx = off.getContext('2d');
-    if (!octx) return '';
-    octx.clearRect(0, 0, res, res);
-    octx.textAlign = 'center';
-    octx.textBaseline = 'middle';
-    octx.font = `${Math.floor(res * 0.92)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    octx.fillText(emoji, res / 2, res / 2 + Math.floor(res * 0.06));
-    const url = off.toDataURL();
+    const BIG = 72;
+    const big = document.createElement('canvas');
+    big.width = BIG; big.height = BIG;
+    const bctx = big.getContext('2d');
+    if (!bctx) return '';
+    bctx.clearRect(0, 0, BIG, BIG);
+    bctx.textAlign = 'center';
+    bctx.textBaseline = 'middle';
+    // 絵文字の実インク位置は字形で上下するので、少し小さめ＋中央基準で全体を収める
+    bctx.font = `${Math.floor(BIG * 0.78)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color",sans-serif`;
+    bctx.fillText(emoji, BIG / 2, BIG / 2 + Math.floor(BIG * 0.04));
+    // 縮小（アンチエイリアスON＝平均化してクリアなドットに）
+    const small = document.createElement('canvas');
+    small.width = res; small.height = res;
+    const sctx = small.getContext('2d');
+    if (!sctx) return '';
+    sctx.imageSmoothingEnabled = true;
+    (sctx as any).imageSmoothingQuality = 'high';
+    sctx.clearRect(0, 0, res, res);
+    sctx.drawImage(big, 0, 0, BIG, BIG, 0, 0, res, res);
+    const url = small.toDataURL();
     pixelCache.set(key, url);
     return url;
   } catch { return ''; }
+}
+
+// 絵文字ごとの動き（ハート＝鼓動／星＝キラキラ／炎・音符＝バウンド 等）
+function animForEmoji(emoji: string): string {
+  if (/[❤♥]|❤|🧡|💛|💚|💙|💜|🤍|🤎|🖤|🩷|💗|💕|💖|💘|💝|😍|🥰|😘|😻/.test(emoji)) return 'retro-heartbeat';
+  if (/⭐|🌟|✨|💫|🎆|🎇|🌠|🔆|😆|😂|🤣/.test(emoji)) return 'retro-sparkle';
+  if (/🌸|🌺|🌷|🌹|🌻|💐|🍀|☘|🌈|🎡|🎠|🌀/.test(emoji)) return 'retro-spin';
+  if (/😢|😭|😥|😪|💧|🥺|😰|😱|😨/.test(emoji)) return 'retro-wiggle';
+  return 'retro-bounce';
 }
 
 /** 絵文字1つをガラケー風ドット絵で表示（res が小さいほど粗い） */
@@ -612,8 +634,8 @@ export function GarakeEmoji({ emoji, size = 22, animated = true }: { emoji: stri
   const px = FACE_MAP[emoji];
   const inner = px
     ? <PixelSprite px={px as any} w={7} h={7} scale={size / 21} />
-    : <PixelEmoji emoji={emoji} size={size} res={10} />;
-  return <span className={animated ? 'retro-bounce' : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>{inner}</span>;
+    : <PixelEmoji emoji={emoji} size={size} res={14} />;
+  return <span className={animated ? animForEmoji(emoji) : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>{inner}</span>;
 }
 
 /** リアクション値を正しく描く共通部品。
