@@ -867,6 +867,16 @@ const ChromeThemeContext = createContext<BgTheme | null>(null);
 
 // 他人のプロフ帳では未入力の項目を隠す（自分のときは空欄も見せて入力を促す）
 const HideEmptyProfileContext = createContext<boolean>(false);
+// プロフ帳のテーマ色（ProfileLine のラベル・区切り線の色に使う）
+const ProfThemeContext = createContext<string>('pink');
+// テーマ色 → 区切り線の bg クラス
+const THEME_BAR: Record<string, string> = {
+  pink:   'bg-pink',
+  purple: 'bg-purple',
+  blue:   'bg-blue-400',
+  green:  'bg-green-500',
+  orange: 'bg-orange-400',
+};
 
 function tabFromScreen(screen: Screen): TabKey {
   if (screen === 'search') return 'search';
@@ -1883,11 +1893,13 @@ const THEME_BG: Record<string, string> = {
 };
 
 function ProfSectionHeader({ icon, title, theme }: { icon: string; title: string; theme: string }) {
+  // プールに映える「バブル見出し」。青系テーマだけ青バブル、それ以外はピンク系バブル。
+  const bubble = theme === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
   return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="text-base">{icon}</span>
-      <span className={`text-sm font-black ${THEME_ACCENT[theme] ?? 'text-pink'}`}>{title}</span>
-      <div className="flex-1 border-b border-dashed border-purple/20" />
+    <div className="mb-3 mt-1 flex items-center justify-center gap-2">
+      <span className="text-lg drop-shadow-sm">{icon}</span>
+      <span className={`${bubble} text-2xl leading-none`}>{title}</span>
+      <span className="text-lg drop-shadow-sm">{icon}</span>
     </div>
   );
 }
@@ -1980,7 +1992,6 @@ function ProfileBookContent({
   onGoDetail?: (id: string) => void;
   lang?: Lang;
 }) {
-  const grad = THEME_GRADIENT[themeColor] ?? THEME_GRADIENT.pink;
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
 
@@ -2033,27 +2044,41 @@ function ProfileBookContent({
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
   const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream');
 
+  // プール地の色：青テーマは水色プール、それ以外はピンクプール
+  const poolClass = themeColor === 'blue' ? 'prof-pool' : 'prof-pool-pink';
+  const bubbleClass = themeColor === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
+
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
-    <div className="space-y-4 px-4 pt-3 pb-32">
+    <ProfThemeContext.Provider value={themeColor}>
+    <div className={`relative min-h-full space-y-4 px-4 pt-4 pb-32 ${poolClass}`}>
+      {/* ── デコシール（ふわふわ揺れる・タップ透過） ── */}
+      <span className="prof-deco text-4xl" style={{ top: 6, left: 8, ['--r' as any]: '-14deg', animationDelay: '0s' } as any}>🌺</span>
+      <span className="prof-deco text-3xl" style={{ top: 12, right: 10, ['--r' as any]: '10deg', animationDelay: '.8s' } as any}>🐬</span>
+      <span className="prof-deco text-2xl" style={{ top: '34%', left: 2, ['--r' as any]: '-8deg', animationDelay: '1.4s' } as any}>💗</span>
+      <span className="prof-deco text-2xl" style={{ top: '58%', right: 4, ['--r' as any]: '12deg', animationDelay: '.4s' } as any}>⭐</span>
+      <span className="prof-deco text-xl" style={{ top: '78%', left: 6, ['--r' as any]: '6deg', animationDelay: '1.1s' } as any}>💎</span>
+      <span className="prof-deco text-2xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>🌴</span>
 
-      {/* ── 表紙カード ── */}
-      <section className={`relative overflow-hidden rounded-[32px] border border-purple/10 ${bgTheme ? '' : `bg-gradient-to-br ${grad}`} p-5 shadow-card`}>
-        {bgTheme && <SceneBackground theme={bgTheme} />}
-        <div className="absolute right-4 top-4 rotate-6 rounded-xl bg-white/80 px-3 py-1 text-[10px] font-black text-pink shadow-sm tracking-widest">
+      {/* ── 表紙カード（My Profile） ── */}
+      <section className="prof-pill relative overflow-hidden p-5">
+        <div className="mb-3 flex items-center justify-center gap-2">
+          <span className={`${bubbleClass} text-3xl leading-none`}>My Profile</span>
+        </div>
+        <div className="absolute right-4 top-4 rotate-6 rounded-xl bg-pink/10 px-2.5 py-1 text-[10px] font-black text-pink tracking-widest">
           ✿ PROFILE ✿
         </div>
         <div className="relative flex items-center gap-4">
-          <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-5xl shadow-inner ring-2 ring-white">
+          <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white text-5xl shadow-md ring-4 ring-pink/30 rotate-[-3deg]">
             {avatarUrl
               ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
               : avatarEmoji}
           </div>
           <div className="min-w-0">
-            <p className="text-xl font-black text-ink leading-tight">{info.name || info.nickname || userId}</p>
+            <p className="text-2xl font-black text-ink leading-tight prof-hand">{info.name || info.nickname || userId}</p>
             <p className="text-xs font-bold text-muted">{info.name && info.nickname ? `${info.nickname} / ${userId}` : userId}</p>
             {info.catchphrase && (
-              <p className={`mt-2 inline-block rounded-full bg-white/80 px-3 py-1 text-xs font-bold ${accent}`}>
+              <p className={`mt-2 inline-block rounded-full bg-pink/10 px-3 py-1 text-xs font-black ${accent}`}>
                 {info.catchphrase}
               </p>
             )}
@@ -2061,21 +2086,22 @@ function ProfileBookContent({
         </div>
         {/* ひとこと帯（未入力なら非表示） */}
         {(translatedInfo.message ?? info.message) && (
-          <div className="relative mt-4 rounded-2xl bg-white/70 px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
+          <div className="relative mt-4 rounded-2xl bg-base px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
             ✉ {translatedInfo.message ?? info.message}
           </div>
         )}
         {bgTheme && (
           <div className="relative mt-2 flex justify-end">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.floaters[0] && <ThemeArt art={bgTheme.floaters[0].art} size={12} />}{bgTheme.name}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-base px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.floaters[0] && <ThemeArt art={bgTheme.floaters[0].art} size={12} />}{bgTheme.name}</span>
           </div>
         )}
       </section>
 
       {/* ── きほんじょうほう ── */}
       {showBasic && (
-      <section className="rounded-[28px] bg-white p-5 shadow-card">
+      <section className="pt-1">
         <ProfSectionHeader icon="☆" title={t('sec_basic', lang)} theme={themeColor} />
+        <div className="space-y-2">
         <ProfileLine label={t('field_name', lang)} value={info.name} />
         <ProfileLine label={t('field_nickname', lang)} value={info.nickname} />
         <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />
@@ -2083,13 +2109,15 @@ function ProfileBookContent({
         {info.gender && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
         <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
         <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />
+        </div>
       </section>
       )}
 
       {/* ── すきなもの ── */}
       {showLikes && (
-      <section className="rounded-[28px] bg-white p-5 shadow-card">
+      <section className="pt-1">
         <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
+        <div className="space-y-2">
         <ProfileLine label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
         <ProfileLine label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
         <ProfileLine label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
@@ -2105,43 +2133,50 @@ function ProfileBookContent({
         <ProfileLine label={t('field_favoriteArtist', lang)} value={translatedInfo.favoriteArtist ?? info.favoriteArtist} />
         <ProfileLine label={t('field_favoriteManga', lang)} value={translatedInfo.favoriteManga ?? info.favoriteManga} />
         <ProfileLine label={t('field_favoriteGame', lang)} value={translatedInfo.favoriteGame ?? info.favoriteGame} />
+        </div>
       </section>
       )}
 
       {/* ── わたしのこと ── */}
       {showAbout && (
-      <section className="rounded-[28px] bg-white p-5 shadow-card">
+      <section className="pt-1">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
+        <div className="space-y-2">
         <ProfileLine label={t('field_hobby', lang)} value={translatedInfo.hobby ?? info.hobby} />
         <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />
         <ProfileLine label={t('field_personality', lang)} value={translatedInfo.personality ?? info.personality} />
         <ProfileLine label={t('field_catchphrase', lang)} value={translatedInfo.catchphrase ?? info.catchphrase} />
         <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
         <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
+        </div>
       </section>
       )}
 
       {/* ── ライフステージ専用セクション ── */}
       {lifeStageDef && lifeStageDef.fields.some((f) => customFields[f.key]) && (
-        <section className="rounded-[28px] bg-white p-5 shadow-card">
+        <section className="pt-1">
           <ProfSectionHeader icon={lifeStageDef.emoji} title={lifeStageDef.sectionTitle} theme={themeColor} />
+          <div className="space-y-2">
           {lifeStageDef.fields.map((f) =>
             customFields[f.key] ? (
               <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
             ) : null
           )}
+          </div>
         </section>
       )}
 
       {/* ── 特技・活動セクション ── */}
       {activityDef && activityDef.fields.some((f) => customFields[f.key]) && (
-        <section className="rounded-[28px] bg-white p-5 shadow-card">
+        <section className="pt-1">
           <ProfSectionHeader icon={activityDef.emoji} title={activityDef.sectionTitle} theme={themeColor} />
+          <div className="space-y-2">
           {activityDef.fields.map((f) =>
             customFields[f.key] ? (
               <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
             ) : null
           )}
+          </div>
         </section>
       )}
 
@@ -2250,6 +2285,7 @@ function ProfileBookContent({
       )}
 
     </div>
+    </ProfThemeContext.Provider>
     </HideEmptyProfileContext.Provider>
   );
 }
@@ -4488,15 +4524,20 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
 
 function ProfileLine({ label, value }: { label: string; value: string }) {
   const hideEmpty = useContext(HideEmptyProfileContext);
+  const theme = useContext(ProfThemeContext);
   // 他人のプロフ帳では未入力（空欄）の項目は表示しない
   if (hideEmpty && !(value ?? '').trim()) return null;
+  const accent = THEME_ACCENT[theme] ?? THEME_ACCENT.pink;
+  const bar = THEME_BAR[theme] ?? THEME_BAR.pink;
+  // ラヴ上等風：白いピル1枚 = 1項目。左に小さなラベル → 縦の区切り線 → 手書き風の回答。
   return (
-    <div className="flex items-center gap-3 border-b border-dashed border-purple/25 py-2">
-      <div className="w-28 shrink-0 text-sm font-black text-ink">
-        ♡ {label}
+    <div className="prof-pill flex items-center px-4 py-2.5">
+      <div className={`w-[5.5rem] shrink-0 text-[11px] font-black leading-tight ${accent}`}>
+        {label}
       </div>
-      <div className="min-w-0 flex-1 text-sm font-bold text-pink">
-        {value}
+      <div className={`mx-3 h-7 w-[3px] shrink-0 rounded-full ${bar} opacity-70`} />
+      <div className="min-w-0 flex-1 break-words text-[15px] text-ink prof-hand">
+        {value || <span className="text-muted/60 font-medium">…</span>}
       </div>
     </div>
   );

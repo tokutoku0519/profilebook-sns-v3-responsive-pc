@@ -295,3 +295,77 @@ button, input, textarea { font: inherit; }
   animation: gacha-spark 1.1s ease-out infinite;
   pointer-events: none;
 }
+
+/* ───────────────────────────────────────────────
+   プロフ帳（平成ギャル「ラヴ上等」風）スタイル
+   ─────────────────────────────────────────────── */
+/* プールタイル地：水色 + 白いタイル目地 + コースティック（水面の光） */
+.prof-pool {
+  background-color: #57c3ef;
+  background-image:
+    radial-gradient(ellipse at 28% 22%, rgba(255,255,255,.55), transparent 42%),
+    radial-gradient(ellipse at 78% 68%, rgba(255,255,255,.30), transparent 38%),
+    radial-gradient(ellipse at 55% 90%, rgba(255,255,255,.22), transparent 40%),
+    repeating-linear-gradient(0deg,  rgba(255,255,255,.20) 0 2px, transparent 2px 46px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.20) 0 2px, transparent 2px 46px),
+    linear-gradient(165deg, #74d4f4 0%, #45b4ea 55%, #2f9fdf 100%);
+}
+/* ピンクテーマなど、他色でも成立するように accent はJS側で切替 */
+.prof-pool-pink {
+  background-color: #ff9ec4;
+  background-image:
+    radial-gradient(ellipse at 28% 22%, rgba(255,255,255,.60), transparent 42%),
+    radial-gradient(ellipse at 78% 68%, rgba(255,255,255,.32), transparent 38%),
+    repeating-linear-gradient(0deg,  rgba(255,255,255,.22) 0 2px, transparent 2px 46px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.22) 0 2px, transparent 2px 46px),
+    linear-gradient(165deg, #ffb3d3 0%, #ff8fbc 55%, #ff6fa8 100%);
+}
+
+/* バブル見出し：白→黄→ピンクのグラデ文字＋ピンク縁取り */
+.prof-bubble {
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: .01em;
+  background: linear-gradient(180deg, #ffffff 0%, #fff0a6 46%, #ff8fbe 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 2.5px #ff3d8b;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 rgba(255,61,139,.30), 0 4px 8px rgba(0,0,0,.18);
+}
+.prof-bubble-blue {
+  background: linear-gradient(180deg, #ffffff 0%, #bfeaff 46%, #4aa8ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 2.5px #1d7fd6;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 0 rgba(29,127,214,.30), 0 4px 8px rgba(0,0,0,.18);
+}
+
+/* 白ピル（1項目1枚のカード）: ぷっくりした影で紙シールっぽく */
+.prof-pill {
+  background: rgba(255,255,255,.96);
+  border-radius: 22px;
+  box-shadow: 0 3px 0 rgba(0,0,0,.07), 0 6px 14px rgba(0,0,0,.10);
+}
+
+/* 手書き風の回答（丸ゴシック太字で代用しつつ少し傾ける） */
+.prof-hand {
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+/* デコシール（ふわふわ揺れる） */
+@keyframes prof-deco-float {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50%      { transform: translateY(-6px) rotate(calc(var(--r, 0deg) + 4deg)); }
+}
+.prof-deco {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.22));
+  animation: prof-deco-float 4.5s ease-in-out infinite;
+}
