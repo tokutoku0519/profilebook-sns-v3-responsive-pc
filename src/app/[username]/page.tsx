@@ -1266,7 +1266,7 @@ function HomeScreen({
 
       {/* フィードのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 92px)' }} onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
@@ -1423,7 +1423,7 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
 
       {/* さがすのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 92px)' }} onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
