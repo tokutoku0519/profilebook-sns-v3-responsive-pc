@@ -27,7 +27,7 @@ function emojiToPixelDataUrl(emoji: string, res: number): string {
 }
 
 /** 絵文字1つをガラケー風ドット絵で表示（res が小さいほど粗い） */
-export function PixelEmoji({ emoji, size = 22, res = 14, className }: { emoji: string; size?: number; res?: number; className?: string }) {
+export function PixelEmoji({ emoji, size = 22, res = 11, className }: { emoji: string; size?: number; res?: number; className?: string }) {
   const [url, setUrl] = useState('');
   useEffect(() => { setUrl(emojiToPixelDataUrl(emoji, res)); }, [emoji, res]);
   if (!url) {
@@ -517,4 +517,109 @@ export function insertRetroCode(
     el.selectionStart = el.selectionEnd = start + code.length;
     el.focus();
   });
+}
+
+// ── ガラケー風・手描き顔スプライト（人の顔はこちらを優先） ──────────
+// パレット: Y=顔 K=目/口 P=ほお R=ハート W=白 B=青(涙) D=黒(サングラス)
+const F = { Y: '#FFC93A', K: '#5A3A1A', P: '#FF7BA0', R: '#FF5A7A', W: '#FFFFFF', B: '#4AA8FF', D: '#3A2A1A' };
+const FACE_HAPPY = parseMap(`.YYYYY.
+YYYYYYY
+YKYYYKY
+PYYYYYP
+YKKKKKY
+.YKKKY.
+.YYYYY.`, F);
+const FACE_GRIN = parseMap(`.YYYYY.
+YYYYYYY
+YKYYYKY
+YYYYYYY
+KKKKKKK
+KWWWWWK
+.KKKKK.`, F);
+const FACE_LAUGH = parseMap(`.YYYYY.
+YYYYYYY
+KYKYKYK
+YYYYYYY
+KKKKKKK
+YKWWWKY
+.YKKKY.`, F);
+const FACE_LOVE = parseMap(`.YYYYY.
+YRYYYRY
+RRRYRRR
+YRYYYRY
+YYYYYYY
+YKKKKKY
+.YYYYY.`, F);
+const FACE_WINK = parseMap(`.YYYYY.
+YYYYYYY
+YKYYKKY
+PYYYYYP
+YKKKKKY
+.YKKKY.
+.YYYYY.`, F);
+const FACE_COOL = parseMap(`.YYYYY.
+YYYYYYY
+DDDDDDD
+YDDYDDY
+YYYYYYY
+.YKKKY.
+.YYYYY.`, F);
+const FACE_SURPRISE = parseMap(`.YYYYY.
+YYYYYYY
+YKYYYKY
+YYYYYYY
+YYKKKYY
+YYKKKYY
+.YYYYY.`, F);
+const FACE_SAD = parseMap(`.YYYYY.
+YYYYYYY
+YKYYYKY
+YBYYYBY
+YYYYYYY
+.YKKKY.
+.YKKKY.`, F);
+const FACE_ANGRY = parseMap(`.YYYYY.
+YKYYYKY
+YYKYKYY
+YKYYYKY
+YYYYYYY
+.YKKKY.
+.YYYYY.`, F);
+const FACE_SLEEPY = parseMap(`.YYYYY.
+YYYYYYY
+YKKYKKY
+YYYYYYY
+YYYYYYY
+.YKKKY.
+.YYYYY.`, F);
+
+// 絵文字 → 手描きスプライト（人の顔まわりを網羅）
+const FACE_MAP: Record<string, number[][]> = {
+  '😊': FACE_HAPPY as any, '🙂': FACE_HAPPY as any, '😌': FACE_HAPPY as any, '☺️': FACE_HAPPY as any, '😇': FACE_HAPPY as any,
+  '😀': FACE_GRIN as any, '😃': FACE_GRIN as any, '😄': FACE_GRIN as any, '😁': FACE_GRIN as any, '😺': FACE_GRIN as any,
+  '😆': FACE_LAUGH as any, '😅': FACE_LAUGH as any, '😂': FACE_LAUGH as any, '🤣': FACE_LAUGH as any, '😹': FACE_LAUGH as any,
+  '😍': FACE_LOVE as any, '🥰': FACE_LOVE as any, '😘': FACE_LOVE as any, '😻': FACE_LOVE as any, '🤩': FACE_LOVE as any,
+  '😉': FACE_WINK as any, '😜': FACE_WINK as any, '😝': FACE_WINK as any, '😛': FACE_WINK as any,
+  '😎': FACE_COOL as any, '🤓': FACE_COOL as any, '🥸': FACE_COOL as any,
+  '😮': FACE_SURPRISE as any, '😯': FACE_SURPRISE as any, '😲': FACE_SURPRISE as any, '😳': FACE_SURPRISE as any, '😱': FACE_SURPRISE as any, '🙀': FACE_SURPRISE as any,
+  '😢': FACE_SAD as any, '😭': FACE_SAD as any, '😥': FACE_SAD as any, '😿': FACE_SAD as any, '🥺': FACE_SAD as any,
+  '😠': FACE_ANGRY as any, '😡': FACE_ANGRY as any, '🤬': FACE_ANGRY as any, '😤': FACE_ANGRY as any,
+  '😴': FACE_SLEEPY as any, '😪': FACE_SLEEPY as any, '😑': FACE_SLEEPY as any, '😐': FACE_SLEEPY as any,
+};
+
+/** ガラケー風の絵文字。人の顔は手描きスプライト、それ以外は自動ドット化。動き付き。 */
+export function GarakeEmoji({ emoji, size = 22, animated = true }: { emoji: string; size?: number; animated?: boolean }) {
+  const px = FACE_MAP[emoji];
+  const inner = px
+    ? <PixelSprite px={px as any} w={7} h={7} scale={size / 21} />
+    : <PixelEmoji emoji={emoji} size={size} res={10} />;
+  return <span className={animated ? 'retro-bounce' : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>{inner}</span>;
+}
+
+/** リアクション値を正しく描く共通部品。
+ *  'px:😊'=ドット絵 / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
+export function ReactionGlyph({ value, size = 20 }: { value: string; size?: number }) {
+  if (value.startsWith('px:')) return <GarakeEmoji emoji={value.slice(3)} size={size} />;
+  if (isRetroCode(value)) return <RetroText text={value} />;
+  return <span style={{ fontSize: size * 0.9, lineHeight: 1, display: 'inline-block', verticalAlign: 'middle' }}>{value}</span>;
 }

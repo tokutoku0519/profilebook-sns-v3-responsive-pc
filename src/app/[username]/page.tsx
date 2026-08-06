@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, PixelEmoji, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, PixelEmoji, GarakeEmoji, ReactionGlyph, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -1266,7 +1266,7 @@ function HomeScreen({
 
       {/* フィードのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
@@ -1423,7 +1423,7 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
 
       {/* さがすのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="absolute inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
@@ -4050,8 +4050,11 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
     : EMOJI_CATEGORIES;
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
+  const [pixelMode, setPixelMode] = useState(false); // ドット絵で貼るか
   const current = categories.find((c) => c.id === cat) ?? categories[0];
-  const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
+  // ドット絵モードのときは 'px:' を付けて渡す（マイスタンプの[code]はそのまま）
+  const emit = (e: string) => onPick(pixelMode && !isRetroCode(e) ? 'px:' + e : e);
+  const submitInput = () => { const e = firstGrapheme(input); if (e) { emit(e); setInput(''); } };
   // 入力があればキーワード検索（例:「ハート」「ねこ」「わらい」）。ヒットしなければ直接入力扱い。
   const q = input.trim();
   const searchHits = q ? searchEmojis(q) : [];
@@ -4068,6 +4071,11 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base font-bold text-ink placeholder:text-muted placeholder:font-normal outline-none"
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
+      </div>
+      {/* 通常 / ドット絵 切り替え */}
+      <div className="flex items-center gap-1 rounded-full bg-base p-1 text-[11px] font-black">
+        <button onClick={() => setPixelMode(false)} className={`flex-1 rounded-full py-1.5 transition ${!pixelMode ? 'bg-white text-ink shadow-sm' : 'text-muted'}`}>🔤 通常</button>
+        <button onClick={() => setPixelMode(true)} className={`flex-1 rounded-full py-1.5 transition ${pixelMode ? 'bg-purple text-white shadow-sm' : 'text-muted'}`}>▦ ドット絵</button>
       </div>
       {/* カテゴリタブ（検索中は隠す） */}
       {!searching && (
@@ -4092,10 +4100,10 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           {(searching ? searchHits : current.emojis).map((emoji, i) => (
             <button
               key={emoji + i}
-              onClick={() => onPick(emoji)}
-              className="grid h-10 w-full place-items-center rounded-lg transition hover:bg-pink/10 active:scale-90"
+              onClick={() => emit(emoji)}
+              className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
             >
-              {isRetroCode(emoji) ? <RetroText text={emoji} /> : <PixelEmoji emoji={emoji} size={26} />}
+              {isRetroCode(emoji) ? <RetroText text={emoji} /> : pixelMode ? <GarakeEmoji emoji={emoji} size={26} /> : <span>{emoji}</span>}
             </button>
           ))}
         </div>
@@ -4202,7 +4210,7 @@ function DetailScreen({
                 onClick={() => onReact(answer.id, emoji)}
                 className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-black shadow-card transition active:scale-95 ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-white text-ink'}`}
               >
-                <span className="text-base">{isRetroCode(emoji) ? <RetroText text={emoji} /> : <PixelEmoji emoji={emoji} size={18} />}</span>{info.count}
+                <span className="text-base"><ReactionGlyph value={emoji} size={18} /></span>{info.count}
               </button>
             ))}
 
