@@ -646,19 +646,62 @@ const FACE_MAP: Record<string, number[][]> = {
   '😴': FACE_SLEEPY as any, '😪': FACE_SLEEPY as any, '😑': FACE_SLEEPY as any, '😐': FACE_SLEEPY as any,
 };
 
-/** ガラケー風の絵文字。人の顔は手描きスプライト、それ以外は自動ドット化。動き付き。 */
-export function GarakeEmoji({ emoji, size = 22, animated = true }: { emoji: string; size?: number; animated?: boolean }) {
-  const px = FACE_MAP[emoji];
-  const inner = px
-    ? <PixelSprite px={px as any} w={7} h={7} scale={size / 21} />
-    : <PixelEmoji emoji={emoji} size={size} res={14} />;
-  return <span className={animated ? animForEmoji(emoji) : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>{inner}</span>;
+// ── 厳選ガラケー風スタンプ（1つずつ手描き）──────────────────
+// 自動ドット化はやめ、ここに載っているスプライトだけをドット絵として使う。
+// 追加はこの配列に { key, px, w, h, anim, label } を足すだけ。
+type GarakeItem = { key: string; px: Px[]; w: number; h: number; anim: string; label: string };
+export const GARAKE_LIST: GarakeItem[] = [
+  // 顔
+  { key: 'happy',    px: FACE_HAPPY,    w: 7, h: 7, anim: 'retro-bounce',    label: 'にこ' },
+  { key: 'grin',     px: FACE_GRIN,     w: 7, h: 7, anim: 'retro-bounce',    label: 'わらい' },
+  { key: 'laugh',    px: FACE_LAUGH,    w: 7, h: 7, anim: 'retro-sparkle',   label: 'ばくわら' },
+  { key: 'love',     px: FACE_LOVE,     w: 7, h: 7, anim: 'retro-heartbeat', label: 'ラブ' },
+  { key: 'wink',     px: FACE_WINK,     w: 7, h: 7, anim: 'retro-bounce',    label: 'ウインク' },
+  { key: 'cool',     px: FACE_COOL,     w: 7, h: 7, anim: 'retro-bounce',    label: 'クール' },
+  { key: 'surprise', px: FACE_SURPRISE, w: 7, h: 7, anim: 'retro-wiggle',    label: 'びっくり' },
+  { key: 'sad',      px: FACE_SAD,      w: 7, h: 7, anim: 'retro-wiggle',    label: 'なき' },
+  { key: 'angry',    px: FACE_ANGRY,    w: 7, h: 7, anim: 'retro-wiggle',    label: 'おこ' },
+  { key: 'sleepy',   px: FACE_SLEEPY,   w: 7, h: 7, anim: 'retro-bounce',    label: 'ねむい' },
+  { key: 'cat',      px: CAT_PX,        w: 7, h: 7, anim: 'retro-bounce',    label: 'ねこ' },
+  // デコ
+  { key: 'heart',    px: HEART_PX,      w: 8, h: 7, anim: 'retro-heartbeat', label: 'ハート' },
+  { key: 'star',     px: SPARKLE_PX,    w: 7, h: 7, anim: 'retro-sparkle',   label: 'スター' },
+  { key: 'ministar', px: MINI_STAR_PX,  w: 5, h: 5, anim: 'retro-sparkle',   label: 'ミニ星' },
+  { key: 'flower',   px: FLOWER_PX,     w: 7, h: 7, anim: 'retro-spin',      label: 'お花' },
+  { key: 'note',     px: NOTE_PX,       w: 5, h: 7, anim: 'retro-bounce',    label: '音符' },
+  { key: 'ribbon',   px: RIBBON_PX,     w: 9, h: 7, anim: 'retro-heartbeat', label: 'リボン' },
+  { key: 'rainbow',  px: RAINBOW_PX,    w: 9, h: 5, anim: 'retro-bounce',    label: 'にじ' },
+  { key: 'moon',     px: MOON_PX,       w: 7, h: 7, anim: 'retro-bounce',    label: 'つき' },
+  { key: 'clover',   px: CLOVER_PX,     w: 7, h: 7, anim: 'retro-spin',      label: 'クローバー' },
+  { key: 'gem',      px: GEM_PX,        w: 7, h: 7, anim: 'retro-sparkle',   label: 'ダイヤ' },
+  { key: 'crown',    px: CROWN_PX,      w: 7, h: 6, anim: 'retro-bounce',    label: 'おうかん' },
+  { key: 'fire',     px: FIRE_PX,       w: 7, h: 7, anim: 'retro-heartbeat', label: 'ほのお' },
+  { key: 'bolt',     px: BOLT_PX,       w: 7, h: 7, anim: 'retro-bounce',    label: 'いなずま' },
+  { key: 'coffee',   px: COFFEE_PX,     w: 7, h: 7, anim: 'retro-bounce',    label: 'コーヒー' },
+  { key: 'icecream', px: ICECREAM_PX,   w: 7, h: 7, anim: 'retro-bounce',    label: 'アイス' },
+  { key: 'game',     px: GAME_PX,       w: 7, h: 5, anim: 'retro-bounce',    label: 'ゲーム' },
+  { key: 'mail',     px: MAIL_PX,       w: 9, h: 7, anim: 'retro-wiggle',    label: 'メール' },
+];
+const GARAKE_BY_KEY: Record<string, GarakeItem> = Object.fromEntries(GARAKE_LIST.map((g) => [g.key, g]));
+
+/** 厳選ガラケースタンプを1つ描く（key指定）。 */
+export function GarakeSticker({ keyId, size = 22, animated = true }: { keyId: string; size?: number; animated?: boolean }) {
+  const g = GARAKE_BY_KEY[keyId];
+  if (!g) return null;
+  const scale = size / (Math.max(g.w, g.h) * C);
+  return (
+    <span className={animated ? g.anim : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <PixelSprite px={g.px} w={g.w} h={g.h} scale={scale} />
+    </span>
+  );
 }
 
 /** リアクション値を正しく描く共通部品。
- *  'px:😊'=ドット絵 / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
+ *  'g:heart'=ガラケースタンプ / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
 export function ReactionGlyph({ value, size = 20 }: { value: string; size?: number }) {
-  if (value.startsWith('px:')) return <GarakeEmoji emoji={value.slice(3)} size={size} />;
+  if (value.startsWith('g:')) return <GarakeSticker keyId={value.slice(2)} size={size} />;
   if (isRetroCode(value)) return <RetroText text={value} />;
-  return <span style={{ fontSize: size * 0.9, lineHeight: 1, display: 'inline-block', verticalAlign: 'middle' }}>{value}</span>;
+  // 旧仕様の 'px:😊' は通常絵文字として表示（自動ドット化は廃止）
+  const shown = value.startsWith('px:') ? value.slice(3) : value;
+  return <span style={{ fontSize: size * 0.9, lineHeight: 1, display: 'inline-block', verticalAlign: 'middle' }}>{shown}</span>;
 }
