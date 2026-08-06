@@ -37,7 +37,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
 type Question = (typeof questions)[number];
@@ -2267,6 +2267,7 @@ function OtherProfileScreen({
   onExchange,
   supabaseBook = null,
   targetUid = null,
+  onOpenBlog,
   lang = 'ja',
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -2281,8 +2282,18 @@ function OtherProfileScreen({
   onExchange?: (userId: string) => void;
   supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null;
   targetUid?: string | null;
+  onOpenBlog?: (post: BlogPost) => void;
   lang?: Lang;
 }) {
+  // 相手が公開しているブログ記事
+  const [userBlogs, setUserBlogs] = useState<BlogPost[]>([]);
+  useEffect(() => {
+    if (isDev || !dbReady()) return;
+    let cancelled = false;
+    getBlogPostsByUserShared(profile.id).then((rows) => { if (!cancelled) setUserBlogs(rows as BlogPost[]); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
   const alreadyFollowing = followers.some((f) => f.id === profile.id);
   const [isFollowing, setIsFollowing] = useState(alreadyFollowing);
 
@@ -2498,6 +2509,25 @@ function OtherProfileScreen({
         onGoDetail={(id) => go('detail', id)}
         lang={lang}
       />
+
+      {/* 相手の公開ブログ */}
+      {userBlogs.length > 0 && (
+        <div className="px-4 pb-4">
+          <section className="rounded-[28px] bg-white p-5 shadow-card">
+            <ProfSectionHeader icon="📔" title="ブログ" theme={themeColor} />
+            <div className="space-y-2">
+              {userBlogs.slice(0, 5).map((p) => (
+                <button key={p.id} onClick={() => onOpenBlog?.(p)}
+                  className="block w-full rounded-2xl bg-base p-3 text-left transition active:scale-[0.99]">
+                  <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</span></p>
+                  <p className="mt-1 line-clamp-1 text-xs font-bold text-muted"><RetroText text={p.body} /></p>
+                  <p className="mt-1 text-[10px] font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ── プレミアムコンテンツ ── */}
       {premium && (
@@ -5362,7 +5392,9 @@ function DiaryCreateScreen({
 // ===================== ブログ画面（個人記事・交換日記とは別機能） =====================
 
 function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[] }) {
-  const sorted = [...posts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
+  const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const base = tab === 'mine' ? posts.filter((p) => p.authorId === me.id) : posts;
+  const sorted = [...base].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
   return (
     <>
       <AppHeader title="ブログ" back onBack={() => go('home')} onBell={() => go('notifications')} />
@@ -5371,10 +5403,14 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
           ＋ 記事を書く
         </button>
-        <p className="px-1 text-xs font-bold text-muted">みんなのブログ記事。タイトル・気分・天気をつけて投稿でき、いいね・コメントで反応できます。</p>
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
+          <button onClick={() => setTab('all')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'all' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>みんな</button>
+          <button onClick={() => setTab('mine')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'mine' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>自分の記事 {posts.filter((p) => p.authorId === me.id).length}</button>
+        </div>
+        <p className="px-1 text-xs font-bold text-muted">{tab === 'mine' ? 'あなたが投稿した記事の一覧です。' : 'みんなのブログ記事。いいね・コメントで反応できます。'}</p>
         {sorted.length === 0 && (
           <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-            まだ記事がありません。最初の記事を書いてみて！
+            {tab === 'mine' ? 'まだ記事を投稿していません。' : 'まだ記事がありません。最初の記事を書いてみて！'}
           </div>
         )}
         {sorted.map((p) => {
@@ -8678,7 +8714,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       if (selectedProfileId) {
         const otherProfile = [...profiles, ...followers].find((p) => p.id === selectedProfileId)
           ?? (viewedProfile && viewedProfile.id === selectedProfileId ? viewedProfile : null);
-        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} supabaseBook={viewedProfileBook} targetUid={viewedProfileUid} lang={lang} />;
+        if (otherProfile) return <OtherProfileScreen go={go} profile={otherProfile} answers={answers} subscribedOfficials={subscribedOfficials} onToggleSubscription={toggleSubscription} myProfile={profileBookInfo} diaryPages={diaryPages} circles={circles} exchanged={exchangedProfiles.includes(otherProfile.id)} onExchange={exchangeProfileBook} supabaseBook={viewedProfileBook} targetUid={viewedProfileUid} onOpenBlog={(post) => { setBlogPosts((prev) => prev.some((x) => x.id === post.id) ? prev : [post, ...prev]); go('blog-detail', post.id); }} lang={lang} />;
         // Supabase から読み込み中
         return (
           <div className="flex min-h-[60vh] items-center justify-center">

@@ -1000,3 +1000,34 @@ export async function deleteDiaryEntryShared(entryId: string): Promise<boolean> 
   const { error } = await supabase.from('diary_entries').delete().eq('id', entryId);
   return !error;
 }
+
+/** 指定ユーザーのブログ記事（自分に見える公開範囲のもの）。username で指定。 */
+export async function getBlogPostsByUserShared(username: string): Promise<any[]> {
+  if (!supabase) return [];
+  const uname = username.replace(/^@/, '');
+  const { data: prof } = await supabase.from('profiles').select('id,username,display_name,avatar_url').eq('username', uname).maybeSingle();
+  if (!prof) return [];
+  const myUid = await getCurrentUserId();
+  const { data: posts } = await supabase.from('blog_posts').select('*').eq('user_id', (prof as any).id).order('created_at', { ascending: false });
+  if (!posts || posts.length === 0) return [];
+  const ids = posts.map((p: any) => p.id);
+  const [{ data: likes }, { data: comments }] = await Promise.all([
+    supabase.from('blog_likes').select('post_id,user_id').in('post_id', ids),
+    supabase.from('blog_comments').select('*').in('post_id', ids),
+  ]);
+  const cprofs = await profilesByIds((comments ?? []).map((c: any) => c.user_id));
+  const authorAt = atName(prof);
+  return posts.map((p: any) => {
+    const postLikes = (likes ?? []).filter((l: any) => l.post_id === p.id);
+    return {
+      id: p.id, authorId: authorAt, authorName: (prof as any).display_name || (prof as any).username, authorAvatar: avatarOf(prof),
+      title: p.title || undefined, mood: p.mood || undefined, weather: p.weather || undefined,
+      body: p.body, photoUrl: p.photo_url || undefined, textColor: p.text_color || undefined,
+      visibility: (p.visibility === 'followers' ? 'followers' : 'public'),
+      likes: postLikes.length, likedByMe: !!myUid && postLikes.some((l: any) => l.user_id === myUid),
+      comments: (comments ?? []).filter((c: any) => c.post_id === p.id).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((c: any) => { const cp = cprofs.get(c.user_id); return { id: c.id, authorId: atName(cp), authorName: cp?.display_name || 'ユーザー', authorAvatar: avatarOf(cp), body: c.body, postedAt: c.created_at }; }),
+      postedAt: p.created_at,
+    };
+  });
+}
