@@ -21,10 +21,24 @@ function emojiToPixelDataUrl(emoji: string, res: number): string {
     bctx.clearRect(0, 0, BIG, BIG);
     bctx.textAlign = 'center';
     bctx.textBaseline = 'middle';
-    // 絵文字の実インク位置は字形で上下するので、少し小さめ＋中央基準で全体を収める
-    bctx.font = `${Math.floor(BIG * 0.78)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color",sans-serif`;
-    bctx.fillText(emoji, BIG / 2, BIG / 2 + Math.floor(BIG * 0.04));
-    // 縮小（アンチエイリアスON＝平均化してクリアなドットに）
+    bctx.font = `${Math.floor(BIG * 0.8)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color",sans-serif`;
+    bctx.fillText(emoji, BIG / 2, BIG / 2);
+    // 実際に描かれた不透明ピクセルの範囲（インクの矩形）を検出して中央フィット
+    let minX = BIG, minY = BIG, maxX = 0, maxY = 0, found = false;
+    try {
+      const d = bctx.getImageData(0, 0, BIG, BIG).data;
+      for (let y = 0; y < BIG; y++) {
+        for (let x = 0; x < BIG; x++) {
+          if (d[(y * BIG + x) * 4 + 3] > 16) {
+            found = true;
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+    } catch { /* getImageData 不可なら全体を使う */ }
+    if (!found) { minX = 0; minY = 0; maxX = BIG - 1; maxY = BIG - 1; }
+    const bw = maxX - minX + 1, bh = maxY - minY + 1;
     const small = document.createElement('canvas');
     small.width = res; small.height = res;
     const sctx = small.getContext('2d');
@@ -32,7 +46,10 @@ function emojiToPixelDataUrl(emoji: string, res: number): string {
     sctx.imageSmoothingEnabled = true;
     (sctx as any).imageSmoothingQuality = 'high';
     sctx.clearRect(0, 0, res, res);
-    sctx.drawImage(big, 0, 0, BIG, BIG, 0, 0, res, res);
+    const pad = 1, avail = res - pad * 2;
+    const scale = Math.min(avail / bw, avail / bh);
+    const dw = bw * scale, dh = bh * scale;
+    sctx.drawImage(big, minX, minY, bw, bh, (res - dw) / 2, (res - dh) / 2, dw, dh);
     const url = small.toDataURL();
     pixelCache.set(key, url);
     return url;
