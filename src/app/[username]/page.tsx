@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, FruitSticker, FRUIT_LIST, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -2044,21 +2044,28 @@ function ProfileBookContent({
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
   const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream');
 
-  // プール地の色：青テーマは水色プール、それ以外はピンクプール
-  const poolClass = themeColor === 'blue' ? 'prof-pool' : 'prof-pool-pink';
+  // 見出しのバブル色（テーマ連動）。海っぽさは背景テーマ側で表現し、ここでは強制しない。
   const bubbleClass = themeColor === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
+  // デコシールはテーマ非依存の中立キュート（海には寄せない）。
+  const deco = ['🌸', '💗', '⭐', '✨', '🎀', '🍀'];
 
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
     <ProfThemeContext.Provider value={themeColor}>
-    <div className={`relative min-h-full space-y-4 px-4 pt-4 pb-32 ${poolClass}`}>
-      {/* ── デコシール（ふわふわ揺れる・タップ透過） ── */}
-      <span className="prof-deco text-4xl" style={{ top: 6, left: 8, ['--r' as any]: '-14deg', animationDelay: '0s' } as any}>🌺</span>
-      <span className="prof-deco text-3xl" style={{ top: 12, right: 10, ['--r' as any]: '10deg', animationDelay: '.8s' } as any}>🐬</span>
-      <span className="prof-deco text-2xl" style={{ top: '34%', left: 2, ['--r' as any]: '-8deg', animationDelay: '1.4s' } as any}>💗</span>
-      <span className="prof-deco text-2xl" style={{ top: '58%', right: 4, ['--r' as any]: '12deg', animationDelay: '.4s' } as any}>⭐</span>
-      <span className="prof-deco text-xl" style={{ top: '78%', left: 6, ['--r' as any]: '6deg', animationDelay: '1.1s' } as any}>💎</span>
-      <span className="prof-deco text-2xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>🌴</span>
+    <div className="relative min-h-full">
+      {/* ── 背景：テーマありなら世界観、なければ中立の紙地 ── */}
+      {bgTheme
+        ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={bgTheme} subtle /></div>
+        : <div className="pointer-events-none absolute inset-0 prof-paper" />}
+
+      <div className="relative z-10 space-y-4 px-4 pt-4 pb-32">
+      {/* ── デコシール（ふわふわ揺れる・タップ透過／テーマ非依存の中立キュート） ── */}
+      <span className="prof-deco text-3xl" style={{ top: 6, left: 8, ['--r' as any]: '-14deg', animationDelay: '0s' } as any}>{deco[0]}</span>
+      <span className="prof-deco text-2xl" style={{ top: 14, right: 10, ['--r' as any]: '10deg', animationDelay: '.8s' } as any}>{deco[1]}</span>
+      <span className="prof-deco text-xl" style={{ top: '34%', left: 2, ['--r' as any]: '-8deg', animationDelay: '1.4s' } as any}>{deco[2]}</span>
+      <span className="prof-deco text-2xl" style={{ top: '58%', right: 4, ['--r' as any]: '12deg', animationDelay: '.4s' } as any}>{deco[3]}</span>
+      <span className="prof-deco text-lg" style={{ top: '78%', left: 6, ['--r' as any]: '6deg', animationDelay: '1.1s' } as any}>{deco[4]}</span>
+      <span className="prof-deco text-xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>{deco[5]}</span>
 
       {/* ── 表紙カード（My Profile） ── */}
       <section className="prof-pill relative overflow-hidden p-5">
@@ -2284,6 +2291,7 @@ function ProfileBookContent({
         </section>
       )}
 
+      </div>
     </div>
     </ProfThemeContext.Provider>
     </HideEmptyProfileContext.Provider>
@@ -4116,6 +4124,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
     : EMOJI_CATEGORIES;
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
+  const [fruitMode, setFruitMode] = useState(false); // フルーツのドット絵タブ
   const current = categories.find((c) => c.id === cat) ?? categories[0];
   const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
   // 入力があればキーワード検索（例:「ハート」「ねこ」「わらい」）。ヒットしなければ直接入力扱い。
@@ -4124,6 +4133,24 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const searching = q.length > 0;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
+      {/* 通常 / フルーツ(ドット絵) 切り替え */}
+      <div className="flex items-center gap-1 rounded-full bg-base p-1 text-[11px] font-black">
+        <button onClick={() => setFruitMode(false)} className={`flex-1 rounded-full py-1.5 transition ${!fruitMode ? 'bg-white text-ink shadow-sm' : 'text-muted'}`}>🔤 絵文字</button>
+        <button onClick={() => setFruitMode(true)} className={`flex-1 rounded-full py-1.5 transition ${fruitMode ? 'bg-green-500 text-white shadow-sm' : 'text-muted'}`}>🍓 フルーツ</button>
+      </div>
+
+      {fruitMode ? (
+        /* フルーツ＝手描きのドット絵のみ（動くアイドルアニメ付き） */
+        <div className="grid max-h-56 grid-cols-5 gap-1 overflow-y-auto pt-1">
+          {FRUIT_LIST.map((f) => (
+            <button key={f.key} onClick={() => onPick('f:' + f.key)} aria-label={f.label}
+              className="grid h-14 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
+              <FruitSticker keyId={f.key} size={34} />
+            </button>
+          ))}
+        </div>
+      ) : (
+      <>
       {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
       <div className="flex items-center gap-2">
         <input
@@ -4165,6 +4192,8 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
             </button>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

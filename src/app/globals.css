@@ -310,6 +310,15 @@ button, input, textarea { font: inherit; }
     repeating-linear-gradient(90deg, rgba(255,255,255,.20) 0 2px, transparent 2px 46px),
     linear-gradient(165deg, #74d4f4 0%, #45b4ea 55%, #2f9fdf 100%);
 }
+/* 既定（テーマ未設定）のプロフ帳の紙地：やわらかいドット方眼。海には寄せない中立デザイン */
+.prof-paper {
+  background-color: #fff6fb;
+  background-image:
+    radial-gradient(circle at 12% 16%, rgba(255,150,195,.14), transparent 42%),
+    radial-gradient(circle at 86% 78%, rgba(150,185,255,.14), transparent 42%),
+    radial-gradient(rgba(120,90,110,.06) 1.4px, transparent 1.4px);
+  background-size: auto, auto, 15px 15px;
+}
 /* ピンクテーマなど、他色でも成立するように accent はJS側で切替 */
 .prof-pool-pink {
   background-color: #ff9ec4;
@@ -369,3 +378,70 @@ button, input, textarea { font: inherit; }
   filter: drop-shadow(0 2px 3px rgba(0,0,0,.22));
   animation: prof-deco-float 4.5s ease-in-out infinite;
 }
+
+/* ───────────────────────────────────────────────
+   フルーツ・ドット絵アニメーション（仕様書8カテゴリ）
+   共通：約2〜3秒に一度だけ「待機→動作→戻る」する
+   アイドルアニメ。動きは1〜2px相当に抑えて視認性優先。
+   ─────────────────────────────────────────────── */
+/* Bounce：ぷにっと潰れて跳ねる（りんご・桃・いちご・メロン） */
+@keyframes fruit-bounce {
+  0%, 68%, 100% { transform: translateY(0) scaleY(1); }
+  76% { transform: translateY(-3px) scaleY(1.06); }
+  84% { transform: translateY(0)    scaleY(0.9); }
+  92% { transform: translateY(-1px) scaleY(1); }
+}
+.fruit-bounce { animation: fruit-bounce 2.4s ease-in-out infinite; transform-origin: 50% 100%; }
+
+/* Roll：コロコロ転がる（みかん・スイカ・青りんご・ココナッツ） */
+@keyframes fruit-roll {
+  0%, 62%, 100% { transform: translateX(0)   rotate(0deg); }
+  78% { transform: translateX(2px)  rotate(15deg); }
+  90% { transform: translateX(-2px) rotate(-15deg); }
+}
+.fruit-roll { animation: fruit-roll 2.6s ease-in-out infinite; transform-origin: 50% 100%; }
+
+/* Wobble：左右にゆらっと（梨・レモン・マンゴー） */
+@keyframes fruit-wobble {
+  0%, 66%, 100% { transform: rotate(0deg); }
+  80% { transform: rotate(8deg); }
+  90% { transform: rotate(-8deg); }
+}
+.fruit-wobble { animation: fruit-wobble 2.4s ease-in-out infinite; transform-origin: 50% 100%; }
+
+/* Rotate：くるっと半回転（バナナ・キウイ・スターフルーツ） */
+@keyframes fruit-rotate {
+  0%, 58%, 100% { transform: rotateY(0deg); }
+  80% { transform: rotateY(180deg); }
+}
+.fruit-rotate { animation: fruit-rotate 2.8s ease-in-out infinite; transform-origin: 50% 50%; }
+
+/* Shake：粒が小刻みに震える（ぶどう・ブルーベリー・さくらんぼ・カシス） */
+@keyframes fruit-shake {
+  0%, 70%, 100% { transform: translateX(0); }
+  74%, 82%, 90% { transform: translateX(-1.5px); }
+  78%, 86%, 94% { transform: translateX(1.5px); }
+}
+.fruit-shake { animation: fruit-shake 2.2s ease-in-out infinite; }
+
+/* Leaf：葉だけ揺れる感じ（本体はほぼ静止／パイナップル・柿） */
+@keyframes fruit-leaf {
+  0%, 66%, 100% { transform: rotate(0deg); }
+  80% { transform: rotate(4deg); }
+  90% { transform: rotate(-4deg); }
+}
+.fruit-leaf { animation: fruit-leaf 2.6s ease-in-out infinite; transform-origin: 50% 90%; }
+
+/* Open：殻・断面がひらく（栗・ライチ・無花果） */
+@keyframes fruit-open {
+  0%, 62%, 100% { transform: scaleX(1); }
+  82% { transform: scaleX(0.85); }
+}
+.fruit-open { animation: fruit-open 2.6s ease-in-out infinite; transform-origin: 50% 50%; }
+
+/* Glow：ツヤ・光沢が流れる（ざくろ・カットマンゴー・パッションフルーツ） */
+@keyframes fruit-glow {
+  0%, 60%, 100% { filter: brightness(1); }
+  80% { filter: brightness(1.55) saturate(1.15); }
+}
+.fruit-glow { animation: fruit-glow 2.6s ease-in-out infinite; }

@@ -696,9 +696,279 @@ export function GarakeSticker({ keyId, size = 22, animated = true }: { keyId: st
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+//  フルーツ・ドット絵（仕様書ベース／1つずつ手描き）
+//  ・太めの輪郭・少ない色数・24px相当でも一目で分かるシルエット
+//  ・各果物に「その果物らしい」動き（globals.css の .fruit-* を割当）
+//  追加はスプライト定義 → FRUIT_LIST に { key, px, w, h, anim, label } を足すだけ。
+// ══════════════════════════════════════════════════════════════
+
+// りんご 13×13 — 丸く重み。ぷにっと跳ねる(bounce)
+const FR_APPLE = parseMap(
+`......s......
+.....ssL.....
+....s.LLL....
+..KKKKKKK....
+.KRRRRRRRKK..
+KRHHRRRRRRRK.
+KRHHRRRRRRRK.
+KRRRRRRRRRRK.
+KRRRRRRRRRRK.
+KRRRRRRRRRrK.
+.KRRRRRRRrK..
+.KrRRRRrrrK..
+..KKrrrrKK...`,
+  { K: '#8f1a12', R: '#e8392b', r: '#bf241c', H: '#ff9d90', s: '#6f4a1e', L: '#5ab23c' });
+
+// 青りんご 13×13 — 軽快。左右にコロン(roll)
+const FR_GREENAPPLE = parseMap(
+`......s......
+.....ssL.....
+....s.LLL....
+..KKKKKKK....
+.KGGGGGGGKK..
+KGHHGGGGGGGK.
+KGHHGGGGGGGK.
+KGGGGGGGGGGK.
+KGGGGGGGGGGK.
+KGGGGGGGGGgK.
+.KGGGGGGGgK..
+.KgGGGGgggK..
+..KKggggKK...`,
+  { K: '#3f7d18', G: '#8fd13a', g: '#6aa828', H: '#e9ffb0', s: '#6f4a1e', L: '#4e9e2e' });
+
+// 梨 11×13 — 細い首。上だけ揺れる(wobble)
+const FR_PEAR = parseMap(
+`....s......
+...sL......
+....LL.....
+....K......
+...KYYK....
+...KYYYK...
+..KYHYYK...
+.KYHYYYYK..
+.KYYYYYYK..
+.KYYYYYYK..
+.KYYYYYYK..
+..KYYYYK...
+...KKKK....`,
+  { K: '#9a8a2a', Y: '#d9d36a', H: '#f4f0b0', s: '#6f4a1e', L: '#5ab23c' });
+
+// 桃 13×13 — 柔らかさ。ぷるんと弾む(bounce)
+const FR_PEACH = parseMap(
+`......LL.....
+....KKKKK....
+..KKPPPPPKK..
+.KPPPPoPPPPK.
+KPPHPPoPPPPK.
+KPPHPPoPPPPK.
+KPPPPPoPPPPK.
+KPPPPPoPPPPK.
+KPPPPPoPPPPK.
+.KPPPPoPPPK..
+.KrPPPPPPrK..
+..KKrPPrKK...
+...KKKKKK....`,
+  { K: '#c65a86', P: '#ffb4c4', r: '#ef8aa6', o: '#f19bb2', H: '#ffe0e8', L: '#5ab23c' });
+
+// みかん 13×13 — 丸いので転がる(roll)
+const FR_ORANGE = parseMap(
+`....Ll.......
+....KKK......
+..KKKKKKK....
+.KOOOOOOOK...
+KOOHHOOOOOOK.
+KOOHHOOOOOOK.
+KOOOOOOOOOOK.
+KOOOOOOOOOOK.
+KOOOOOOOOOOK.
+.KOOOOOOOOK..
+.KoOOOOOooK..
+..KKoooOKK...
+...KKKKKK....`,
+  { K: '#c9631a', O: '#ff9d2e', o: '#df7c17', H: '#ffd08a', L: '#4e9e2e', l: '#6fbf3a' });
+
+// レモン 13×10 — 横長の楕円＋両端の突起で「レモンらしさ」。左右に振れる(wobble)
+const FR_LEMON = parseMap(
+`.....KKK.....
+...KKYYYKK...
+..KYHYYYYYK..
+.KYHYYYYYYYK.
+bKYYYYYYYYYKb
+.KYYYYYYYYYK.
+..KYYYYYYYK..
+...KKYYYKK...
+.....KKK.....
+.............`,
+  { K: '#c9a91a', Y: '#ffe14a', H: '#fff3a8', b: '#ffe14a' });
+
+// スイカ 13×13 — 重い。前後にゴロン(roll)。三角スライス
+const FR_WATERMELON = parseMap(
+`KKKKKKKKKKKKK
+KGGGGGGGGGGGK
+KWWWWWWWWWWWK
+KRRRRRRRRRRRK
+.KRRkRRRRkRRK
+.KRRRRRRRRRK.
+..KRRkRRRRRK.
+..KRRRRRkRK..
+...KRRRRRRK..
+...KRRkRRK...
+....KRRRK....
+.....KRK.....
+......K......`,
+  { K: '#2f7d34', G: '#57b34a', W: '#f3fff0', R: '#f0475e', k: '#2a2a2a' });
+
+// バナナ 13×13 — 細長く軽い。くるっと回転(rotate)
+const FR_BANANA = parseMap(
+`.........bK..
+........KYYK.
+.......KYYYK.
+......KYYYK..
+.....KYYYK...
+....KYYYK....
+b...KYYK.....
+KK.KYYK......
+.KKYYYK......
+.KYYYYK......
+.KbYYK.......
+..KKK........
+.............`,
+  { K: '#b98b16', Y: '#ffdd4a', b: '#7a5210' });
+
+// ぶどう 13×13 — 粒が揺れる(shake)。房
+const FR_GRAPES = parseMap(
+`......S......
+.....LSL.....
+..KKKKKKK....
+.KPPKPPKPPK..
+.KPpKPpKPpK..
+..KPPKPPK....
+..KPpKPpK....
+...KPPKP.....
+...KPpKp.....
+....KPK......
+....KpK......
+.....K.......
+.............`,
+  { K: '#41205e', P: '#8a4fd0', p: '#6d33b0', L: '#4e9e2e', S: '#6f4a1e' });
+
+// さくらんぼ 13×11 — 双子。カチンと当たる(shake)
+const FR_CHERRY = parseMap(
+`......Ss.....
+.....S.s.....
+....S..sLL...
+...S...s.L...
+..S....s.....
+.KKK..KKK....
+KRHRK.KRRK...
+KRRRKKKRHRK..
+KRRRK.KRRRK..
+.KKK...KKK...
+.............`,
+  { K: '#8f1a12', R: '#e8392b', H: '#ff9d90', S: '#5a8a2e', s: '#5a8a2e', L: '#5ab23c' });
+
+// いちご 13×12 — 小さく可愛い。ぴょんぴょん(bounce)
+const FR_STRAWBERRY = parseMap(
+`....LGLGL....
+...LLGGGLL...
+....KKKKK....
+..KKRRRRRKK..
+.KRyRRRyRRRK.
+.KRRRRRRRRRK.
+.KRRyRRRyRRK.
+..KRRRRRRRK..
+..KRyRRRyRK..
+...KRRRRRK...
+....KRyRK....
+.....KRK.....`,
+  { K: '#9a1f16', R: '#f0435a', y: '#ffe14a', L: '#4e9e2e', G: '#6fbf3a' });
+
+// ブルーベリー 13×12 — 小粒。ぷるぷる震える(shake)
+const FR_BLUEBERRY = parseMap(
+`..KKK...KKK..
+.KBBBK.KBBBK.
+KBBhBBKBBhBBK
+KBkBBBKBBkBBK
+.KBBBK.KBBBK.
+..KKK...KKK..
+....KKKKK....
+...KBBBBBK...
+..KBBhBBBK...
+..KBkBBBBK...
+...KBBBBK....
+....KKKK.....`,
+  { K: '#26306e', B: '#4a6fd0', h: '#a9c0ff', k: '#1b2350' });
+
+// パイナップル 13×13 — 本体は重い。葉だけ揺れる(leaf)
+const FR_PINEAPPLE = parseMap(
+`....G.G.G....
+...GGGGGGG...
+..G.GGGGG.G..
+....GG.GG....
+....KKKKK....
+..KOoOoOoOK..
+.KoOoOoOoOoK.
+.KOoOoOoOoOK.
+.KoOoOoOoOoK.
+.KOoOoOoOoOK.
+..KoOoOoOoK..
+..KOoOoOoOK..
+...KKKKKKK...`,
+  { K: '#8a5a1e', O: '#f0b93a', o: '#c98a24', G: '#4e9e2e' });
+
+// メロン 13×13 — 重量感。上下にぽよん(bounce)。網目
+const FR_MELON = parseMap(
+`....Ll.......
+...KKKKK.....
+..KMMMMMMK...
+.KMnMMnMMMK..
+KMMMnMMnMMMK.
+KMnMMMnMMnMK.
+KMMnMMMnMMMK.
+KMnMMnMMMnMK.
+KMMMnMMnMMMK.
+.KMnMMMnMMK..
+.KMMnMMnMMK..
+..KMMMMMMK...
+...KKKKK.....`,
+  { K: '#5a8a3a', M: '#c6e0a0', n: '#8fb86a', L: '#4e9e2e', l: '#6fbf3a' });
+
+type FruitItem = { key: string; px: Px[]; w: number; h: number; anim: string; label: string };
+export const FRUIT_LIST: FruitItem[] = [
+  { key: 'apple',      px: FR_APPLE,      w: 13, h: 13, anim: 'fruit-bounce', label: 'りんご' },
+  { key: 'greenapple', px: FR_GREENAPPLE, w: 13, h: 13, anim: 'fruit-roll',   label: '青りんご' },
+  { key: 'pear',       px: FR_PEAR,       w: 11, h: 13, anim: 'fruit-wobble', label: '梨' },
+  { key: 'peach',      px: FR_PEACH,      w: 13, h: 13, anim: 'fruit-bounce', label: '桃' },
+  { key: 'orange',     px: FR_ORANGE,     w: 13, h: 13, anim: 'fruit-roll',   label: 'みかん' },
+  { key: 'lemon',      px: FR_LEMON,      w: 13, h: 10, anim: 'fruit-wobble', label: 'レモン' },
+  { key: 'watermelon', px: FR_WATERMELON, w: 13, h: 13, anim: 'fruit-roll',   label: 'スイカ' },
+  { key: 'banana',     px: FR_BANANA,     w: 13, h: 13, anim: 'fruit-rotate', label: 'バナナ' },
+  { key: 'grapes',     px: FR_GRAPES,     w: 13, h: 13, anim: 'fruit-shake',  label: 'ぶどう' },
+  { key: 'cherry',     px: FR_CHERRY,     w: 13, h: 11, anim: 'fruit-shake',  label: 'さくらんぼ' },
+  { key: 'strawberry', px: FR_STRAWBERRY, w: 13, h: 12, anim: 'fruit-bounce', label: 'いちご' },
+  { key: 'blueberry',  px: FR_BLUEBERRY,  w: 13, h: 12, anim: 'fruit-shake',  label: 'ブルーベリー' },
+  { key: 'pineapple',  px: FR_PINEAPPLE,  w: 13, h: 13, anim: 'fruit-leaf',   label: 'パイナップル' },
+  { key: 'melon',      px: FR_MELON,      w: 13, h: 13, anim: 'fruit-bounce', label: 'メロン' },
+];
+const FRUIT_BY_KEY: Record<string, FruitItem> = Object.fromEntries(FRUIT_LIST.map((f) => [f.key, f]));
+
+/** フルーツのドット絵を1つ描く（key指定）。 */
+export function FruitSticker({ keyId, size = 24, animated = true }: { keyId: string; size?: number; animated?: boolean }) {
+  const f = FRUIT_BY_KEY[keyId];
+  if (!f) return null;
+  const scale = size / (Math.max(f.w, f.h) * C);
+  return (
+    <span className={animated ? f.anim : undefined} style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <PixelSprite px={f.px} w={f.w} h={f.h} scale={scale} />
+    </span>
+  );
+}
+
 /** リアクション値を正しく描く共通部品。
- *  'g:heart'=ガラケースタンプ / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
+ *  'f:apple'=フルーツドット絵 / 'g:heart'=ガラケースタンプ / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
 export function ReactionGlyph({ value, size = 20 }: { value: string; size?: number }) {
+  if (value.startsWith('f:')) return <FruitSticker keyId={value.slice(2)} size={size} />;
   if (value.startsWith('g:')) return <GarakeSticker keyId={value.slice(2)} size={size} />;
   if (isRetroCode(value)) return <RetroText text={value} />;
   // 旧仕様の 'px:😊' は通常絵文字として表示（自動ドット化は廃止）
