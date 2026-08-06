@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, GarakeSticker, GARAKE_LIST, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -4080,7 +4080,6 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
     : EMOJI_CATEGORIES;
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
-  const [pixelMode, setPixelMode] = useState(false); // ドット絵で貼るか
   const current = categories.find((c) => c.id === cat) ?? categories[0];
   const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
   // 入力があればキーワード検索（例:「ハート」「ねこ」「わらい」）。ヒットしなければ直接入力扱い。
@@ -4089,67 +4088,47 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const searching = q.length > 0;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
-      {/* 通常 / ドット絵 切り替え */}
-      <div className="flex items-center gap-1 rounded-full bg-base p-1 text-[11px] font-black">
-        <button onClick={() => setPixelMode(false)} className={`flex-1 rounded-full py-1.5 transition ${!pixelMode ? 'bg-white text-ink shadow-sm' : 'text-muted'}`}>🔤 通常</button>
-        <button onClick={() => setPixelMode(true)} className={`flex-1 rounded-full py-1.5 transition ${pixelMode ? 'bg-purple text-white shadow-sm' : 'text-muted'}`}>▦ ドット絵</button>
+      {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
+      <div className="flex items-center gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
+          placeholder="🔍 絵文字か言葉で検索（例:ハート）"
+          className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base font-bold text-ink placeholder:text-muted placeholder:font-normal outline-none"
+        />
+        <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
-
-      {pixelMode ? (
-        /* ドット絵＝手描きの厳選ガラケースタンプのみ */
-        <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto pt-1">
-          {GARAKE_LIST.map((g) => (
-            <button key={g.key} onClick={() => onPick('g:' + g.key)} aria-label={g.label}
-              className="grid h-12 w-full place-items-center rounded-lg transition hover:bg-purple/10 active:scale-90">
-              <GarakeSticker keyId={g.key} size={30} />
+      {/* カテゴリタブ（検索中は隠す） */}
+      {!searching && (
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCat(c.id)}
+              aria-label={c.label}
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xl transition ${cat === c.id ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}
+            >
+              {c.icon}
             </button>
           ))}
         </div>
+      )}
+      {/* 絵文字一覧（検索中は検索結果、そうでなければカテゴリ） */}
+      {searching && searchHits.length === 0 ? (
+        <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
       ) : (
-        <>
-          {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
-          <div className="flex items-center gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitInput(); }}
-              placeholder="🔍 絵文字か言葉で検索（例:ハート）"
-              className="min-w-0 flex-1 rounded-full bg-base px-4 py-2 text-base font-bold text-ink placeholder:text-muted placeholder:font-normal outline-none"
-            />
-            <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
-          </div>
-          {/* カテゴリタブ（検索中は隠す） */}
-          {!searching && (
-            <div className="flex gap-1 overflow-x-auto pb-1">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCat(c.id)}
-                  aria-label={c.label}
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xl transition ${cat === c.id ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}
-                >
-                  {c.icon}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* 絵文字一覧（検索中は検索結果、そうでなければカテゴリ） */}
-          {searching && searchHits.length === 0 ? (
-            <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
-          ) : (
-            <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
-              {(searching ? searchHits : current.emojis).map((emoji, i) => (
-                <button
-                  key={emoji + i}
-                  onClick={() => onPick(emoji)}
-                  className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
-                >
-                  {isRetroCode(emoji) ? <RetroText text={emoji} /> : <span>{emoji}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+        <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
+          {(searching ? searchHits : current.emojis).map((emoji, i) => (
+            <button
+              key={emoji + i}
+              onClick={() => onPick(emoji)}
+              className="grid h-10 w-full place-items-center rounded-lg text-2xl transition hover:bg-pink/10 active:scale-90"
+            >
+              {isRetroCode(emoji) ? <RetroText text={emoji} /> : <span>{emoji}</span>}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
