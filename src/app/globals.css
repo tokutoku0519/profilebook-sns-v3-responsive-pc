@@ -363,10 +363,11 @@ button, input, textarea { font: inherit; }
   box-shadow: 0 3px 0 rgba(0,0,0,.07), 0 6px 14px rgba(0,0,0,.10);
 }
 
-/* 手書き風の回答（万年筆風の手書きフォント Klee One / 太めで視認性◎） */
+/* 手書き風の回答：言語ごとに手書きフォントを差し替え（--hand-font / --hand-weight を
+   ProfileBookContent 側で言語に応じてセット。未設定時は日本語＝Klee One）。 */
 .prof-hand {
-  font-family: "Klee One", "Zen Kurenaido", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
-  font-weight: 600;
+  font-family: var(--hand-font, "Klee One", "Zen Kurenaido", "Hiragino Maru Gothic ProN", system-ui, sans-serif);
+  font-weight: var(--hand-weight, 600);
   letter-spacing: .01em;
 }
 

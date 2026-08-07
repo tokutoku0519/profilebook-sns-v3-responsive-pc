@@ -1959,6 +1959,21 @@ function GachaSpinOverlay({ burst }: { burst: boolean }) {
   );
 }
 
+// 言語ごとの手書きフォント（Google Fonts は表示中の言語のぶんだけ読み込まれる）
+function handFontVars(lang: Lang): React.CSSProperties {
+  const L = String(lang);
+  const set = (font: string, weight: number): React.CSSProperties =>
+    ({ ['--hand-font' as any]: font, ['--hand-weight' as any]: String(weight) });
+  if (L === 'ja') return set('"Klee One","Zen Kurenaido","Hiragino Maru Gothic ProN",system-ui,sans-serif', 600);
+  if (L === 'ko') return set('"Gaegu","Apple SD Gothic Neo",system-ui,sans-serif', 700);
+  if (L === 'zh' || L === 'zh-tw') return set('"Ma Shan Zheng","PingFang SC",system-ui,sans-serif', 400);
+  if (L === 'th') return set('"Sriracha",system-ui,sans-serif', 400);
+  if (L === 'hi') return set('"Kalam","Caveat",system-ui,sans-serif', 700);
+  if (L === 'ar') return set('system-ui,sans-serif', 600); // アラビア語の手書きフォントは未搭載→標準
+  // ラテン系（英・西・葡・仏・独・伊・蘭・土・尼・馬・比）＋ベトナム語＋ロシア語(キリル) → Caveat
+  return set('"Caveat","Klee One",system-ui,sans-serif', 700);
+}
+
 function ProfileBookContent({
   info,
   best3,
@@ -2055,7 +2070,7 @@ function ProfileBookContent({
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
     <ProfThemeContext.Provider value={themeColor}>
-    <div className="relative min-h-full">
+    <div className="relative min-h-full" style={handFontVars(lang)}>
       {/* ── 背景：テーマありなら世界観、なければ中立の紙地。bare のときは画面側が用意する ── */}
       {!bare && (bgTheme
         ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={bgTheme} subtle /></div>
