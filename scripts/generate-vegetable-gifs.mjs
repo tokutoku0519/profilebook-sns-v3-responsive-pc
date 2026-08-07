@@ -55,8 +55,20 @@ const vegetables = [
 function cropSprite(cx, cy) {
   const box = { x: Math.max(0,cx-42), y: Math.max(0,cy-42), w: 84, h: 84 };
   let minX=box.w, minY=box.h, maxX=0, maxY=0;
-  // 純白に近い背景だけを抜く。大根・かぶ・にんにく等の白い本体は保持する。
-  const isInk = (x,y) => { const i=((box.y+y)*image.w+box.x+x)*4; const r=image.rgba[i],g=image.rgba[i+1],b=image.rgba[i+2]; return !(r>252&&g>252&&b>252) && !(Math.abs(r-g)<5&&Math.abs(g-b)<5&&r>205); };
+  // 外周につながっている白〜薄いグレーだけを背景として flood fill する。
+  // 輪郭内の白（大根、かぶ、きのこの茎、ハイライト）は色が同じでも保持される。
+  const outside = new Uint8Array(box.w * box.h);
+  const queue = [];
+  const isBackgroundColor = (x,y) => {
+    const i=((box.y+y)*image.w+box.x+x)*4;
+    const r=image.rgba[i],g=image.rgba[i+1],b=image.rgba[i+2];
+    return (r>244&&g>244&&b>244) || (Math.abs(r-g)<7&&Math.abs(g-b)<7&&r>210);
+  };
+  const enqueue = (x,y) => { const p=y*box.w+x; if(!outside[p]&&isBackgroundColor(x,y)){outside[p]=1;queue.push([x,y]);} };
+  for(let x=0;x<box.w;x++){enqueue(x,0);enqueue(x,box.h-1);}
+  for(let y=0;y<box.h;y++){enqueue(0,y);enqueue(box.w-1,y);}
+  for(let q=0;q<queue.length;q++){const [x,y]=queue[q];if(x>0)enqueue(x-1,y);if(x+1<box.w)enqueue(x+1,y);if(y>0)enqueue(x,y-1);if(y+1<box.h)enqueue(x,y+1);}
+  const isInk = (x,y) => !outside[y*box.w+x];
   for(let y=0;y<box.h;y++) for(let x=0;x<box.w;x++) if(isInk(x,y)){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
   minX=Math.max(0,minX-2); minY=Math.max(0,minY-2); maxX=Math.min(box.w-1,maxX+2); maxY=Math.min(box.h-1,maxY+2);
   const sw=maxX-minX+1, sh=maxY-minY+1, scale=Math.min(20/sw,20/sh), dw=Math.max(1,Math.round(sw*scale)), dh=Math.max(1,Math.round(sh*scale));
@@ -64,7 +76,7 @@ function cropSprite(cx, cy) {
   for(let y=0;y<dh;y++) for(let x=0;x<dw;x++) {
     const sx=box.x+minX+Math.min(sw-1,Math.floor(x/scale)), sy=box.y+minY+Math.min(sh-1,Math.floor(y/scale)), si=(sy*image.w+sx)*4, di=((oy+y)*24+ox+x)*4;
     const r=image.rgba[si],g=image.rgba[si+1],b=image.rgba[si+2];
-    if ((r>252&&g>252&&b>252)||(Math.abs(r-g)<5&&Math.abs(g-b)<5&&r>205)) continue;
+    if (outside[(minY+Math.min(sh-1,Math.floor(y/scale)))*box.w+minX+Math.min(sw-1,Math.floor(x/scale))]) continue;
     base[di]=r;base[di+1]=g;base[di+2]=b;base[di+3]=255;
   }
   return base;

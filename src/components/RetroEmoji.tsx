@@ -101,7 +101,7 @@ export function VegetableEmoji({ id, label, size = 24 }: { id?: string; label?: 
   const resolvedId = id ?? (label ? VEGETABLE_BY_LABEL[label] : undefined);
   if (!resolvedId) return null;
   const resolvedLabel = label ?? VEGETABLES.find(([candidate]) => candidate === resolvedId)?.[1] ?? '野菜';
-  return <img src={`/vegetables/${resolvedId}.gif?v=4`} width={size} height={size} alt={resolvedLabel} title={resolvedLabel} className="pixel-emoji-image inline-block shrink-0 align-middle [image-rendering:pixelated]" />;
+  return <img src={`/vegetables/${resolvedId}.gif?v=5`} width={size} height={size} alt={resolvedLabel} title={resolvedLabel} className="pixel-emoji-image inline-block shrink-0 align-middle [image-rendering:pixelated]" />;
 }
 
 // 1 cell = 3 CSS px  (3px/cell × 7cells = 21px per sprite, ガラケーらしい小サイズ)
