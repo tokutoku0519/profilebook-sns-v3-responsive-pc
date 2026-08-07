@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, FruitSticker, FRUIT_LIST, VegetableEmoji, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, FruitSticker, FRUIT_LIST, VEGETABLES, VegetableEmoji, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -4156,12 +4156,17 @@ function getOwnedStickerEmojis(ownedPackIds: string[], ownedGachaStickers: strin
 
 // アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）。myStickers があれば先頭に「マイスタンプ」タブ。
 function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => void; myStickers?: string[] }) {
-  // フルーツ（ドット絵）は専用カテゴリとして絵文字カテゴリの一員に混ぜる（🍓アイコンのみ・文字ラベルなし）
+  // 野菜・フルーツのドット絵を専用カテゴリとして絵文字カテゴリに混ぜる。
+  const VEGETABLE_CAT = '__vegetable';
   const FRUIT_CAT = '__fruit';
   const categories = myStickers.length > 0
     ? [{ id: 'mine', label: 'マイスタンプ', icon: '🎁', emojis: myStickers }, ...EMOJI_CATEGORIES]
     : EMOJI_CATEGORIES;
-  const tabs = [...categories, { id: FRUIT_CAT, label: 'フルーツ', icon: '🍓', emojis: [] }];
+  const tabs = [
+    ...categories,
+    { id: VEGETABLE_CAT, label: '野菜', icon: '🥕', emojis: [] },
+    { id: FRUIT_CAT, label: 'フルーツ', icon: '🍓', emojis: [] },
+  ];
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
   const current = categories.find((c) => c.id === cat) ?? categories[0];
@@ -4170,6 +4175,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const q = input.trim();
   const searchHits = q ? searchEmojis(q) : [];
   const searching = q.length > 0;
+  const vegetableTab = cat === VEGETABLE_CAT && !searching;
   const fruitTab = cat === FRUIT_CAT && !searching;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
@@ -4184,7 +4190,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
-      {/* カテゴリタブ（検索中は隠す）。末尾に🍓フルーツ（ドット絵）カテゴリ */}
+      {/* カテゴリタブ（検索中は隠す）。末尾に🥕野菜・🍓フルーツカテゴリ */}
       {!searching && (
         <div className="flex gap-1 overflow-x-auto pb-1">
           {tabs.map((c) => (
@@ -4199,8 +4205,17 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           ))}
         </div>
       )}
-      {/* 一覧：フルーツカテゴリならドット絵、そうでなければ絵文字（検索中は検索結果） */}
-      {fruitTab ? (
+      {/* 一覧：野菜・フルーツカテゴリならドット絵、そうでなければ通常絵文字 */}
+      {vegetableTab ? (
+        <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+          {VEGETABLES.map(([id, label]) => (
+            <button key={id} onClick={() => onPick(`[野菜:${label}]`)} aria-label={label} title={label}
+              className="grid h-12 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
+              <VegetableEmoji id={id} label={label} size={30} />
+            </button>
+          ))}
+        </div>
+      ) : fruitTab ? (
         <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
           {FRUIT_LIST.map((f) => (
             <button key={f.key} onClick={() => onPick('f:' + f.key)} aria-label={f.label}
