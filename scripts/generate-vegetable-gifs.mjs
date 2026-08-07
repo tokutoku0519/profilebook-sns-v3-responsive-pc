@@ -55,7 +55,8 @@ const vegetables = [
 function cropSprite(cx, cy) {
   const box = { x: Math.max(0,cx-42), y: Math.max(0,cy-42), w: 84, h: 84 };
   let minX=box.w, minY=box.h, maxX=0, maxY=0;
-  const isInk = (x,y) => { const i=((box.y+y)*image.w+box.x+x)*4; const r=image.rgba[i],g=image.rgba[i+1],b=image.rgba[i+2]; return !(r>238&&g>238&&b>238) && !(Math.abs(r-g)<8&&Math.abs(g-b)<8&&r>185); };
+  // 純白に近い背景だけを抜く。大根・かぶ・にんにく等の白い本体は保持する。
+  const isInk = (x,y) => { const i=((box.y+y)*image.w+box.x+x)*4; const r=image.rgba[i],g=image.rgba[i+1],b=image.rgba[i+2]; return !(r>252&&g>252&&b>252) && !(Math.abs(r-g)<5&&Math.abs(g-b)<5&&r>205); };
   for(let y=0;y<box.h;y++) for(let x=0;x<box.w;x++) if(isInk(x,y)){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
   minX=Math.max(0,minX-2); minY=Math.max(0,minY-2); maxX=Math.min(box.w-1,maxX+2); maxY=Math.min(box.h-1,maxY+2);
   const sw=maxX-minX+1, sh=maxY-minY+1, scale=Math.min(20/sw,20/sh), dw=Math.max(1,Math.round(sw*scale)), dh=Math.max(1,Math.round(sh*scale));
@@ -63,7 +64,7 @@ function cropSprite(cx, cy) {
   for(let y=0;y<dh;y++) for(let x=0;x<dw;x++) {
     const sx=box.x+minX+Math.min(sw-1,Math.floor(x/scale)), sy=box.y+minY+Math.min(sh-1,Math.floor(y/scale)), si=(sy*image.w+sx)*4, di=((oy+y)*24+ox+x)*4;
     const r=image.rgba[si],g=image.rgba[si+1],b=image.rgba[si+2];
-    if ((r>238&&g>238&&b>238)||(Math.abs(r-g)<8&&Math.abs(g-b)<8&&r>185)) continue;
+    if ((r>252&&g>252&&b>252)||(Math.abs(r-g)<5&&Math.abs(g-b)<5&&r>205)) continue;
     base[di]=r;base[di+1]=g;base[di+2]=b;base[di+3]=255;
   }
   return base;
@@ -94,6 +95,8 @@ function lzw(indices,min=8){const clear=1<<min,end=clear+1,bits=[];let cur=0,n=0
 function gif(frames,file){const chunks=[Buffer.from('GIF89a','ascii')],hdr=Buffer.alloc(7);hdr.writeUInt16LE(24,0);hdr.writeUInt16LE(24,2);hdr[4]=0xF7;chunks.push(hdr);const pal=Buffer.alloc(768);for(let i=1;i<256;i++){const q=i-1;pal[i*3]=((q>>5)&7)*255/7;pal[i*3+1]=((q>>2)&7)*255/7;pal[i*3+2]=(q&3)*255/3;}chunks.push(pal,Buffer.from([0x21,0xFF,0x0B]),Buffer.from('NETSCAPE2.0'),Buffer.from([3,1,0,0,0]));for(let f=0;f<frames.length;f++){const delay=f===0?200:13;chunks.push(Buffer.from([0x21,0xF9,4,0x09,delay&255,delay>>8,0,0,0x2C,0,0,0,0,24,0,24,0,0,8]));const idx=[];for(let i=0;i<frames[f].length;i+=4)idx.push(paletteIndex(frames[f][i],frames[f][i+1],frames[f][i+2],frames[f][i+3]));const dat=lzw(idx);for(let p=0;p<dat.length;p+=255)chunks.push(Buffer.from([Math.min(255,dat.length-p)]),dat.subarray(p,p+255));chunks.push(Buffer.from([0]));}chunks.push(Buffer.from([0x3B]));fs.writeFileSync(file,Buffer.concat(chunks));}
 
 const manifest=[];
-for(const [id,label,x,y,pattern] of vegetables){const base=cropSprite(x,y);gif([0,1,2,3].map(s=>frame(base,pattern,s)),path.join(outDir,`${id}.gif`));manifest.push({id,label,pattern,src:`/vegetables/${id}.gif`});}
+// 部位変形で割れて見える問題を避けるため、野菜は一旦すべて静止GIFで出力する。
+// `pattern` は要件データとしてmanifestに残し、将来スプライトを部位別に描き直した際に再利用する。
+for(const [id,label,x,y,pattern] of vegetables){const base=cropSprite(x,y);gif([base],path.join(outDir,`${id}.gif`));manifest.push({id,label,pattern,animated:false,src:`/vegetables/${id}.gif`});}
 fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 console.log(`Generated ${manifest.length} vegetable GIFs in ${outDir}`);
