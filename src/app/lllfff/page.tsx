@@ -1,7 +1,7 @@
 'use client';
 
 // 動くドット絵（野菜・フルーツ）プレビュー用ページ。
-// URL: /preview  … ピッカーを開かずに全スタンプの見た目・動きを一覧で確認できる。
+// URL: /lllfff  … ピッカーを開かずに全スタンプの見た目・動きを一覧で確認できる。
 import { FRUIT_LIST, FruitSticker, VEGETABLES, VegetableEmoji } from '@/components/RetroEmoji';
 
 export default function StickerPreviewPage() {
