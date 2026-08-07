@@ -106,9 +106,15 @@ function paletteIndex(r,g,b,a){ if(!a)return 0; return 1+(((r>>5)<<5)|((g>>5)<<2
 function lzw(indices,min=8){const clear=1<<min,end=clear+1,bits=[];let cur=0,n=0;const emit=c=>{cur|=c<<n;n+=min+1;while(n>=8){bits.push(cur&255);cur>>=8;n-=8;}};for(const value of indices){emit(clear);emit(value);}emit(end);if(n)bits.push(cur&255);return Buffer.from(bits);}
 function gif(frames,file){const chunks=[Buffer.from('GIF89a','ascii')],hdr=Buffer.alloc(7);hdr.writeUInt16LE(24,0);hdr.writeUInt16LE(24,2);hdr[4]=0xF7;chunks.push(hdr);const pal=Buffer.alloc(768);for(let i=1;i<256;i++){const q=i-1;pal[i*3]=((q>>5)&7)*255/7;pal[i*3+1]=((q>>2)&7)*255/7;pal[i*3+2]=(q&3)*255/3;}chunks.push(pal,Buffer.from([0x21,0xFF,0x0B]),Buffer.from('NETSCAPE2.0'),Buffer.from([3,1,0,0,0]));for(let f=0;f<frames.length;f++){const delay=f===0?200:13;chunks.push(Buffer.from([0x21,0xF9,4,0x09,delay&255,delay>>8,0,0,0x2C,0,0,0,0,24,0,24,0,0,8]));const idx=[];for(let i=0;i<frames[f].length;i+=4)idx.push(paletteIndex(frames[f][i],frames[f][i+1],frames[f][i+2],frames[f][i+3]));const dat=lzw(idx);for(let p=0;p<dat.length;p+=255)chunks.push(Buffer.from([Math.min(255,dat.length-p)]),dat.subarray(p,p+255));chunks.push(Buffer.from([0]));}chunks.push(Buffer.from([0x3B]));fs.writeFileSync(file,Buffer.concat(chunks));}
 
+// ブラウザ差のない静止RGBA PNGを書き出す。
+const crcTable = Array.from({length:256},(_,n)=>{let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
+function crc32(buf){let c=0xffffffff;for(const byte of buf)c=crcTable[(c^byte)&255]^(c>>>8);return (c^0xffffffff)>>>0;}
+function pngChunk(type,data){const name=Buffer.from(type),body=Buffer.concat([name,data]),out=Buffer.alloc(data.length+12);out.writeUInt32BE(data.length,0);body.copy(out,4);out.writeUInt32BE(crc32(body),data.length+8);return out;}
+function png(rgba,file){const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(24,0);ihdr.writeUInt32BE(24,4);ihdr[8]=8;ihdr[9]=6;const raw=Buffer.alloc((24*4+1)*24);for(let y=0;y<24;y++){const row=y*(24*4+1);raw[row]=0;Buffer.from(rgba.buffer,rgba.byteOffset+y*24*4,24*4).copy(raw,row+1);}fs.writeFileSync(file,Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),pngChunk('IHDR',ihdr),pngChunk('IDAT',zlib.deflateSync(raw,{level:9})),pngChunk('IEND',Buffer.alloc(0))]));}
+
 const manifest=[];
 // 部位変形で割れて見える問題を避けるため、野菜は一旦すべて静止GIFで出力する。
 // `pattern` は要件データとしてmanifestに残し、将来スプライトを部位別に描き直した際に再利用する。
-for(const [id,label,x,y,pattern] of vegetables){const base=cropSprite(x,y);gif([base],path.join(outDir,`${id}.gif`));manifest.push({id,label,pattern,animated:false,src:`/vegetables/${id}.gif`});}
+for(const [id,label,x,y,pattern] of vegetables){const base=cropSprite(x,y);png(base,path.join(outDir,`${id}.png`));manifest.push({id,label,pattern,animated:false,src:`/vegetables/${id}.png`});}
 fs.writeFileSync(path.join(outDir,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
-console.log(`Generated ${manifest.length} vegetable GIFs in ${outDir}`);
+console.log(`Generated ${manifest.length} static vegetable PNGs in ${outDir}`);
