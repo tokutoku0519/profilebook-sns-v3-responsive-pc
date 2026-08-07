@@ -517,13 +517,13 @@ export const RETRO_CODES: { code: string; label: string }[] = [
 
 // ショートコードを検索する正規表現（RETRO_CODES から自動生成）
 const CODE_RE = new RegExp(
-  '(' + [...RETRO_CODES.map((c) => c.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '\\[野菜:[^\\]]+\\]'].join('|') + ')',
+  '(' + [...RETRO_CODES.map((c) => c.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '\\[野菜:[^\\]]+\\]', '\\[果物:[^\\]]+\\]'].join('|') + ')',
   'g'
 );
 
 /** 文字列が単一のレトロコードか（＝ピクセルデコ・スタンプか） */
 export function isRetroCode(s: string): boolean {
-  return !!CODE_RENDER[s] || /^\[野菜:[^\]]+\]$/.test(s);
+  return !!CODE_RENDER[s] || /^\[(野菜|果物):[^\]]+\]$/.test(s);
 }
 
 /** テキスト中のショートコードをアニメSVGに変換して表示 */
@@ -534,10 +534,14 @@ export function RetroText({ text, className }: { text: string; className?: strin
       {parts.map((part, i) => {
         const factory = CODE_RENDER[part];
         const vegetable = part.match(/^\[野菜:([^\]]+)\]$/)?.[1];
+        const fruit = part.match(/^\[果物:([^\]]+)\]$/)?.[1];
+        const fruitItem = fruit ? FRUIT_LIST.find((item) => item.label === fruit) : undefined;
         return factory
           ? <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 1px' }}>{factory()}</span>
           : vegetable && VEGETABLE_BY_LABEL[vegetable]
             ? <VegetableEmoji key={i} label={vegetable} />
+          : fruitItem
+            ? <FruitSticker key={i} keyId={fruitItem.key} />
           : <React.Fragment key={i}>{part}</React.Fragment>;
       })}
     </span>
@@ -546,12 +550,15 @@ export function RetroText({ text, className }: { text: string; className?: strin
 
 /** テキストエリアの上に表示する絵文字ピッカーボタン列 */
 export function RetroEmojiPicker({ onInsert }: { onInsert: (code: string) => void }) {
-  const [vegetablesOpen, setVegetablesOpen] = React.useState(false);
+  const [openCategory, setOpenCategory] = React.useState<'vegetables' | 'fruits' | null>(null);
   return (
     <div className="rounded-2xl bg-base px-3 py-2">
       <div className="flex gap-1.5 overflow-x-auto">
-        <button type="button" onClick={() => setVegetablesOpen(!vegetablesOpen)} aria-expanded={vegetablesOpen} className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-black shadow-card transition ${vegetablesOpen ? 'bg-pink text-white' : 'bg-white text-ink'}`}>
+        <button type="button" onClick={() => setOpenCategory(openCategory === 'vegetables' ? null : 'vegetables')} aria-expanded={openCategory === 'vegetables'} className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-black shadow-card transition ${openCategory === 'vegetables' ? 'bg-pink text-white' : 'bg-white text-ink'}`}>
           <VegetableEmoji id="carrot" size={22} /> 野菜
+        </button>
+        <button type="button" onClick={() => setOpenCategory(openCategory === 'fruits' ? null : 'fruits')} aria-expanded={openCategory === 'fruits'} className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-black shadow-card transition ${openCategory === 'fruits' ? 'bg-pink text-white' : 'bg-white text-ink'}`}>
+          <FruitSticker keyId="apple" size={22} /> フルーツ
         </button>
         {RETRO_CODES.map(({ code, label }) => (
           <button key={code} type="button" title={label} aria-label={label} onClick={() => onInsert(code)} className="flex shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-card transition active:scale-90 hover:bg-pink/10">
@@ -559,11 +566,20 @@ export function RetroEmojiPicker({ onInsert }: { onInsert: (code: string) => voi
           </button>
         ))}
       </div>
-      {vegetablesOpen && (
+      {openCategory === 'vegetables' && (
         <div className="mt-2 grid max-h-52 grid-cols-6 gap-1.5 overflow-y-auto rounded-xl bg-white/70 p-2 sm:grid-cols-8">
           {VEGETABLES.map(([id, label]) => (
             <button key={id} type="button" title={label} aria-label={label} onClick={() => onInsert(`[野菜:${label}]`)} className="grid aspect-square place-items-center rounded-xl bg-white shadow-sm transition hover:bg-pink/10 active:scale-90">
               <VegetableEmoji id={id} label={label} />
+            </button>
+          ))}
+        </div>
+      )}
+      {openCategory === 'fruits' && (
+        <div className="mt-2 grid max-h-52 grid-cols-6 gap-1.5 overflow-y-auto rounded-xl bg-white/70 p-2 sm:grid-cols-8">
+          {FRUIT_LIST.map((fruit) => (
+            <button key={fruit.key} type="button" title={fruit.label} aria-label={fruit.label} onClick={() => onInsert(`[果物:${fruit.label}]`)} className="grid aspect-square place-items-center rounded-xl bg-white shadow-sm transition hover:bg-pink/10 active:scale-90">
+              <FruitSticker keyId={fruit.key} />
             </button>
           ))}
         </div>
