@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, FruitSticker, FRUIT_LIST, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, FruitSticker, FRUIT_LIST, VegetableEmoji, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -1594,6 +1594,7 @@ function CreateScreen({
 
   // --- 日記モード ---
   const [diaryCaption, setDiaryCaption] = useState('');
+  const diaryCaptionRef = useRef<HTMLTextAreaElement>(null);
   const [diaryCaptionPhoto, setDiaryCaptionPhoto] = useState('');
   const [diaryNgError, setDiaryNgError] = useState(false);
   const [diaryFont, setDiaryFont] = useState<string>(DIARY_FONTS[0].value);
@@ -1841,7 +1842,9 @@ function CreateScreen({
                   不適切な言葉が含まれています。書き直してね。
                 </p>
               )}
+              <RetroEmojiPicker onInsert={(code) => insertRetroCode(diaryCaptionRef, code, setDiaryCaption)} />
               <textarea
+                ref={diaryCaptionRef}
                 value={diaryCaption}
                 onChange={(e) => { setDiaryCaption(e.target.value); if (diaryNgError) setDiaryNgError(false); }}
                 maxLength={200}
@@ -4265,7 +4268,7 @@ function DetailScreen({
   const likeInfo = reactions['like'] ?? { count: 0, mine: false };
   // 絵文字スタンプ（like以外）を件数の多い順に
   const stickerEntries = Object.entries(reactions)
-    .filter(([type]) => type !== 'like')
+    .filter(([type]) => type !== 'like' && !/^\[野菜:(トマト|にんじん|さつまいも)\]$/.test(type))
     .sort((a, b) => b[1].count - a[1].count);
 
   function tapLike() {
@@ -4315,6 +4318,16 @@ function DetailScreen({
               <Heart size={18} fill={likeInfo.mine ? 'currentColor' : 'none'} className={heartPop ? 'heart-pop' : ''} />
               すき{likeInfo.count > 0 && <span>{likeInfo.count}</span>}
             </button>
+
+            {([['tomato','トマト'],['carrot','にんじん'],['sweet-potato','さつまいも']] as const).map(([id, label]) => {
+              const code = `[野菜:${label}]`;
+              const info = reactions[code] ?? { count: 0, mine: false };
+              return (
+                <button key={id} onClick={() => onReact(answer.id, code)} title={`${label}でリアクション`} className={`flex items-center gap-1 rounded-full px-3 py-2 text-sm font-black shadow-card transition active:scale-95 ${info.mine ? 'bg-pink/15 text-pink ring-1 ring-pink' : 'bg-white text-ink'}`}>
+                  <VegetableEmoji id={id} label={label} size={22} />{info.count > 0 && info.count}
+                </button>
+              );
+            })}
 
             {/* 付いている絵文字スタンプ（Slack風チップ） */}
             {stickerEntries.map(([emoji, info]) => (

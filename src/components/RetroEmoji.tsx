@@ -85,6 +85,25 @@ export function PixelEmoji({ emoji, size = 22, res = 11, className }: { emoji: s
   );
 }
 
+export const VEGETABLES = [
+  ['carrot','にんじん'],['potato','じゃがいも'],['sweet-potato','さつまいも'],['daikon','大根'],['turnip','かぶ'],['radish','ラディッシュ'],['burdock','ごぼう'],['lotus-root','れんこん'],['ginger','しょうが'],['taro','さといも'],['konjac','こんにゃく芋'],['yam','長いも'],
+  ['lettuce','レタス'],['cabbage','キャベツ'],['napa-cabbage','白菜'],['spinach','ほうれん草'],['komatsuna','小松菜'],['bok-choy','チンゲンサイ'],['mizuna','水菜'],['red-leaf-lettuce','サニーレタス'],['broccoli','ブロッコリー'],['cauliflower','カリフラワー'],['kale','ケール'],['red-cabbage','紫キャベツ'],
+  ['tomato','トマト'],['cherry-tomato','ミニトマト'],['eggplant','なす'],['cucumber','きゅうり'],['zucchini','ズッキーニ'],['yellow-zucchini','黄ズッキーニ'],['green-pepper','ピーマン'],['paprika','パプリカ'],['pumpkin','かぼちゃ'],['corn','とうもろこし'],['okra','オクラ'],['goya','ゴーヤ'],
+  ['edamame','枝豆'],['broad-bean','そら豆'],['green-peas','グリーンピース'],['snap-pea','スナップエンドウ'],['green-bean','インゲン'],
+  ['shiitake','しいたけ'],['enoki','えのき'],['shimeji','しめじ'],['eringi','エリンギ'],['maitake','まいたけ'],['mushroom','マッシュルーム'],
+  ['scallion','ねぎ'],['long-scallion','長ねぎ'],['chive','ニラ'],['celery','セロリ'],['shiso','しそ'],['cilantro','パクチー'],['basil','バジル'],['mint','ミント'],['parsley','パセリ'],['rosemary','ローズマリー'],
+  ['garlic','にんにく'],['onion','玉ねぎ'],['chili','唐辛子'],['green-chili','青唐辛子'],['myoga','みょうが'],['beet','ビーツ'],['winter-melon','冬瓜'],['olive','オリーブ'],
+] as const;
+
+const VEGETABLE_BY_LABEL = Object.fromEntries(VEGETABLES.map(([id, label]) => [label, id]));
+
+export function VegetableEmoji({ id, label, size = 24 }: { id?: string; label?: string; size?: number }) {
+  const resolvedId = id ?? (label ? VEGETABLE_BY_LABEL[label] : undefined);
+  if (!resolvedId) return null;
+  const resolvedLabel = label ?? VEGETABLES.find(([candidate]) => candidate === resolvedId)?.[1] ?? '野菜';
+  return <img src={`/vegetables/${resolvedId}.gif`} width={size} height={size} alt={resolvedLabel} title={resolvedLabel} className="inline-block shrink-0 align-middle [image-rendering:pixelated]" />;
+}
+
 // 1 cell = 3 CSS px  (3px/cell × 7cells = 21px per sprite, ガラケーらしい小サイズ)
 const C = 3;
 
@@ -498,13 +517,13 @@ export const RETRO_CODES: { code: string; label: string }[] = [
 
 // ショートコードを検索する正規表現（RETRO_CODES から自動生成）
 const CODE_RE = new RegExp(
-  '(' + RETRO_CODES.map((c) => c.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')',
+  '(' + [...RETRO_CODES.map((c) => c.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '\\[野菜:[^\\]]+\\]'].join('|') + ')',
   'g'
 );
 
 /** 文字列が単一のレトロコードか（＝ピクセルデコ・スタンプか） */
 export function isRetroCode(s: string): boolean {
-  return !!CODE_RENDER[s];
+  return !!CODE_RENDER[s] || /^\[野菜:[^\]]+\]$/.test(s);
 }
 
 /** テキスト中のショートコードをアニメSVGに変換して表示 */
@@ -514,8 +533,11 @@ export function RetroText({ text, className }: { text: string; className?: strin
     <span className={className} style={{ wordBreak: 'break-word' }}>
       {parts.map((part, i) => {
         const factory = CODE_RENDER[part];
+        const vegetable = part.match(/^\[野菜:([^\]]+)\]$/)?.[1];
         return factory
           ? <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', margin: '0 1px' }}>{factory()}</span>
+          : vegetable && VEGETABLE_BY_LABEL[vegetable]
+            ? <VegetableEmoji key={i} label={vegetable} />
           : <React.Fragment key={i}>{part}</React.Fragment>;
       })}
     </span>
@@ -524,19 +546,28 @@ export function RetroText({ text, className }: { text: string; className?: strin
 
 /** テキストエリアの上に表示する絵文字ピッカーボタン列 */
 export function RetroEmojiPicker({ onInsert }: { onInsert: (code: string) => void }) {
+  const [vegetablesOpen, setVegetablesOpen] = React.useState(false);
   return (
-    <div className="flex gap-1.5 overflow-x-auto rounded-2xl bg-base px-3 py-2">
-      {RETRO_CODES.map(({ code, label }) => (
-        <button
-          key={code}
-          type="button"
-          title={label}
-          onClick={() => onInsert(code)}
-          className="flex shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-card transition active:scale-90 hover:bg-pink/10"
-        >
-          {CODE_RENDER[code]?.()}
+    <div className="rounded-2xl bg-base px-3 py-2">
+      <div className="flex gap-1.5 overflow-x-auto">
+        <button type="button" onClick={() => setVegetablesOpen(!vegetablesOpen)} aria-expanded={vegetablesOpen} className={`flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-black shadow-card transition ${vegetablesOpen ? 'bg-pink text-white' : 'bg-white text-ink'}`}>
+          <VegetableEmoji id="carrot" size={22} /> 野菜
         </button>
-      ))}
+        {RETRO_CODES.map(({ code, label }) => (
+          <button key={code} type="button" title={label} aria-label={label} onClick={() => onInsert(code)} className="flex shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-card transition active:scale-90 hover:bg-pink/10">
+            {CODE_RENDER[code]?.()}
+          </button>
+        ))}
+      </div>
+      {vegetablesOpen && (
+        <div className="mt-2 grid max-h-52 grid-cols-6 gap-1.5 overflow-y-auto rounded-xl bg-white/70 p-2 sm:grid-cols-8">
+          {VEGETABLES.map(([id, label]) => (
+            <button key={id} type="button" title={label} aria-label={label} onClick={() => onInsert(`[野菜:${label}]`)} className="grid aspect-square place-items-center rounded-xl bg-white shadow-sm transition hover:bg-pink/10 active:scale-90">
+              <VegetableEmoji id={id} label={label} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1541,6 +1572,8 @@ export function FruitSticker({ keyId, size = 24, animated = true }: { keyId: str
 export function ReactionGlyph({ value, size = 20 }: { value: string; size?: number }) {
   if (value.startsWith('f:')) return <FruitSticker keyId={value.slice(2)} size={size} />;
   if (value.startsWith('g:')) return <GarakeSticker keyId={value.slice(2)} size={size} />;
+  const vegetable = value.match(/^\[野菜:([^\]]+)\]$/)?.[1];
+  if (vegetable) return <VegetableEmoji label={vegetable} size={size} />;
   if (isRetroCode(value)) return <RetroText text={value} />;
   // 旧仕様の 'px:😊' は通常絵文字として表示（自動ドット化は廃止）
   const shown = value.startsWith('px:') ? value.slice(3) : value;
