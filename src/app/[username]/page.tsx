@@ -2200,7 +2200,7 @@ function ProfileBookContent({
           {monthlyBest3.items.some((v) => v.trim()) ? (
             <div className="space-y-1 pl-1">
               {monthlyBest3.items.map((item, i) => item.trim() && (
-                <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+                <p key={i} className="text-[15px] text-ink prof-hand">{medals[i]} {item}</p>
               ))}
             </div>
           ) : (
@@ -2225,7 +2225,7 @@ function ProfileBookContent({
                   <p className={`mb-1.5 text-xs font-black ${accent}`}>{cat.emoji} {cat.label}</p>
                   <div className="space-y-1 pl-1">
                     {items.map((item, i) => (
-                      <p key={i} className="text-sm font-bold text-ink">{medals[i]} {item}</p>
+                      <p key={i} className="text-[15px] text-ink prof-hand">{medals[i]} {item}</p>
                     ))}
                   </div>
                 </div>
@@ -2251,7 +2251,7 @@ function ProfileBookContent({
               {visibleQA.map((item, i) => (
                 <div key={i} className={`py-3 ${i < visibleQA.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
                   <p className={`text-[11px] font-black ${accent}`}>Q{i + 1}. {item.q}</p>
-                  <p className="mt-1 text-sm font-bold text-ink leading-relaxed">➜ {item.a}</p>
+                  <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">➜ {item.a}</p>
                 </div>
               ))}
             </div>
@@ -2287,7 +2287,7 @@ function ProfileBookContent({
                 <p className={`text-[11px] font-black ${accent}`}>
                   {typeof answer.question === 'string' ? answer.question : answer.question?.title}
                 </p>
-                <p className="mt-1 text-sm font-bold text-ink leading-relaxed">{answer.body}</p>
+                <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">{answer.body}</p>
               </button>
             ))}
           </div>
@@ -4576,7 +4576,7 @@ function ProfileLine({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className={`mx-3 h-7 w-[3px] shrink-0 rounded-full ${bar} opacity-70`} />
-      <div className="min-w-0 flex-1 break-words text-[15px] text-ink prof-hand">
+      <div className="min-w-0 flex-1 break-words text-[17px] leading-snug text-ink prof-hand">
         {value || <span className="text-muted/60 font-medium">…</span>}
       </div>
     </div>

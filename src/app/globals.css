@@ -330,27 +330,30 @@ button, input, textarea { font: inherit; }
     linear-gradient(165deg, #ffb3d3 0%, #ff8fbc 55%, #ff6fa8 100%);
 }
 
-/* バブル見出し：白→黄→ピンクのグラデ文字＋ピンク縁取り */
+/* 見出し：丸ゴシック＋白フチ＋控えめな影の、読みやすい可愛いシール見出し */
 .prof-bubble {
-  font-weight: 900;
-  font-style: italic;
-  letter-spacing: .01em;
-  background: linear-gradient(180deg, #ffffff 0%, #fff0a6 46%, #ff8fbe 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-stroke: 2.5px #ff3d8b;
-  paint-order: stroke fill;
-  text-shadow: 0 2px 0 rgba(255,61,139,.30), 0 4px 8px rgba(0,0,0,.18);
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #f2609b;
+  text-shadow:
+    1.5px 1.5px 0 #fff, -1.5px 1.5px 0 #fff,
+    1.5px -1.5px 0 #fff, -1.5px -1.5px 0 #fff,
+    0 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 -2px 0 #fff,
+    2px 3px 0 rgba(214,60,120,.16),
+    0 4px 7px rgba(0,0,0,.10);
 }
 .prof-bubble-blue {
-  background: linear-gradient(180deg, #ffffff 0%, #bfeaff 46%, #4aa8ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-stroke: 2.5px #1d7fd6;
-  paint-order: stroke fill;
-  text-shadow: 0 2px 0 rgba(29,127,214,.30), 0 4px 8px rgba(0,0,0,.18);
+  font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: #4a9fe0;
+  text-shadow:
+    1.5px 1.5px 0 #fff, -1.5px 1.5px 0 #fff,
+    1.5px -1.5px 0 #fff, -1.5px -1.5px 0 #fff,
+    0 2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 -2px 0 #fff,
+    2px 3px 0 rgba(40,120,200,.16),
+    0 4px 7px rgba(0,0,0,.10);
 }
 
 /* 白ピル（1項目1枚のカード）: ぷっくりした影で紙シールっぽく */
@@ -360,9 +363,10 @@ button, input, textarea { font: inherit; }
   box-shadow: 0 3px 0 rgba(0,0,0,.07), 0 6px 14px rgba(0,0,0,.10);
 }
 
-/* 手書き風の回答（丸ゴシック太字で代用しつつ少し傾ける） */
+/* 手書き風の回答（万年筆風の手書きフォント Klee One / 太めで視認性◎） */
 .prof-hand {
-  font-weight: 800;
+  font-family: "Klee One", "Zen Kurenaido", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  font-weight: 600;
   letter-spacing: .01em;
 }
 
