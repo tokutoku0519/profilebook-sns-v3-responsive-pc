@@ -1276,9 +1276,9 @@ function HomeScreen({
 
       {/* フィードのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 92px)' }} onClick={() => setStickerPickerFor(null)}>
+        <div className="pixel-picker-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="pixel-picker-sheet relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
             <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
           </div>
@@ -1433,9 +1433,9 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
 
       {/* さがすのカードから直接スタンプでリアクション（ボトムシート） */}
       {stickerPickerFor && onReact && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 92px)' }} onClick={() => setStickerPickerFor(null)}>
+        <div className="pixel-picker-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
-          <div className="relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="pixel-picker-sheet relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
             <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
             <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
           </div>
@@ -4175,7 +4175,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const vegetableTab = pickerMode === 'pixel' && pixelCat === VEGETABLE_CAT;
   const fruitTab = pickerMode === 'pixel' && pixelCat === FRUIT_CAT;
   return (
-    <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
+    <div className="pixel-picker space-y-2 rounded-2xl bg-white p-3 shadow-card">
       <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1 text-xs font-black">
         <button type="button" onClick={() => setPickerMode('emoji')} className={`rounded-xl py-2.5 transition ${pickerMode === 'emoji' ? 'bg-white text-pink shadow-sm' : 'text-muted'}`}>絵文字</button>
         <button type="button" onClick={() => { setPickerMode('pixel'); setInput(''); }} className={`rounded-xl py-2.5 transition ${pickerMode === 'pixel' ? 'bg-white text-pink shadow-sm' : 'text-muted'}`}>ピクセル絵文字</button>
@@ -4215,7 +4215,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
       )}
       {/* 一覧：野菜・フルーツカテゴリならドット絵、そうでなければ通常絵文字 */}
       {vegetableTab ? (
-        <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+        <div className="pixel-picker-grid grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
           {VEGETABLES.map(([id, label]) => (
             <button key={id} onClick={() => onPick(`[野菜:${label}]`)} aria-label={label} title={label}
               className="grid h-12 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
@@ -4224,7 +4224,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           ))}
         </div>
       ) : fruitTab ? (
-        <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+        <div className="pixel-picker-grid grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
           {FRUIT_LIST.map((f) => (
             <button key={f.key} onClick={() => onPick('f:' + f.key)} aria-label={f.label}
               className="grid h-12 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
@@ -4235,7 +4235,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
       ) : pickerMode === 'emoji' && searching && searchHits.length === 0 ? (
         <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
       ) : (
-        <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
+        <div className="emoji-picker-grid grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
           {(searching ? searchHits : current.emojis).map((emoji, i) => (
             <button
               key={emoji + i}

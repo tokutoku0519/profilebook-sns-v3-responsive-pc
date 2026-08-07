@@ -101,7 +101,7 @@ export function VegetableEmoji({ id, label, size = 24 }: { id?: string; label?: 
   const resolvedId = id ?? (label ? VEGETABLE_BY_LABEL[label] : undefined);
   if (!resolvedId) return null;
   const resolvedLabel = label ?? VEGETABLES.find(([candidate]) => candidate === resolvedId)?.[1] ?? '野菜';
-  return <img src={`/vegetables/${resolvedId}.gif`} width={size} height={size} alt={resolvedLabel} title={resolvedLabel} className="inline-block shrink-0 align-middle [image-rendering:pixelated]" />;
+  return <img src={`/vegetables/${resolvedId}.gif`} width={size} height={size} alt={resolvedLabel} title={resolvedLabel} className="pixel-emoji-image inline-block shrink-0 align-middle [image-rendering:pixelated]" />;
 }
 
 // 1 cell = 3 CSS px  (3px/cell × 7cells = 21px per sprite, ガラケーらしい小サイズ)
@@ -1569,6 +1569,7 @@ export function FruitSticker({ keyId, size = 24, animated = true }: { keyId: str
   return (
     <span className={animated ? f.anim : undefined} style={{ display: 'inline-block', verticalAlign: 'middle', lineHeight: 0 }}>
       <svg
+        className="pixel-emoji-art"
         width={size}
         height={size}
         viewBox={`${offX * C} ${offY * C} ${side * C} ${side * C}`}

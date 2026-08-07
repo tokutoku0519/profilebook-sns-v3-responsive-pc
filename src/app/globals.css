@@ -450,3 +450,74 @@ button, input, textarea { font: inherit; }
   80% { filter: brightness(1.55) saturate(1.15); }
 }
 .fruit-glow { animation: fruit-glow 2.6s ease-in-out infinite; }
+
+/* ── 絵文字・ピクセル絵文字ピッカー：端末／ブラウザ共通レイアウト ── */
+.pixel-picker-overlay {
+  padding-right: max(12px, env(safe-area-inset-right));
+  padding-bottom: calc(env(safe-area-inset-bottom) + 92px);
+  padding-left: max(12px, env(safe-area-inset-left));
+}
+.pixel-picker-sheet {
+  max-height: calc(100vh - 116px);
+  max-height: calc(100dvh - 116px);
+}
+.pixel-picker {
+  width: 100%;
+  max-height: calc(100vh - 140px);
+  max-height: calc(100dvh - 140px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.pixel-picker-grid,
+.emoji-picker-grid {
+  max-height: min(13rem, calc(100vh - 310px));
+  max-height: min(13rem, calc(100dvh - 310px));
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.pixel-picker-grid > button,
+.emoji-picker-grid > button {
+  min-width: 0;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.pixel-emoji-image,
+.pixel-emoji-art {
+  display: block;
+  flex: none;
+  max-width: none;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  transform: translateZ(0);
+}
+
+@media (max-width: 359px) {
+  .pixel-picker { padding: 10px; }
+  .pixel-picker-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .emoji-picker-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+}
+
+@media (min-width: 600px) {
+  .pixel-picker-sheet { max-width: 36rem; }
+  .pixel-picker-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .emoji-picker-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .pixel-picker-grid > button,
+  .emoji-picker-grid > button { min-height: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pixel-picker .fruit-bounce,
+  .pixel-picker .fruit-roll,
+  .pixel-picker .fruit-wobble,
+  .pixel-picker .fruit-rotate,
+  .pixel-picker .fruit-shake,
+  .pixel-picker .fruit-leaf,
+  .pixel-picker .fruit-open,
+  .pixel-picker .fruit-glow { animation: none !important; }
+}
