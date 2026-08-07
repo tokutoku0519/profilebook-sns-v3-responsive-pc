@@ -4138,38 +4138,23 @@ function getOwnedStickerEmojis(ownedPackIds: string[], ownedGachaStickers: strin
 
 // アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）。myStickers があれば先頭に「マイスタンプ」タブ。
 function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => void; myStickers?: string[] }) {
+  // フルーツ（ドット絵）は専用カテゴリとして絵文字カテゴリの一員に混ぜる（🍓アイコンのみ・文字ラベルなし）
+  const FRUIT_CAT = '__fruit';
   const categories = myStickers.length > 0
     ? [{ id: 'mine', label: 'マイスタンプ', icon: '🎁', emojis: myStickers }, ...EMOJI_CATEGORIES]
     : EMOJI_CATEGORIES;
+  const tabs = [...categories, { id: FRUIT_CAT, label: 'フルーツ', icon: '🍓', emojis: [] }];
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
-  const [fruitMode, setFruitMode] = useState(false); // フルーツのドット絵タブ
   const current = categories.find((c) => c.id === cat) ?? categories[0];
   const submitInput = () => { const e = firstGrapheme(input); if (e) { onPick(e); setInput(''); } };
   // 入力があればキーワード検索（例:「ハート」「ねこ」「わらい」）。ヒットしなければ直接入力扱い。
   const q = input.trim();
   const searchHits = q ? searchEmojis(q) : [];
   const searching = q.length > 0;
+  const fruitTab = cat === FRUIT_CAT && !searching;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
-      {/* 通常 / フルーツ(ドット絵) 切り替え */}
-      <div className="flex items-center gap-1 rounded-full bg-base p-1 text-[11px] font-black">
-        <button onClick={() => setFruitMode(false)} className={`flex-1 rounded-full py-1.5 transition ${!fruitMode ? 'bg-white text-ink shadow-sm' : 'text-muted'}`}>🔤 絵文字</button>
-        <button onClick={() => setFruitMode(true)} className={`flex-1 rounded-full py-1.5 transition ${fruitMode ? 'bg-green-500 text-white shadow-sm' : 'text-muted'}`}>🍓 フルーツ</button>
-      </div>
-
-      {fruitMode ? (
-        /* フルーツ＝手描きのドット絵のみ（動くアイドルアニメ付き） */
-        <div className="grid max-h-56 grid-cols-5 gap-1 overflow-y-auto pt-1">
-          {FRUIT_LIST.map((f) => (
-            <button key={f.key} onClick={() => onPick('f:' + f.key)} aria-label={f.label}
-              className="grid h-14 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
-              <FruitSticker keyId={f.key} size={34} />
-            </button>
-          ))}
-        </div>
-      ) : (
-      <>
       {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
       <div className="flex items-center gap-2">
         <input
@@ -4181,10 +4166,10 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
-      {/* カテゴリタブ（検索中は隠す） */}
+      {/* カテゴリタブ（検索中は隠す）。末尾に🍓フルーツ（ドット絵）カテゴリ */}
       {!searching && (
         <div className="flex gap-1 overflow-x-auto pb-1">
-          {categories.map((c) => (
+          {tabs.map((c) => (
             <button
               key={c.id}
               onClick={() => setCat(c.id)}
@@ -4196,8 +4181,17 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           ))}
         </div>
       )}
-      {/* 絵文字一覧（検索中は検索結果、そうでなければカテゴリ） */}
-      {searching && searchHits.length === 0 ? (
+      {/* 一覧：フルーツカテゴリならドット絵、そうでなければ絵文字（検索中は検索結果） */}
+      {fruitTab ? (
+        <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+          {FRUIT_LIST.map((f) => (
+            <button key={f.key} onClick={() => onPick('f:' + f.key)} aria-label={f.label}
+              className="grid h-12 w-full place-items-center rounded-xl transition hover:bg-green-500/10 active:scale-90">
+              <FruitSticker keyId={f.key} size={30} />
+            </button>
+          ))}
+        </div>
+      ) : searching && searchHits.length === 0 ? (
         <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
       ) : (
         <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
@@ -4211,8 +4205,6 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
             </button>
           ))}
         </div>
-      )}
-      </>
       )}
     </div>
   );
