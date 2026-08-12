@@ -5817,6 +5817,7 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
 }) {
   const [comment, setComment] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const d = new Date(post.postedAt);
   const dateStr = d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
   const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
@@ -5855,6 +5856,19 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
               <Heart size={15} fill={post.likedByMe ? 'currentColor' : 'none'} className={post.likedByMe ? 'heart-pop' : ''} />いいね {post.likes}
             </button>
             <span className="rounded-full bg-base px-3 py-1.5 text-xs font-black text-muted">💬 コメント {post.comments.length}</span>
+            {post.visibility === 'public' && !post.id.startsWith('b-') && (
+              <button
+                onClick={async () => {
+                  const url = `${location.origin}/b/${post.id}`;
+                  try {
+                    if (navigator.share) { await navigator.share({ title: post.title || 'ブログ記事', url }); }
+                    else { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); }
+                  } catch { try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch {} }
+                }}
+                className="ml-auto rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-500 transition active:scale-95">
+                {linkCopied ? '✓ コピー済' : '🔗 リンク'}
+              </button>
+            )}
           </div>
         </article>
 
