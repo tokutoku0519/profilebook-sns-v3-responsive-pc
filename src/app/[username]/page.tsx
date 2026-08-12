@@ -1217,7 +1217,7 @@ function HomeScreen({
               <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
                 <p className="text-sm">{p.weather}{p.mood}</p>
                 <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</p>
-                <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={p.body} /></p>
+                <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                 <p className="mt-3 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
               </button>
             ))}
@@ -2590,7 +2590,7 @@ function OtherProfileScreen({
                 <button key={p.id} onClick={() => onOpenBlog?.(p)}
                   className="block w-full rounded-2xl bg-base p-3 text-left transition active:scale-[0.99]">
                   <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</span></p>
-                  <p className="mt-1 line-clamp-1 text-xs font-bold text-muted"><RetroText text={p.body} /></p>
+                  <p className="mt-1 line-clamp-1 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                   <p className="mt-1 text-[10px] font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
                 </button>
               ))}
@@ -5469,6 +5469,237 @@ function DiaryCreateScreen({
 
 // ===================== ブログ画面（個人記事・交換日記とは別機能） =====================
 
+// ============ アメブロ風ブログ：リッチ本文 ============
+// 本文(body)にマークアップを埋め込んで保存（SQL不要）。
+//  先頭 [[bg:ID]] = 記事背景 / 行頭 "# " = 見出し(大) / "## " = 見出し(小)
+//  行 "---" = 区切り線 / 行 [[img:URL]] = 画像 / 本文内 [[c:#hex]]..[[/c]] = 文字色
+//  [[hl]]..[[/hl]] or [[hl:#hex]] = ハイライト / [[big]]..[[/big]] 大 / [[small]]..[[/small]] 小
+type BlogBlock =
+  | { type: 'p'; text: string }
+  | { type: 'h'; level: 2 | 3; text: string }
+  | { type: 'img'; url: string }
+  | { type: 'hr' }
+  | { type: 'space' };
+
+const BLOG_BG: { id: string; label: string; style: React.CSSProperties }[] = [
+  { id: 'plain',    label: 'なし',       style: { background: '#ffffff' } },
+  { id: 'cream',    label: 'クリーム',   style: { background: '#FFF8EE' } },
+  { id: 'sakura',   label: 'さくら',     style: { background: 'linear-gradient(160deg,#fff1f6,#ffe3ef)' } },
+  { id: 'sky',      label: 'そら',       style: { background: 'linear-gradient(160deg,#eef6ff,#dcecff)' } },
+  { id: 'mint',     label: 'ミント',     style: { background: 'linear-gradient(160deg,#effaf3,#dcf3e6)' } },
+  { id: 'lemon',    label: 'レモン',     style: { background: 'linear-gradient(160deg,#fffbe6,#fff2c2)' } },
+  { id: 'lavender', label: 'ラベンダー', style: { background: 'linear-gradient(160deg,#f5f0ff,#e9e0ff)' } },
+  { id: 'dot',      label: 'ドット',     style: { backgroundColor: '#fff7fb', backgroundImage: 'radial-gradient(rgba(236,72,153,.12) 1.4px, transparent 1.4px)', backgroundSize: '14px 14px' } },
+  { id: 'grid',     label: '方眼',       style: { backgroundColor: '#ffffff', backgroundImage: 'linear-gradient(rgba(120,120,160,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(120,120,160,.10) 1px,transparent 1px)', backgroundSize: '20px 20px' } },
+];
+const BLOG_BG_BY_ID = Object.fromEntries(BLOG_BG.map((b) => [b.id, b]));
+
+// body から背景IDとブロック列を取り出す
+function parseBlogDoc(body: string): { bgId: string; blocks: BlogBlock[] } {
+  let text = body ?? '';
+  let bgId = 'plain';
+  const bgM = text.match(/^\[\[bg:([a-z0-9_-]+)\]\]\n?/i);
+  if (bgM) { bgId = bgM[1]; text = text.slice(bgM[0].length); }
+  const blocks: BlogBlock[] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    if (/^\s*---\s*$/.test(line)) { blocks.push({ type: 'hr' }); continue; }
+    const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
+    if (img) { blocks.push({ type: 'img', url: img[1] }); continue; }
+    const h3 = line.match(/^##\s+(.*)$/);
+    if (h3) { blocks.push({ type: 'h', level: 3, text: h3[1] }); continue; }
+    const h2 = line.match(/^#\s+(.*)$/);
+    if (h2) { blocks.push({ type: 'h', level: 2, text: h2[1] }); continue; }
+    if (line.trim() === '') { blocks.push({ type: 'space' }); continue; }
+    blocks.push({ type: 'p', text: line });
+  }
+  return { bgId, blocks };
+}
+
+// 一覧・フィードのプレビュー用：マークアップを外したプレーン文字列
+function blogPlain(body: string): string {
+  let t = body ?? '';
+  t = t.replace(/^\[\[bg:[^\]]+\]\]\n?/i, '');
+  t = t.replace(/^\[\[img:[^\]]+\]\]$/gim, '');
+  t = t.replace(/^\s*---\s*$/gim, '');
+  t = t.replace(/^#{1,2}\s+/gim, '');
+  t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]/g, '');
+  return t.replace(/\n{2,}/g, '\n').trim();
+}
+
+const BLOG_INLINE_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]([\s\S]*?)\[\[\/(?:c|hl|big|small)\]\]/g;
+// 本文内のインライン装飾（色・ハイライト・大小）を描画。装飾外は RetroText（ガチャ絵文字対応）
+function renderBlogInline(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let last = 0; let k = 0; let m: RegExpExecArray | null;
+  BLOG_INLINE_RE.lastIndex = 0;
+  while ((m = BLOG_INLINE_RE.exec(text))) {
+    if (m.index > last) out.push(<RetroText key={k++} text={text.slice(last, m.index)} />);
+    const tag = m[1]; const inner = m[2];
+    const style: React.CSSProperties = {};
+    if (tag.startsWith('c:#')) style.color = tag.slice(2);
+    else if (tag.startsWith('hl')) { style.backgroundColor = tag.includes(':#') ? tag.split(':')[1] : '#fff59d'; style.padding = '0 .14em'; style.borderRadius = '.25em'; }
+    else if (tag === 'big') style.fontSize = '1.35em';
+    else if (tag === 'small') style.fontSize = '0.82em';
+    out.push(<span key={k++} style={style}><RetroText text={inner} /></span>);
+    last = BLOG_INLINE_RE.lastIndex;
+  }
+  if (last < text.length) out.push(<RetroText key={k++} text={text.slice(last)} />);
+  return out;
+}
+
+// ブログ本文レンダラ（詳細で使用）
+function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
+  const { blocks } = parseBlogDoc(body);
+  return (
+    <div className="space-y-1.5">
+      {blocks.map((b, i) => {
+        if (b.type === 'hr') return <hr key={i} className="my-4 border-0 border-t-2 border-dashed border-pink/30" />;
+        if (b.type === 'space') return <div key={i} className="h-2.5" />;
+        if (b.type === 'img') return <div key={i} className="my-3 overflow-hidden rounded-2xl shadow-sm"><img src={b.url} alt="" className="w-full object-cover" /></div>;
+        if (b.type === 'h') return b.level === 3
+          ? <h4 key={i} className="mt-3 mb-0.5 text-base font-black" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h4>
+          : <h3 key={i} className="mt-4 mb-1 border-l-4 border-pink/40 pl-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h3>;
+        return <p key={i} className="text-base font-bold leading-8 text-ink">{renderBlogInline(b.text)}</p>;
+      })}
+    </div>
+  );
+}
+
+// アメブロ風リッチエディタ（ツールバー＋テキストエリア＋背景選択＋プレビュー）
+function BlogRichEditor({
+  title, setTitle, body, setBody, mood, setMood, weather, setWeather,
+  titleColor, setTitleColor, bgId, setBgId, bodyRef, ngError,
+}: {
+  title: string; setTitle: (v: string) => void;
+  body: string; setBody: (v: string) => void;
+  mood: string; setMood: (v: string) => void;
+  weather: string; setWeather: (v: string) => void;
+  titleColor: string; setTitleColor: (v: string) => void;
+  bgId: string; setBgId: (v: string) => void;
+  bodyRef: React.RefObject<HTMLTextAreaElement | null>;
+  ngError?: boolean;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
+
+  function replaceSel(makeRep: (sel: string) => string) {
+    const el = bodyRef.current;
+    const s = el?.selectionStart ?? body.length;
+    const e = el?.selectionEnd ?? s;
+    const sel = body.slice(s, e);
+    const rep = makeRep(sel);
+    const next = body.slice(0, s) + rep + body.slice(e);
+    setBody(next);
+    requestAnimationFrame(() => { if (el) { el.focus(); const pos = s + rep.length; el.selectionStart = el.selectionEnd = pos; } });
+  }
+  const wrap = (o: string, c: string) => replaceSel((sel) => `${o}${sel || 'テキスト'}${c}`);
+  function insertLine(text: string) {
+    const el = bodyRef.current;
+    const s = el?.selectionStart ?? body.length;
+    const before = body.slice(0, s); const after = body.slice(s);
+    const nl1 = before === '' || before.endsWith('\n') ? '' : '\n';
+    const nl2 = after === '' || after.startsWith('\n') ? '' : '\n';
+    const next = before + nl1 + text + nl2 + after;
+    setBody(next);
+    requestAnimationFrame(() => { if (el) { el.focus(); const pos = (before + nl1 + text).length; el.selectionStart = el.selectionEnd = pos; } });
+  }
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = (ev) => insertLine(`[[img:${ev.target?.result}]]`);
+    r.readAsDataURL(f); e.target.value = '';
+  }
+
+  const btn = 'shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-black text-ink shadow-card transition active:scale-90 hover:bg-pink/10';
+  return (
+    <div className="space-y-3">
+      {/* タイトル */}
+      <input
+        value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40}
+        placeholder="タイトル（例：今日のできごと♪）"
+        className="w-full rounded-2xl border border-purple/15 bg-white px-4 py-2.5 text-base font-black outline-none focus:border-pink"
+        style={{ color: titleColor }}
+      />
+      {/* 見出し色 */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-black text-muted">見出し色</span>
+        {DIARY_TITLE_COLORS.map((c) => (
+          <button key={c.value} type="button" onClick={() => setTitleColor(c.value)} aria-label={c.label}
+            className={`h-6 w-6 rounded-full ring-2 transition ${titleColor === c.value ? 'ring-ink scale-110' : 'ring-white'}`}
+            style={{ background: c.value }} />
+        ))}
+      </div>
+      {/* 気分・天気 */}
+      <div className="flex flex-wrap gap-1">
+        {DIARY_MOODS.map((m) => (
+          <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
+            className={`grid h-8 w-8 place-items-center rounded-lg text-lg transition ${mood === m ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}>{m}</button>
+        ))}
+        <span className="mx-1 w-px self-stretch bg-purple/15" />
+        {DIARY_WEATHERS.map((w) => (
+          <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
+            className={`grid h-8 w-8 place-items-center rounded-lg text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-base'}`}>{w}</button>
+        ))}
+      </div>
+
+      {/* ツールバー */}
+      <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
+        <button type="button" className={btn} onClick={() => insertLine(`# ${''}`)}>見出し</button>
+        <button type="button" className={btn} onClick={() => insertLine(`## ${''}`)}>小見出し</button>
+        <button type="button" className={btn} onClick={() => wrap('[[big]]', '[[/big]]')}>大</button>
+        <button type="button" className={btn} onClick={() => wrap('[[small]]', '[[/small]]')}>小</button>
+        <button type="button" className={btn} onClick={() => wrap('[[hl]]', '[[/hl]]')}>🖍 マーカー</button>
+        <button type="button" className={btn} onClick={() => insertLine('---')}>― 区切り</button>
+        <button type="button" className={btn} onClick={() => fileRef.current?.click()}>🖼 写真</button>
+        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+      </div>
+      {/* 文字色パレット */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-black text-muted">文字色</span>
+        {TEXT_COLORS.map((col) => (
+          <button key={col} type="button" onClick={() => wrap(`[[c:${col}]]`, '[[/c]]')} aria-label={`色 ${col}`}
+            className="h-6 w-6 rounded-full ring-2 ring-white transition active:scale-90" style={{ background: col }} />
+        ))}
+      </div>
+
+      {/* 本文 */}
+      <textarea
+        ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)}
+        rows={9} maxLength={4000}
+        placeholder={'本文を書こう。\n選択して「大」「マーカー」「文字色」、行頭で「見出し」「区切り」「写真」が使えます。'}
+        className={`w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base font-bold leading-8 text-ink outline-none focus:border-pink ${ngError ? 'border-red-400' : 'border-purple/15'}`}
+      />
+      {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}
+
+      {/* 記事背景 */}
+      <div>
+        <p className="mb-1.5 text-[11px] font-black text-muted">記事の背景</p>
+        <div className="flex flex-wrap gap-1.5">
+          {BLOG_BG.map((b) => (
+            <button key={b.id} type="button" onClick={() => setBgId(b.id)} title={b.label}
+              className={`h-9 w-9 rounded-xl ring-2 transition ${bgId === b.id ? 'ring-pink scale-110' : 'ring-white'}`}
+              style={b.style} />
+          ))}
+        </div>
+      </div>
+
+      {/* プレビュー */}
+      {(title.trim() || body.trim()) && (
+        <div>
+          <p className="mb-1.5 text-[11px] font-black text-muted">プレビュー</p>
+          <div className="overflow-hidden rounded-2xl border border-purple/10">
+            <div className="p-4" style={(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style}>
+              {title.trim() && <h3 className="mb-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>✿ <RetroText text={title} /></h3>}
+              <BlogBody body={body} titleColor={titleColor} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[] }) {
   const [tab, setTab] = useState<'all' | 'mine'>('all');
   const base = tab === 'mine' ? posts.filter((p) => p.authorId === me.id) : posts;
@@ -5503,7 +5734,7 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
               </div>
               <div className="p-4">
                 {p.title && <p className="mb-1 text-base font-black leading-snug" style={{ color: p.textColor || '#EC4899' }}>✿ <RetroText text={p.title} /></p>}
-                <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={p.body} /></p>
+                <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={blogPlain(p.body)} /></p>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="grid h-8 w-8 place-items-center rounded-full bg-pink/10 text-base">{p.authorAvatar}</span>
@@ -5529,7 +5760,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   const [mood, setMood] = useState('');
   const [weather, setWeather] = useState('');
   const [titleColor, setTitleColor] = useState(DIARY_TITLE_COLORS[0].value);
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [bgId, setBgId] = useState('plain');
   const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
   const [ngError, setNgError] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -5538,7 +5769,9 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
     if (!canPost) return;
-    const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: body.trim(), photoUrl: photoUrl || undefined, textColor: titleColor, visibility });
+    // 背景を本文先頭に埋め込んで保存（SQL不要）
+    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + body.trim();
+    const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
     if (id) go('blog-detail', id);
   }
 
@@ -5547,15 +5780,14 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
       <AppHeader title="記事を書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <DiaryComposer
+          <BlogRichEditor
             title={title} setTitle={setTitle}
-            body={body} setBody={setBody}
+            body={body} setBody={(v) => { setBody(v); if (ngError) setNgError(false); }}
             mood={mood} setMood={setMood}
             weather={weather} setWeather={setWeather}
             titleColor={titleColor} setTitleColor={setTitleColor}
-            photoUrl={photoUrl} setPhotoUrl={setPhotoUrl}
+            bgId={bgId} setBgId={setBgId}
             bodyRef={bodyRef} ngError={ngError}
-            onBodyChange={() => { if (ngError) setNgError(false); }}
           />
         </section>
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -5589,6 +5821,7 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
   const dateStr = d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
   const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
   const isMine = post.authorId === me.id;
+  const blogBg = (BLOG_BG_BY_ID[parseBlogDoc(post.body).bgId] ?? BLOG_BG[0]).style;
   function submitComment() {
     const text = comment.trim();
     if (!text || containsNgWord(text)) return;
@@ -5604,10 +5837,10 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
             <p className="text-[11px] font-black text-muted">🗓 {dateStr} {timeStr}</p>
             <div className="flex items-center gap-1 text-base">{post.weather}{post.mood}</div>
           </div>
-          <div className="p-4">
+          <div className="p-4" style={blogBg}>
             {post.title && <h3 className="mb-2 text-xl font-black leading-snug" style={{ color: post.textColor || '#EC4899' }}>✿ <RetroText text={post.title} /></h3>}
-            <p className="text-base font-bold leading-8 text-ink"><RetroText text={post.body} /></p>
-            {post.photoUrl && <div className="mt-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
+            {post.photoUrl && <div className="mb-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
+            <BlogBody body={post.body} titleColor={post.textColor} />
             <div className="mt-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="grid h-9 w-9 place-items-center rounded-full bg-pink/10 text-lg">{post.authorAvatar}</span>
