@@ -5495,7 +5495,7 @@ type BlogBlock =
   | { type: 'p'; text: string }
   | { type: 'h'; level: 2 | 3; text: string }
   | { type: 'img'; url: string }
-  | { type: 'hr'; variant?: string }
+  | { type: 'hr'; variant?: string; color?: string }
   | { type: 'space' };
 
 // 区切り線バリエーション（ギャルっぽい装飾ライン）
@@ -5532,8 +5532,8 @@ function parseBlogDoc(body: string): { bgId: string; blocks: BlogBlock[] } {
   for (const raw of text.split('\n')) {
     const line = raw.replace(/\s+$/, '');
     if (/^\s*---\s*$/.test(line)) { blocks.push({ type: 'hr' }); continue; }
-    const hrv = line.match(/^\[\[hr:([a-z]+)\]\]$/);
-    if (hrv) { blocks.push({ type: 'hr', variant: hrv[1] }); continue; }
+    const hrv = line.match(/^\[\[hr:([a-z]+)(?::(#[0-9a-fA-F]{3,8}))?\]\]$/);
+    if (hrv) { blocks.push({ type: 'hr', variant: hrv[1], color: hrv[2] || undefined }); continue; }
     const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
     if (img) { blocks.push({ type: 'img', url: img[1] }); continue; }
     const h3 = line.match(/^##\s+(.*)$/);
@@ -5616,8 +5616,8 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
       {blocks.map((b, i) => {
         if (b.type === 'hr') {
           if (b.variant && b.variant !== 'line' && DIVIDER_TEXT[b.variant] !== undefined)
-            return <div key={i} className="my-4 text-center text-sm font-black tracking-widest text-pink/70">{DIVIDER_TEXT[b.variant]}</div>;
-          return <hr key={i} className="my-4 border-0 border-t-2 border-dashed border-pink/30" />;
+            return <div key={i} className="my-4 text-center text-sm font-black tracking-widest" style={{ color: b.color || 'rgba(236,72,153,.7)' }}>{DIVIDER_TEXT[b.variant]}</div>;
+          return <hr key={i} className="my-4 border-0 border-t-2 border-dashed" style={{ borderTopColor: b.color || 'rgba(236,72,153,.3)' }} />;
         }
         if (b.type === 'space') return <div key={i} className="h-2.5" />;
         if (b.type === 'img') return <div key={i} className="my-3 overflow-hidden rounded-2xl shadow-sm"><img src={b.url} alt="" className="w-full object-cover" /></div>;
@@ -5671,8 +5671,8 @@ function serializeEditor(root: HTMLElement | null): string {
       if (node.nodeType === 3) { const t = node.nodeValue ?? ''; if (t.trim() !== '') lines.push(t); return; }
       if (node.nodeType !== 1) return;
       const el = node as HTMLElement; const tag = el.tagName;
-      if (tag === 'HR') { lines.push('---'); return; }
-      if (el.getAttribute('data-hr')) { lines.push(`[[hr:${el.getAttribute('data-hr')}]]`); return; }
+      if (tag === 'HR') { const c = el.getAttribute('data-color'); lines.push(c ? `[[hr:line:${c}]]` : '---'); return; }
+      if (el.getAttribute('data-hr')) { const v = el.getAttribute('data-hr'); const c = el.getAttribute('data-color'); lines.push(c ? `[[hr:${v}:${c}]]` : `[[hr:${v}]]`); return; }
       if (tag === 'IMG') { lines.push(`[[img:${el.getAttribute('src') ?? ''}]]`); return; }
       if (tag === 'H1' || tag === 'H2') { lines.push('# ' + serializeInline(el)); return; }
       if (tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6') { lines.push('## ' + serializeInline(el)); return; }
@@ -5708,6 +5708,8 @@ function BlogWysiwygEditor({
   const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
   const MARKER_COLORS = ['#fff59d', '#ffc9de', '#bfe3ff', '#c8f0cf', '#ffd8a8'];
   const [active, setActive] = useState<{ color: string; hl: string; bold: boolean; underline: boolean }>({ color: '', hl: '', bold: false, underline: false });
+  // 直近に選んだ文字色。区切り線を挿入するときの色に使う（未選択なら標準のピンク）。
+  const [pickedColor, setPickedColor] = useState('');
 
   useEffect(() => { getBodyRef.current = () => serializeEditor(edRef.current); }, [getBodyRef]);
   const notify = () => onTextChange(!!edRef.current?.textContent?.trim());
@@ -5742,7 +5744,7 @@ function BlogWysiwygEditor({
     document.execCommand(cmd, false, val);
     notify(); refreshActive();
   }
-  const setColor = (col: string) => exec('foreColor', col);
+  const setColor = (col: string) => { setPickedColor(col); exec('foreColor', col); };
   function setHl(col: string) {
     edRef.current?.focus();
     document.execCommand('styleWithCSS', false, 'true');
@@ -5778,8 +5780,14 @@ function BlogWysiwygEditor({
   function block(tag: string) { edRef.current?.focus(); document.execCommand('formatBlock', false, tag); notify(); }
   function insertHtml(html: string) { edRef.current?.focus(); document.execCommand('insertHTML', false, html); notify(); }
   function insertDivider(id: string) {
-    if (id === 'line') { insertHtml('<hr><br>'); return; }
-    insertHtml(`<div data-hr="${id}" contenteditable="false" class="blog-hr">${DIVIDER_TEXT[id] || ''}</div><br>`);
+    const c = pickedColor; // 文字色パレットで選んだ色。未選択なら標準（ピンク）。
+    if (id === 'line') {
+      insertHtml(c ? `<hr data-color="${c}" style="border-top-color:${c}"><br>` : '<hr><br>');
+      return;
+    }
+    const cattr = c ? ` data-color="${c}"` : '';
+    const cstyle = c ? ` style="color:${c}"` : '';
+    insertHtml(`<div data-hr="${id}"${cattr} contenteditable="false" class="blog-hr"${cstyle}>${DIVIDER_TEXT[id] || ''}</div><br>`);
   }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
@@ -5982,7 +5990,7 @@ function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any
   );
 }
 
-function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => void; onCreate: (data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }) => string }) {
+function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => void; onCreate: (data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }) => Promise<string> | string }) {
   const [title, setTitle] = useState('');
   const [mood, setMood] = useState('');
   const [weather, setWeather] = useState('');
@@ -5990,22 +5998,28 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   const [bgId, setBgId] = useState('plain');
   const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
   const [ngError, setNgError] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [hasText, setHasText] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const getBodyRef = useRef<() => string>(() => '');
   const canPost = hasText && !submitting;
 
-  function submit() {
+  // 投稿が「完了」するまでスピナーを回し続け、完了したら詳細へ遷移する。
+  async function submit() {
     if (submitting) return; // 連打防止
     const bodyText = (getBodyRef.current?.() ?? '').trim();
     if (!bodyText) return;
     if (containsNgWord(bodyText)) { setNgError(true); return; }
+    setSaveError(false);
     setSubmitting(true);
-    // 保存に失敗しても画面が固まらないよう、一定時間で解除
-    setTimeout(() => setSubmitting(false), 8000);
-    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + bodyText;
-    const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
-    if (id) go('blog-detail', id);
+    try {
+      const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + bodyText;
+      const id = await onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
+      if (id) { go('blog-detail', id); return; } // 遷移後はこの画面が消えるので submitting は戻さない
+      setSaveError(true); setSubmitting(false);
+    } catch {
+      setSaveError(true); setSubmitting(false);
+    }
   }
 
   return (
@@ -6039,6 +6053,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
             ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> 投稿中…</>
             : <>ブログを投稿する ✿</>}
         </button>
+        {saveError && <p className="text-center text-xs font-black text-red-500">投稿に失敗しました。もう一度お試しください。</p>}
       </div>
     </>
   );
@@ -9110,25 +9125,23 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     return () => { clearTimeout(t1); clearTimeout(t2); };
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
-  function createBlogPost(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): string {
+  // 投稿の「完了」を await できるように Promise を返す（演出＝投稿完了までスピナーを回すため）。
+  async function createBlogPost(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): Promise<string> {
     if (blogUseDb) {
-      void (async () => {
-        const realId = await createBlogPostShared(data);
-        if (realId) { await reloadBlog(); go('blog-detail', realId); return; }
-        // DB保存に失敗しても端末に残す（投稿が消えないように）
-        const lid = `blog-${Date.now()}`;
-        const lpost: BlogPost = {
-          id: lid, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
-          title: data.title?.trim() || undefined, mood: data.mood, weather: data.weather,
-          body: data.body.trim(), photoUrl: data.photoUrl || undefined, textColor: data.textColor,
-          visibility: data.visibility, likes: 0, likedByMe: false, comments: [],
-          postedAt: new Date().toISOString(),
-        };
-        setBlogPosts((prev) => { const next = [lpost, ...prev]; try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {} return next; });
-        go('blog-detail', lid);
-        showToast('端末に保存しました（通信回復後に再投稿してね）');
-      })();
-      return '';
+      const realId = await createBlogPostShared(data);
+      if (realId) { await reloadBlog(); return realId; }
+      // DB保存に失敗しても端末に残す（投稿が消えないように）
+      const lid = `blog-${Date.now()}`;
+      const lpost: BlogPost = {
+        id: lid, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
+        title: data.title?.trim() || undefined, mood: data.mood, weather: data.weather,
+        body: data.body.trim(), photoUrl: data.photoUrl || undefined, textColor: data.textColor,
+        visibility: data.visibility, likes: 0, likedByMe: false, comments: [],
+        postedAt: new Date().toISOString(),
+      };
+      setBlogPosts((prev) => { const next = [lpost, ...prev]; try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {} return next; });
+      showToast('端末に保存しました（通信回復後に再投稿してね）');
+      return lid;
     }
     const id = `blog-${Date.now()}`;
     const post: BlogPost = {

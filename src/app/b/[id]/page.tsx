@@ -38,6 +38,7 @@ function plain(body: string): string {
   let t = body ?? '';
   t = t.replace(/^\[\[bg:[^\]]+\]\]\n?/i, '');
   t = t.replace(/^\[\[img:[^\]]+\]\]$/gim, '');
+  t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
   t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]/g, '');
@@ -76,6 +77,11 @@ function renderInline(text: string, kp: string): React.ReactNode[] {
   return out;
 }
 
+const DIVIDER_TEXT: Record<string, string> = {
+  line: '', hearts: '♡ ⋆ ｡ ⋆ ♡ ⋆ ｡ ⋆ ♡', stars: '⋆ ✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆',
+  ribbon: '･ﾟ✧ ── ✿ ── ✧ﾟ･', sparkle: '✩°｡ ⋆⸜ ♡ ⸝⋆ ｡°✩', wave: '～★～☆～★～☆～',
+};
+
 function ArticleBody({ body, titleColor }: { body: string; titleColor?: string }) {
   let text = body ?? '';
   const bgM = text.match(/^\[\[bg:[a-z0-9_-]+\]\]\n?/i);
@@ -86,6 +92,13 @@ function ArticleBody({ body, titleColor }: { body: string; titleColor?: string }
       {lines.map((raw, i) => {
         const line = raw.replace(/\s+$/, '');
         if (/^\s*---\s*$/.test(line)) return <hr key={i} style={{ margin: '18px 0', border: 0, borderTop: '2px dashed rgba(236,72,153,.3)' }} />;
+        const hrv = line.match(/^\[\[hr:([a-z]+)(?::(#[0-9a-fA-F]{3,8}))?\]\]$/);
+        if (hrv) {
+          const col = hrv[2];
+          if (hrv[1] !== 'line' && DIVIDER_TEXT[hrv[1]])
+            return <div key={i} style={{ margin: '18px 0', textAlign: 'center', fontSize: 14, fontWeight: 800, letterSpacing: '.12em', color: col || 'rgba(236,72,153,.7)' }}>{DIVIDER_TEXT[hrv[1]]}</div>;
+          return <hr key={i} style={{ margin: '18px 0', border: 0, borderTop: `2px dashed ${col || 'rgba(236,72,153,.3)'}` }} />;
+        }
         const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
         if (img) return <div key={i} style={{ margin: '14px 0', borderRadius: 16, overflow: 'hidden' }}><img src={img[1]} alt="" style={{ width: '100%', display: 'block' }} /></div>;
         const h3 = line.match(/^##\s+(.*)$/);
