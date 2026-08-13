@@ -395,3 +395,24 @@ button, input, textarea { font: inherit; }
   max-height: calc(100vh - 116px);
   max-height: calc(100dvh - 116px);
 }
+
+/* ── ブログ WYSIWYG 編集面（contentEditable＝できあがり表示のまま編集） ── */
+.blog-editable:empty:before {
+  content: attr(data-placeholder);
+  color: rgba(107, 116, 144, .55);
+  font-weight: 700;
+  pointer-events: none;
+}
+.blog-editable:focus { outline: none; }
+.blog-editable h1, .blog-editable h2 {
+  margin: 16px 0 4px; font-size: 20px; font-weight: 900; line-height: 1.35;
+  color: var(--title-color, #EC4899);
+  border-left: 4px solid rgba(236, 72, 153, .4); padding-left: 8px;
+}
+.blog-editable h3, .blog-editable h4 {
+  margin: 12px 0 2px; font-size: 17px; font-weight: 900;
+  color: var(--title-color, #EC4899);
+}
+.blog-editable img { max-width: 100%; height: auto; display: block; border-radius: 16px; margin: 8px 0; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
+.blog-editable hr { margin: 16px 0; border: 0; border-top: 2px dashed rgba(236, 72, 153, .3); }
+.blog-editable p { margin: 6px 0; }

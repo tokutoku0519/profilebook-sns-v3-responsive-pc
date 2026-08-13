@@ -5527,14 +5527,6 @@ function blogPlain(body: string): string {
   return t.replace(/\n{2,}/g, '\n').trim();
 }
 
-// 編集用の短い画像トークン [[img:#N]] を、実データURLの [[img:...]] に展開
-function resolveBlogImages(body: string, images: string[]): string {
-  return (body ?? '').replace(/\[\[img:#(\d+)\]\]/g, (_, n) => {
-    const url = images[Number(n)];
-    return url ? `[[img:${url}]]` : '';
-  });
-}
-
 const BLOG_INLINE_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]([\s\S]*?)\[\[\/(?:c|hl|big|small)\]\]/g;
 // 本文内のインライン装飾（色・ハイライト・大小）を描画。装飾外は RetroText（ガチャ絵文字対応）
 function renderBlogInline(text: string): React.ReactNode[] {
@@ -5574,57 +5566,106 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
   );
 }
 
-// アメブロ風リッチエディタ（ツールバー＋テキストエリア＋背景選択＋プレビュー）
-function BlogRichEditor({
-  title, setTitle, body, setBody, mood, setMood, weather, setWeather,
-  titleColor, setTitleColor, bgId, setBgId, images, setImages, bodyRef, ngError,
+// contentEditable の内容を「安全マークアップ」に直列化（保存・表示は React の BlogBody＝HTML注入なしでXSS安全）
+function rgbToHex(c: string): string {
+  if (!c) return '';
+  if (c.startsWith('#')) return c;
+  const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return c;
+  return '#' + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
+}
+function serializeInline(node: Node): string {
+  let out = '';
+  node.childNodes.forEach((ch) => {
+    if (ch.nodeType === 3) { out += ch.nodeValue ?? ''; return; }
+    if (ch.nodeType !== 1) return;
+    const el = ch as HTMLElement;
+    if (el.tagName === 'BR') { out += '\n'; return; }
+    let inner = serializeInline(el);
+    const st = el.style;
+    const fs = parseFloat(st.fontSize) || 0;
+    if (fs >= 1.2) inner = `[[big]]${inner}[[/big]]`;
+    else if (fs > 0 && fs <= 0.95) inner = `[[small]]${inner}[[/small]]`;
+    const bg = st.backgroundColor;
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') inner = `[[hl:${rgbToHex(bg)}]]${inner}[[/hl]]`;
+    const col = st.color;
+    if (col) inner = `[[c:${rgbToHex(col)}]]${inner}[[/c]]`;
+    out += inner;
+  });
+  return out;
+}
+function serializeEditor(root: HTMLElement | null): string {
+  if (!root) return '';
+  const lines: string[] = [];
+  const walk = (parent: HTMLElement) => {
+    parent.childNodes.forEach((node) => {
+      if (node.nodeType === 3) { const t = node.nodeValue ?? ''; if (t.trim() !== '') lines.push(t); return; }
+      if (node.nodeType !== 1) return;
+      const el = node as HTMLElement; const tag = el.tagName;
+      if (tag === 'HR') { lines.push('---'); return; }
+      if (tag === 'IMG') { lines.push(`[[img:${el.getAttribute('src') ?? ''}]]`); return; }
+      if (tag === 'H1' || tag === 'H2') { lines.push('# ' + serializeInline(el)); return; }
+      if (tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6') { lines.push('## ' + serializeInline(el)); return; }
+      if (tag === 'DIV' || tag === 'P') {
+        const hasBlock = Array.from(el.childNodes).some((c) => c.nodeType === 1 && ['IMG', 'HR', 'DIV', 'P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes((c as HTMLElement).tagName));
+        if (hasBlock) { walk(el); return; }
+        lines.push(serializeInline(el));
+        return;
+      }
+      lines.push(serializeInline(el));
+    });
+  };
+  walk(root);
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/g, '');
+}
+
+// アメブロ風 WYSIWYG エディタ：プレビュー＝編集面（contentEditable）。タグは一切見せない。
+function BlogWysiwygEditor({
+  title, setTitle, mood, setMood, weather, setWeather,
+  titleColor, setTitleColor, bgId, setBgId, getBodyRef, onTextChange, ngError,
 }: {
   title: string; setTitle: (v: string) => void;
-  body: string; setBody: (v: string) => void;
   mood: string; setMood: (v: string) => void;
   weather: string; setWeather: (v: string) => void;
   titleColor: string; setTitleColor: (v: string) => void;
   bgId: string; setBgId: (v: string) => void;
-  images: string[]; setImages: (v: string[]) => void;
-  bodyRef: React.RefObject<HTMLTextAreaElement | null>;
+  getBodyRef: React.MutableRefObject<() => string>;
+  onTextChange: (hasText: boolean) => void;
   ngError?: boolean;
 }) {
+  const edRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
-  // 編集中は本文に短い [[img:#N]] だけを置き、実データは images[] に持つ（テキストエリアを汚さない）
-  const resolvedBody = resolveBlogImages(body, images);
 
-  function replaceSel(makeRep: (sel: string) => string) {
-    const el = bodyRef.current;
-    const s = el?.selectionStart ?? body.length;
-    const e = el?.selectionEnd ?? s;
-    const sel = body.slice(s, e);
-    const rep = makeRep(sel);
-    const next = body.slice(0, s) + rep + body.slice(e);
-    setBody(next);
-    requestAnimationFrame(() => { if (el) { el.focus(); const pos = s + rep.length; el.selectionStart = el.selectionEnd = pos; } });
+  useEffect(() => { getBodyRef.current = () => serializeEditor(edRef.current); }, [getBodyRef]);
+  const notify = () => onTextChange(!!edRef.current?.textContent?.trim());
+  const keepSel = (e: React.MouseEvent) => e.preventDefault(); // ツールバー押下で選択を失わない
+
+  function wrapInline(css: string) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+    const span = document.createElement('span');
+    span.setAttribute('style', css);
+    try { range.surroundContents(span); }
+    catch { const frag = range.extractContents(); span.appendChild(frag); range.insertNode(span); }
+    sel.removeAllRanges();
+    notify();
   }
-  const wrap = (o: string, c: string) => replaceSel((sel) => `${o}${sel || 'テキスト'}${c}`);
-  function insertLine(text: string) {
-    const el = bodyRef.current;
-    const s = el?.selectionStart ?? body.length;
-    const before = body.slice(0, s); const after = body.slice(s);
-    const nl1 = before === '' || before.endsWith('\n') ? '' : '\n';
-    const nl2 = after === '' || after.startsWith('\n') ? '' : '\n';
-    const next = before + nl1 + text + nl2 + after;
-    setBody(next);
-    requestAnimationFrame(() => { if (el) { el.focus(); const pos = (before + nl1 + text).length; el.selectionStart = el.selectionEnd = pos; } });
-  }
+  function block(tag: string) { edRef.current?.focus(); document.execCommand('formatBlock', false, tag); notify(); }
+  function insertHtml(html: string) { edRef.current?.focus(); document.execCommand('insertHTML', false, html); notify(); }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = (ev) => {
-      const dataUrl = String(ev.target?.result || '');
-      const idx = images.length;
-      setImages([...images, dataUrl]);
-      insertLine(`[[img:#${idx}]]`);
-    };
+    r.onload = (ev) => insertHtml(`<img src="${String(ev.target?.result || '')}" alt=""><br>`);
     r.readAsDataURL(f); e.target.value = '';
+  }
+  function onPaste(e: React.ClipboardEvent) {
+    e.preventDefault();
+    const t = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, t);
+    notify();
   }
 
   const btn = 'shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-black text-ink shadow-card transition active:scale-90 hover:bg-pink/10';
@@ -5659,62 +5700,43 @@ function BlogRichEditor({
         ))}
       </div>
 
-      {/* 👀 できあがりプレビュー（記事の見た目そのまま・常時表示） */}
-      <div className="overflow-hidden rounded-2xl border-2 border-pink/25">
-        <p className="bg-pink/10 px-3 py-1.5 text-[11px] font-black text-pink">👀 できあがりプレビュー</p>
-        <div className="p-4" style={(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style}>
-          {title.trim()
-            ? <h3 className="mb-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>✿ <RetroText text={title} /></h3>
-            : <p className="mb-2 text-sm font-bold text-muted/70">（タイトル未入力）</p>}
-          {body.trim()
-            ? <BlogBody body={resolvedBody} titleColor={titleColor} />
-            : <p className="text-sm font-bold text-muted/70">本文を書くと、ここに仕上がりが表示されます。</p>}
-        </div>
-      </div>
-
-      {/* ツールバー */}
+      {/* ツールバー（押しても本文の選択を保持） */}
       <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
-        <button type="button" className={btn} onClick={() => insertLine(`# ${''}`)}>見出し</button>
-        <button type="button" className={btn} onClick={() => insertLine(`## ${''}`)}>小見出し</button>
-        <button type="button" className={btn} onClick={() => wrap('[[big]]', '[[/big]]')}>大</button>
-        <button type="button" className={btn} onClick={() => wrap('[[small]]', '[[/small]]')}>小</button>
-        <button type="button" className={btn} onClick={() => wrap('[[hl]]', '[[/hl]]')}>🖍 マーカー</button>
-        <button type="button" className={btn} onClick={() => insertLine('---')}>― 区切り</button>
-        <button type="button" className={btn} onClick={() => fileRef.current?.click()}>🖼 写真</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('h2')}>見出し</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('h3')}>小見出し</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('background-color:#fff59d;border-radius:.25em;padding:0 .12em')}>🖍 マーカー</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('p')}>戻す</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => insertHtml('<hr>')}>― 区切り</button>
+        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
       </div>
-      {/* 文字色パレット */}
+      {/* 文字色 */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">文字色</span>
         {TEXT_COLORS.map((col) => (
-          <button key={col} type="button" onClick={() => wrap(`[[c:${col}]]`, '[[/c]]')} aria-label={`色 ${col}`}
+          <button key={col} type="button" onMouseDown={keepSel} onClick={() => wrapInline(`color:${col}`)} aria-label={`色 ${col}`}
             className="h-6 w-6 rounded-full ring-2 ring-white transition active:scale-90" style={{ background: col }} />
         ))}
       </div>
 
-      {/* 本文（入力欄。装飾は上のプレビューで実際の見た目になる） */}
-      <div>
-        <p className="mb-1 text-[11px] font-bold text-muted">本文（ここに入力。装飾は上のプレビューで確認）</p>
-        <textarea
-          ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)}
-          rows={8} maxLength={200000}
-          placeholder={'本文を書こう。\n文字を選んで「大」「マーカー」「文字色」、行頭で「見出し」「区切り」「写真」が使えます。'}
-          className={`w-full resize-none rounded-2xl border bg-white px-4 py-3 text-sm font-bold leading-7 text-ink outline-none focus:border-pink ${ngError ? 'border-red-400' : 'border-purple/15'}`}
-        />
-      </div>
-      {images.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {images.map((src, i) => (
-            <span key={i} className="relative">
-              <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-purple/15" />
-              <span className="absolute -left-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-pink text-[9px] font-black text-white">{i}</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* 編集面＝できあがりそのまま（contentEditable） */}
+      <p className="text-[11px] font-bold text-muted">👇 ここに直接書けます。文字を選んで「大／マーカー／文字色」、ツールバーで見出し・区切り・写真。</p>
+      <div
+        ref={edRef}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={false}
+        onInput={notify}
+        onPaste={onPaste}
+        data-placeholder="ここに本文を書こう…"
+        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-bold leading-8 text-ink outline-none focus:border-pink"
+        style={{ ...(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style, ['--title-color' as any]: titleColor }}
+      />
       {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}
 
-      {/* 記事背景 */}
+      {/* 記事背景（編集面に即反映） */}
       <div>
         <p className="mb-1.5 text-[11px] font-black text-muted">記事の背景</p>
         <div className="flex flex-wrap gap-1.5">
@@ -5785,23 +5807,21 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
 
 function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => void; onCreate: (data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }) => string }) {
   const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
   const [mood, setMood] = useState('');
   const [weather, setWeather] = useState('');
   const [titleColor, setTitleColor] = useState(DIARY_TITLE_COLORS[0].value);
   const [bgId, setBgId] = useState('plain');
-  const [images, setImages] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
   const [ngError, setNgError] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const canPost = body.trim().length > 0 && !containsNgWord(body);
+  const [hasText, setHasText] = useState(false);
+  const getBodyRef = useRef<() => string>(() => '');
+  const canPost = hasText;
 
   function submit() {
-    if (containsNgWord(body)) { setNgError(true); return; }
-    if (!canPost) return;
-    // 画像トークン展開 → 背景を本文先頭に埋め込んで保存（SQL不要）
-    const resolved = resolveBlogImages(body.trim(), images);
-    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + resolved;
+    const bodyText = (getBodyRef.current?.() ?? '').trim();
+    if (!bodyText) return;
+    if (containsNgWord(bodyText)) { setNgError(true); return; }
+    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + bodyText;
     const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
     if (id) go('blog-detail', id);
   }
@@ -5811,15 +5831,15 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
       <AppHeader title="記事を書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <BlogRichEditor
+          <BlogWysiwygEditor
             title={title} setTitle={setTitle}
-            body={body} setBody={(v) => { setBody(v); if (ngError) setNgError(false); }}
             mood={mood} setMood={setMood}
             weather={weather} setWeather={setWeather}
             titleColor={titleColor} setTitleColor={setTitleColor}
             bgId={bgId} setBgId={setBgId}
-            images={images} setImages={setImages}
-            bodyRef={bodyRef} ngError={ngError}
+            getBodyRef={getBodyRef}
+            onTextChange={(has) => { setHasText(has); if (ngError) setNgError(false); }}
+            ngError={ngError}
           />
         </section>
         <section className="rounded-[32px] bg-white p-5 shadow-card">
