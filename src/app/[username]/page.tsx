@@ -5751,6 +5751,16 @@ function BlogWysiwygEditor({
   }
   const toggleBold = () => exec('bold');
   const toggleUnderline = () => exec('underline');
+  // 装飾を解除して以降の入力をプレーンに戻す（色・太字・下線・マーカーを一括オフ）
+  function clearFmt() {
+    edRef.current?.focus();
+    document.execCommand('styleWithCSS', false, 'true');
+    document.execCommand('removeFormat');
+    if (document.queryCommandState('underline')) document.execCommand('underline');
+    if (document.queryCommandState('bold')) document.execCommand('bold');
+    if (!document.execCommand('hiliteColor', false, 'transparent')) document.execCommand('backColor', false, 'transparent');
+    notify(); refreshActive();
+  }
 
   // 大／小は選択範囲を span で包む
   function wrapInline(css: string) {
@@ -5785,6 +5795,10 @@ function BlogWysiwygEditor({
   }
 
   const btn = 'shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-black text-ink shadow-card transition active:scale-90 hover:bg-pink/10';
+  // 選択中（アクティブ）表現を全ボタン共通に：外枠を濃く強調＋少し大きく
+  const btnActive = 'ring-2 ring-ink bg-pink/10 text-pink';
+  const swatchActive = 'ring-2 ring-ink scale-110 shadow-card';
+  const swatchIdle = 'ring-2 ring-white';
   return (
     <div className="space-y-3">
       {/* タイトル */}
@@ -5799,7 +5813,7 @@ function BlogWysiwygEditor({
         <span className="text-[11px] font-black text-muted">見出し色</span>
         {DIARY_TITLE_COLORS.map((c) => (
           <button key={c.value} type="button" onClick={() => setTitleColor(c.value)} aria-label={c.label}
-            className={`h-6 w-6 rounded-full ring-2 transition ${titleColor === c.value ? 'ring-ink scale-110' : 'ring-white'}`}
+            className={`h-7 w-7 rounded-full transition active:scale-90 ${titleColor === c.value ? swatchActive : swatchIdle}`}
             style={{ background: c.value }} />
         ))}
       </div>
@@ -5828,33 +5842,33 @@ function BlogWysiwygEditor({
       <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h2')}>見出し</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h3')}>小見出し</button>
-        <button type="button" className={`${btn} ${active.bold ? 'ring-2 ring-pink text-pink' : ''}`} onPointerDown={keepSel} onClick={toggleBold}><b>B</b> 太字</button>
-        <button type="button" className={`${btn} ${active.underline ? 'ring-2 ring-pink text-pink' : ''}`} onPointerDown={keepSel} onClick={toggleUnderline}><u>U</u> 下線</button>
+        <button type="button" className={`${btn} ${active.bold ? btnActive : ''}`} onPointerDown={keepSel} onClick={toggleBold}><b>B</b> 太字</button>
+        <button type="button" className={`${btn} ${active.underline ? btnActive : ''}`} onPointerDown={keepSel} onClick={toggleUnderline}><u>U</u> 下線</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={clearFmt}>✕ 解除</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('p')}>戻す</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
       </div>
-      {/* 文字色（選択中の色にチェック。以降の入力もこの色になる） */}
+      {/* 文字色（選択中の色は外枠を強調＋少し大きく。以降の入力もこの色になる） */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">文字色</span>
         {TEXT_COLORS.map((col) => (
           <button key={col} type="button" onPointerDown={keepSel} onClick={() => setColor(col)} aria-label={`色 ${col}`}
-            className={`grid h-6 w-6 place-items-center rounded-full text-[10px] text-white transition active:scale-90 ${active.color === col.toLowerCase() ? 'ring-2 ring-ink scale-110' : 'ring-2 ring-white'}`}
-            style={{ background: col }}>{active.color === col.toLowerCase() ? '✓' : ''}</button>
+            className={`h-7 w-7 rounded-full transition active:scale-90 ${active.color === col.toLowerCase() ? swatchActive : swatchIdle}`}
+            style={{ background: col }} />
         ))}
       </div>
-      {/* マーカー色（選択中の色にチェック。以降の入力もこの色でマーク） */}
+      {/* マーカー色（選択中の色は外枠を強調＋少し大きく。以降の入力もこの色でマーク） */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">🖍 マーカー</span>
         {MARKER_COLORS.map((col) => (
           <button key={col} type="button" onPointerDown={keepSel} onClick={() => setHl(col)} aria-label={`マーカー ${col}`}
-            className={`grid h-6 w-6 place-items-center rounded-md text-[10px] text-ink transition active:scale-90 ${active.hl === col.toLowerCase() ? 'ring-2 ring-ink scale-110' : 'ring-2 ring-white'}`}
-            style={{ background: col }}>{active.hl === col.toLowerCase() ? '✓' : ''}</button>
+            className={`h-7 w-7 rounded-md transition active:scale-90 ${active.hl === col.toLowerCase() ? swatchActive : swatchIdle}`}
+            style={{ background: col }} />
         ))}
-        <button type="button" onPointerDown={keepSel} onClick={() => setHl('transparent')}
-          className="rounded-md bg-white px-2 py-0.5 text-[10px] font-black text-muted ring-1 ring-purple/15">なし</button>
+        <button type="button" onPointerDown={keepSel} onClick={() => setHl('transparent')} className={btn}>マーカーなし</button>
       </div>
       {/* 区切り線（ギャルっぽい飾り線も） */}
       <div className="flex flex-wrap items-center gap-1.5">
