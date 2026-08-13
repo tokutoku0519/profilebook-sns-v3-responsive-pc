@@ -5478,8 +5478,19 @@ type BlogBlock =
   | { type: 'p'; text: string }
   | { type: 'h'; level: 2 | 3; text: string }
   | { type: 'img'; url: string }
-  | { type: 'hr' }
+  | { type: 'hr'; variant?: string }
   | { type: 'space' };
+
+// 区切り線バリエーション（ギャルっぽい装飾ライン）
+const BLOG_DIVIDERS: { id: string; label: string; text: string }[] = [
+  { id: 'line',    label: '線',     text: '' },
+  { id: 'hearts',  label: 'ハート', text: '♡ ⋆ ｡ ⋆ ♡ ⋆ ｡ ⋆ ♡' },
+  { id: 'stars',   label: 'スター', text: '⋆ ✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆' },
+  { id: 'ribbon',  label: 'リボン', text: '･ﾟ✧ ── ✿ ── ✧ﾟ･' },
+  { id: 'sparkle', label: 'キラ',   text: '✩°｡ ⋆⸜ ♡ ⸝⋆ ｡°✩' },
+  { id: 'wave',    label: 'なみ',   text: '～★～☆～★～☆～' },
+];
+const DIVIDER_TEXT: Record<string, string> = Object.fromEntries(BLOG_DIVIDERS.map((d) => [d.id, d.text]));
 
 const BLOG_BG: { id: string; label: string; style: React.CSSProperties }[] = [
   { id: 'plain',    label: 'なし',       style: { background: '#ffffff' } },
@@ -5504,6 +5515,8 @@ function parseBlogDoc(body: string): { bgId: string; blocks: BlogBlock[] } {
   for (const raw of text.split('\n')) {
     const line = raw.replace(/\s+$/, '');
     if (/^\s*---\s*$/.test(line)) { blocks.push({ type: 'hr' }); continue; }
+    const hrv = line.match(/^\[\[hr:([a-z]+)\]\]$/);
+    if (hrv) { blocks.push({ type: 'hr', variant: hrv[1] }); continue; }
     const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
     if (img) { blocks.push({ type: 'img', url: img[1] }); continue; }
     const h3 = line.match(/^##\s+(.*)$/);
@@ -5521,6 +5534,7 @@ function blogPlain(body: string): string {
   let t = body ?? '';
   t = t.replace(/^\[\[bg:[^\]]+\]\]\n?/i, '');
   t = t.replace(/^\[\[img:[^\]]+\]\]$/gim, '');
+  t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
   t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]/g, '');
@@ -5554,7 +5568,11 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
   return (
     <div className="space-y-1.5">
       {blocks.map((b, i) => {
-        if (b.type === 'hr') return <hr key={i} className="my-4 border-0 border-t-2 border-dashed border-pink/30" />;
+        if (b.type === 'hr') {
+          if (b.variant && b.variant !== 'line' && DIVIDER_TEXT[b.variant] !== undefined)
+            return <div key={i} className="my-4 text-center text-sm font-black tracking-widest text-pink/70">{DIVIDER_TEXT[b.variant]}</div>;
+          return <hr key={i} className="my-4 border-0 border-t-2 border-dashed border-pink/30" />;
+        }
         if (b.type === 'space') return <div key={i} className="h-2.5" />;
         if (b.type === 'img') return <div key={i} className="my-3 overflow-hidden rounded-2xl shadow-sm"><img src={b.url} alt="" className="w-full object-cover" /></div>;
         if (b.type === 'h') return b.level === 3
@@ -5603,6 +5621,7 @@ function serializeEditor(root: HTMLElement | null): string {
       if (node.nodeType !== 1) return;
       const el = node as HTMLElement; const tag = el.tagName;
       if (tag === 'HR') { lines.push('---'); return; }
+      if (el.getAttribute('data-hr')) { lines.push(`[[hr:${el.getAttribute('data-hr')}]]`); return; }
       if (tag === 'IMG') { lines.push(`[[img:${el.getAttribute('src') ?? ''}]]`); return; }
       if (tag === 'H1' || tag === 'H2') { lines.push('# ' + serializeInline(el)); return; }
       if (tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6') { lines.push('## ' + serializeInline(el)); return; }
@@ -5637,9 +5656,11 @@ function BlogWysiwygEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
 
+  const MARKER_COLORS = ['#fff59d', '#ffc9de', '#bfe3ff', '#c8f0cf', '#ffd8a8'];
   useEffect(() => { getBodyRef.current = () => serializeEditor(edRef.current); }, [getBodyRef]);
   const notify = () => onTextChange(!!edRef.current?.textContent?.trim());
-  const keepSel = (e: React.MouseEvent) => e.preventDefault(); // ツールバー押下で選択を失わない
+  // ツールバーをタップしても本文の選択を失わないように（iOSはpointerdownで抑止するのが確実）
+  const keepSel = (e: React.SyntheticEvent) => e.preventDefault();
 
   function wrapInline(css: string) {
     const sel = window.getSelection();
@@ -5655,6 +5676,10 @@ function BlogWysiwygEditor({
   }
   function block(tag: string) { edRef.current?.focus(); document.execCommand('formatBlock', false, tag); notify(); }
   function insertHtml(html: string) { edRef.current?.focus(); document.execCommand('insertHTML', false, html); notify(); }
+  function insertDivider(id: string) {
+    if (id === 'line') { insertHtml('<hr><br>'); return; }
+    insertHtml(`<div data-hr="${id}" contenteditable="false" class="blog-hr">${DIVIDER_TEXT[id] || ''}</div><br>`);
+  }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
     const r = new FileReader();
@@ -5700,29 +5725,45 @@ function BlogWysiwygEditor({
         ))}
       </div>
 
-      {/* ツールバー（押しても本文の選択を保持） */}
+      {/* ツールバー（押しても本文の選択を保持＝onPointerDownで抑止） */}
       <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('h2')}>見出し</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('h3')}>小見出し</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => wrapInline('background-color:#fff59d;border-radius:.25em;padding:0 .12em')}>🖍 マーカー</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => block('p')}>戻す</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => insertHtml('<hr>')}>― 区切り</button>
-        <button type="button" className={btn} onMouseDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h2')}>見出し</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h3')}>小見出し</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('p')}>戻す</button>
+        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
       </div>
       {/* 文字色 */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">文字色</span>
         {TEXT_COLORS.map((col) => (
-          <button key={col} type="button" onMouseDown={keepSel} onClick={() => wrapInline(`color:${col}`)} aria-label={`色 ${col}`}
+          <button key={col} type="button" onPointerDown={keepSel} onClick={() => wrapInline(`color:${col}`)} aria-label={`色 ${col}`}
             className="h-6 w-6 rounded-full ring-2 ring-white transition active:scale-90" style={{ background: col }} />
+        ))}
+      </div>
+      {/* マーカー色（選んだ色で塗る） */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-black text-muted">🖍 マーカー</span>
+        {MARKER_COLORS.map((col) => (
+          <button key={col} type="button" onPointerDown={keepSel} onClick={() => wrapInline(`background-color:${col};border-radius:.25em;padding:0 .12em`)} aria-label={`マーカー ${col}`}
+            className="h-6 w-6 rounded-md ring-2 ring-white transition active:scale-90" style={{ background: col }} />
+        ))}
+      </div>
+      {/* 区切り線（ギャルっぽい飾り線も） */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-black text-muted">区切り</span>
+        {BLOG_DIVIDERS.map((d) => (
+          <button key={d.id} type="button" onPointerDown={keepSel} onClick={() => insertDivider(d.id)}
+            className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-black text-ink shadow-card transition active:scale-90 hover:bg-pink/10">
+            {d.id === 'line' ? '― 線' : d.text.slice(0, 5)}
+          </button>
         ))}
       </div>
 
       {/* 編集面＝できあがりそのまま（contentEditable） */}
-      <p className="text-[11px] font-bold text-muted">👇 ここに直接書けます。文字を選んで「大／マーカー／文字色」、ツールバーで見出し・区切り・写真。</p>
+      <p className="text-[11px] font-bold text-muted">👇 ここに直接書けます。文字を選んで「大／小／文字色／マーカー」、ツールバーで見出し・区切り・写真。</p>
       <div
         ref={edRef}
         contentEditable
@@ -5751,8 +5792,9 @@ function BlogWysiwygEditor({
   );
 }
 
-function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[] }) {
+function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[]; onDelete?: (id: string) => void }) {
   const [tab, setTab] = useState<'all' | 'mine'>('all');
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const base = tab === 'mine' ? posts.filter((p) => p.authorId === me.id) : posts;
   const sorted = [...base].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
   return (
@@ -5794,6 +5836,11 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
                   <div className="flex items-center gap-3 text-[11px] font-black text-muted">
                     <span className="flex items-center gap-1"><Heart size={13} fill={p.likedByMe ? 'currentColor' : 'none'} className={p.likedByMe ? 'text-pink' : ''} />{p.likes}</span>
                     <span>💬 {p.comments.length}</span>
+                    {onDelete && p.authorId === me.id && (
+                      <span role="button" tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); setConfirmId(p.id); }}
+                        className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🗑 削除</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5801,6 +5848,17 @@ function BlogListScreen({ go, posts }: { go: (s: Screen, payload?: any) => void;
           );
         })}
       </div>
+      {confirmId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6" onClick={() => setConfirmId(null)}>
+          <div className="w-full max-w-xs rounded-[28px] bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-center text-sm font-black text-ink">この記事を削除しますか？</p>
+            <div className="mt-5 flex gap-3">
+              <button onClick={() => setConfirmId(null)} className="flex-1 rounded-full border border-purple/20 py-3 text-sm font-black text-muted">キャンセル</button>
+              <button onClick={() => { onDelete?.(confirmId); setConfirmId(null); }} className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white">削除する</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -8905,17 +8963,44 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
   async function reloadBlog() {
     if (!blogUseDb) return;
-    const rows = await getBlogFeedShared(100);
-    setBlogPosts(rows as BlogPost[]);
+    const rows = (await getBlogFeedShared(100)) as BlogPost[];
+    setBlogPosts((prev) => {
+      const dbIds = new Set(rows.map((r) => r.id));
+      // 端末だけに存在する未同期の投稿（blog-...）は消さずに残す
+      const localOnly = prev.filter((p) => String(p.id).startsWith('blog-') && !dbIds.has(p.id));
+      // DBが一時的に空を返したときは、既存のDB由来投稿を保持（消失防止）
+      const base = rows.length === 0 && prev.length > 0 ? prev.filter((p) => !String(p.id).startsWith('blog-')) : rows;
+      const merged = [...base, ...localOnly];
+      try { localStorage.setItem('miri_blog_posts', JSON.stringify(merged)); } catch {}
+      return merged;
+    });
   }
-  useEffect(() => { if (blogUseDb) void reloadBlog(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => {
+    if (!blogUseDb) return;
+    void reloadBlog();
+    // セッションのハイドレーション待ちで空振りすることがあるため数回リトライ
+    const t1 = setTimeout(() => void reloadBlog(), 900);
+    const t2 = setTimeout(() => void reloadBlog(), 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, []);
   function createBlogPost(data: { title?: string; mood?: string; weather?: string; body: string; photoUrl?: string; textColor?: string; visibility: 'public' | 'followers' }): string {
     if (blogUseDb) {
       void (async () => {
         const realId = await createBlogPostShared(data);
-        await reloadBlog();
-        if (realId) go('blog-detail', realId);
-        else showToast('投稿に失敗しました。通信環境を確認してね');
+        if (realId) { await reloadBlog(); go('blog-detail', realId); return; }
+        // DB保存に失敗しても端末に残す（投稿が消えないように）
+        const lid = `blog-${Date.now()}`;
+        const lpost: BlogPost = {
+          id: lid, authorId: me.id, authorName: me.name, authorAvatar: me.avatar,
+          title: data.title?.trim() || undefined, mood: data.mood, weather: data.weather,
+          body: data.body.trim(), photoUrl: data.photoUrl || undefined, textColor: data.textColor,
+          visibility: data.visibility, likes: 0, likedByMe: false, comments: [],
+          postedAt: new Date().toISOString(),
+        };
+        setBlogPosts((prev) => { const next = [lpost, ...prev]; try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {} return next; });
+        go('blog-detail', lid);
+        showToast('端末に保存しました（通信回復後に再投稿してね）');
       })();
       return '';
     }
@@ -8954,11 +9039,11 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     saveBlog(blogPosts.map((p) => p.id === postId ? { ...p, comments: [...p.comments, c] } : p));
   }
   function deleteBlogPost(postId: string) {
-    if (blogUseDb) {
+    // まず画面から即消し（端末キャッシュも更新）→ DBからも削除
+    setBlogPosts((prev) => { const next = prev.filter((p) => p.id !== postId); try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {} return next; });
+    if (blogUseDb && !String(postId).startsWith('blog-')) {
       void (async () => { await deleteBlogPostShared(postId); await reloadBlog(); })();
-      return;
     }
-    saveBlog(blogPosts.filter((p) => p.id !== postId));
   }
 
   const current = useMemo(() => {
@@ -9065,12 +9150,12 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           sharedMode={diaryUseDb}
         />
       );
-    if (screen === 'blog-list') return <BlogListScreen go={go} posts={blogPosts} />;
+    if (screen === 'blog-list') return <BlogListScreen go={go} posts={blogPosts} onDelete={deleteBlogPost} />;
     if (screen === 'blog-create') return <BlogCreateScreen go={go} onCreate={createBlogPost} />;
     if (screen === 'blog-detail') {
       const post = blogPosts.find((p) => p.id === selectedBlogId);
       if (post) return <BlogDetailScreen go={go} post={post} onToggleLike={toggleBlogLike} onAddComment={addBlogComment} onDelete={deleteBlogPost} />;
-      return <BlogListScreen go={go} posts={blogPosts} />;
+      return <BlogListScreen go={go} posts={blogPosts} onDelete={deleteBlogPost} />;
     }
     if (screen === 'search') return <SearchScreen go={go} answers={answers} myProfile={profileBookInfo} questionList={[...communityQuestions, ...localizedQuestions]} reactionsMap={reactState} likedIds={new Set(Object.entries(reactState).filter(([, r]) => (r as any).like?.mine).map(([id]) => id))} onLike={(id) => react(id, 'like')} onReact={react} myStickers={getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers)} />;
     if (screen === 'create')

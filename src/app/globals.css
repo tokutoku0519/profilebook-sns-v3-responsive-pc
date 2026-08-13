@@ -416,3 +416,7 @@ button, input, textarea { font: inherit; }
 .blog-editable img { max-width: 100%; height: auto; display: block; border-radius: 16px; margin: 8px 0; box-shadow: 0 2px 6px rgba(0,0,0,.1); }
 .blog-editable hr { margin: 16px 0; border: 0; border-top: 2px dashed rgba(236, 72, 153, .3); }
 .blog-editable p { margin: 6px 0; }
+.blog-editable .blog-hr {
+  margin: 14px 0; text-align: center; color: #EC4899; font-weight: 800;
+  letter-spacing: .12em; user-select: none;
+}

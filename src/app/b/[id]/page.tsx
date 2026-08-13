@@ -3,6 +3,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { siteUrl } from '@/lib/siteUrl';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,11 +104,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   if (!post) return { title: '記事が見つかりません — Miri', robots: { index: false, follow: false } };
   const title = (post.title?.trim() || '無題の記事') + ' — Miri';
   const description = plain(post.body).slice(0, 120);
+  const canonical = `${siteUrl()}/b/${params.id}`;
   return {
     title,
     description,
+    alternates: { canonical },
     robots: { index: true, follow: true },
-    openGraph: { title, description, type: 'article' },
+    openGraph: { title, description, type: 'article', url: canonical },
     twitter: { card: 'summary', title, description },
   };
 }
