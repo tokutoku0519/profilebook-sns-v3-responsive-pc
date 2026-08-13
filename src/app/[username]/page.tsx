@@ -1211,18 +1211,18 @@ function HomeScreen({
             <h2 className="flex items-center gap-1.5 text-lg font-black text-ink">📔 ブログ</h2>
             <button onClick={() => go('blog-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
           </div>
-          <p className="mt-0.5 text-[11px] font-bold text-muted">タイトルをつけて書く、自分だけの記事</p>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">タイトルをつけて書く、自分だけのブログ</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {[...blogPosts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()).slice(0, 5).map((p) => (
               <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
                 <p className="text-sm">{p.weather}{p.mood}</p>
-                <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</p>
+                <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</p>
                 <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                 <p className="mt-3 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
               </button>
             ))}
             <button onClick={() => go('blog-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-sm font-black text-purple shadow-card active:scale-[0.98]">
-              ＋ 記事を書く
+              ＋ ブログを書く
             </button>
           </div>
         </section>
@@ -2589,7 +2589,7 @@ function OtherProfileScreen({
               {userBlogs.slice(0, 5).map((p) => (
                 <button key={p.id} onClick={() => onOpenBlog?.(p)}
                   className="block w-full rounded-2xl bg-base p-3 text-left transition active:scale-[0.99]">
-                  <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || '無題の記事'}</span></p>
+                  <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</span></p>
                   <p className="mt-1 line-clamp-1 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                   <p className="mt-1 text-[10px] font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
                 </button>
@@ -4926,7 +4926,7 @@ function DiaryListScreen({
                 <p className="mt-1 text-xs font-bold leading-5 text-muted">{page.description}</p>
               </div>
               <span className="shrink-0 rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
-                {page.entries.length}記事
+                {page.entries.length}件
               </span>
             </div>
             {page.entries.length > 0 && (() => {
@@ -5884,7 +5884,7 @@ function BlogWysiwygEditor({
 
       {/* 記事背景（編集面に即反映） */}
       <div>
-        <p className="mb-1.5 text-[11px] font-black text-muted">記事の背景</p>
+        <p className="mb-1.5 text-[11px] font-black text-muted">ブログの背景</p>
         <div className="flex flex-wrap gap-1.5">
           {BLOG_BG.map((b) => (
             <button key={b.id} type="button" onClick={() => setBgId(b.id)} title={b.label}
@@ -5908,16 +5908,16 @@ function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any
       <div className="space-y-4 px-4 pt-3 pb-32">
         <button onClick={() => go('blog-create')}
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
-          ＋ 記事を書く
+          ＋ ブログを書く
         </button>
         <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
           <button onClick={() => setTab('all')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'all' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>みんな</button>
-          <button onClick={() => setTab('mine')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'mine' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>自分の記事 {posts.filter((p) => p.authorId === me.id).length}</button>
+          <button onClick={() => setTab('mine')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'mine' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>自分のブログ {posts.filter((p) => p.authorId === me.id).length}</button>
         </div>
-        <p className="px-1 text-xs font-bold text-muted">{tab === 'mine' ? 'あなたが投稿した記事の一覧です。' : 'みんなのブログ記事。いいね・コメントで反応できます。'}</p>
+        <p className="px-1 text-xs font-bold text-muted">{tab === 'mine' ? 'あなたが投稿したブログの一覧です。' : 'みんなのブログ。いいね・コメントで反応できます。'}</p>
         {sorted.length === 0 && (
           <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-            {tab === 'mine' ? 'まだ記事を投稿していません。' : 'まだ記事がありません。最初の記事を書いてみて！'}
+            {tab === 'mine' ? 'まだブログを投稿していません。' : 'まだブログがありません。最初のブログを書いてみて！'}
           </div>
         )}
         {sorted.map((p) => {
@@ -5956,7 +5956,7 @@ function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any
       {confirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6" onClick={() => setConfirmId(null)}>
           <div className="w-full max-w-xs rounded-[28px] bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <p className="text-center text-sm font-black text-ink">この記事を削除しますか？</p>
+            <p className="text-center text-sm font-black text-ink">このブログを削除しますか？</p>
             <div className="mt-5 flex gap-3">
               <button onClick={() => setConfirmId(null)} className="flex-1 rounded-full border border-purple/20 py-3 text-sm font-black text-muted">キャンセル</button>
               <button onClick={() => { onDelete?.(confirmId); setConfirmId(null); }} className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white">削除する</button>
@@ -5996,7 +5996,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
 
   return (
     <>
-      <AppHeader title="記事を書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
+      <AppHeader title="ブログを書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <BlogWysiwygEditor
@@ -6023,7 +6023,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
           className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
           {submitting
             ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> 投稿中…</>
-            : <>記事を投稿する ✿</>}
+            : <>ブログを投稿する ✿</>}
         </button>
       </div>
     </>
@@ -6053,7 +6053,7 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
   }
   return (
     <>
-      <AppHeader title="ブログ記事" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
+      <AppHeader title="ブログ" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-8">
         <article className="overflow-hidden rounded-[28px] bg-white shadow-card">
           <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
@@ -6083,7 +6083,7 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
                 onClick={async () => {
                   const url = `${location.origin}/b/${post.id}`;
                   try {
-                    if (navigator.share) { await navigator.share({ title: post.title || 'ブログ記事', url }); }
+                    if (navigator.share) { await navigator.share({ title: post.title || 'ブログ', url }); }
                     else { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); }
                   } catch { try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch {} }
                 }}
@@ -6119,7 +6119,7 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6">
           <div className="w-full max-w-xs rounded-[28px] bg-white p-6 shadow-2xl">
-            <p className="text-center text-sm font-black text-ink">この記事を削除しますか？</p>
+            <p className="text-center text-sm font-black text-ink">このブログを削除しますか？</p>
             <div className="mt-5 flex gap-3">
               <button onClick={() => setConfirmDelete(false)} className="flex-1 rounded-full border border-purple/20 py-3 text-sm font-black text-muted">キャンセル</button>
               <button onClick={() => { onDelete(post.id); go('blog-list'); }} className="flex-1 rounded-full bg-pink py-3 text-sm font-black text-white">削除する</button>
@@ -7229,7 +7229,7 @@ function formatServerNotif(n: NotificationRow): { id: string; icon: string; text
     case 'circle_request':return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」への参加をリクエストしました` };
     case 'circle_join':   return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」に参加しました` };
     case 'circle_accept': return { ...base, icon: '🎉', text: `「${n.body ?? 'サークル'}」への参加が承認されました` };
-    case 'blog_like':     return { ...base, icon: '💗', text: `${who}さんがあなたのブログ記事にいいねしました` };
+    case 'blog_like':     return { ...base, icon: '💗', text: `${who}さんがあなたのブログにいいねしました` };
     case 'blog_comment':  return { ...base, icon: '💬', text: `${who}さんがブログにコメントしました${n.body ? '：' + n.body : ''}` };
     case 'diary_invite':  return { ...base, icon: '📔', text: `${who}さんが交換日記「${n.body ?? ''}」に招待しました` };
     default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };

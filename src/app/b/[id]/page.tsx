@@ -101,8 +101,8 @@ function ArticleBody({ body, titleColor }: { body: string; titleColor?: string }
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const post = await getPost(params.id);
-  if (!post) return { title: '記事が見つかりません — Miri', robots: { index: false, follow: false } };
-  const title = (post.title?.trim() || '無題の記事') + ' — Miri';
+  if (!post) return { title: 'ブログが見つかりません — Miri', robots: { index: false, follow: false } };
+  const title = (post.title?.trim() || '無題のブログ') + ' — Miri';
   const description = plain(post.body).slice(0, 120);
   const canonical = `${siteUrl()}/b/${params.id}`;
   return {
@@ -132,7 +132,7 @@ export default async function BlogArticlePage({ params }: { params: { id: string
           <span>{post.weather ?? ''}{post.mood ?? ''}</span>
         </div>
         <div style={{ padding: 20, ...bg }}>
-          <h1 style={{ margin: '0 0 10px', fontSize: 24, fontWeight: 900, lineHeight: 1.3, color: post.text_color || '#EC4899' }}>✿ {post.title?.trim() || '無題の記事'}</h1>
+          <h1 style={{ margin: '0 0 10px', fontSize: 24, fontWeight: 900, lineHeight: 1.3, color: post.text_color || '#EC4899' }}>✿ {post.title?.trim() || '無題のブログ'}</h1>
           <ArticleBody body={post.body} titleColor={post.text_color ?? undefined} />
           <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 8, color: '#1F2C56' }}>
             <span style={{ display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: '50%', background: 'rgba(236,72,153,.1)', fontSize: 18 }}>{author?.avatar_url && !author.avatar_url.startsWith('http') ? author.avatar_url : '📷'}</span>
