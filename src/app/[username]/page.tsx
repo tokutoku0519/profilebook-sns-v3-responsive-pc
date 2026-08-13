@@ -5527,6 +5527,14 @@ function blogPlain(body: string): string {
   return t.replace(/\n{2,}/g, '\n').trim();
 }
 
+// 編集用の短い画像トークン [[img:#N]] を、実データURLの [[img:...]] に展開
+function resolveBlogImages(body: string, images: string[]): string {
+  return (body ?? '').replace(/\[\[img:#(\d+)\]\]/g, (_, n) => {
+    const url = images[Number(n)];
+    return url ? `[[img:${url}]]` : '';
+  });
+}
+
 const BLOG_INLINE_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]([\s\S]*?)\[\[\/(?:c|hl|big|small)\]\]/g;
 // 本文内のインライン装飾（色・ハイライト・大小）を描画。装飾外は RetroText（ガチャ絵文字対応）
 function renderBlogInline(text: string): React.ReactNode[] {
@@ -5569,7 +5577,7 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
 // アメブロ風リッチエディタ（ツールバー＋テキストエリア＋背景選択＋プレビュー）
 function BlogRichEditor({
   title, setTitle, body, setBody, mood, setMood, weather, setWeather,
-  titleColor, setTitleColor, bgId, setBgId, bodyRef, ngError,
+  titleColor, setTitleColor, bgId, setBgId, images, setImages, bodyRef, ngError,
 }: {
   title: string; setTitle: (v: string) => void;
   body: string; setBody: (v: string) => void;
@@ -5577,11 +5585,14 @@ function BlogRichEditor({
   weather: string; setWeather: (v: string) => void;
   titleColor: string; setTitleColor: (v: string) => void;
   bgId: string; setBgId: (v: string) => void;
+  images: string[]; setImages: (v: string[]) => void;
   bodyRef: React.RefObject<HTMLTextAreaElement | null>;
   ngError?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
+  // 編集中は本文に短い [[img:#N]] だけを置き、実データは images[] に持つ（テキストエリアを汚さない）
+  const resolvedBody = resolveBlogImages(body, images);
 
   function replaceSel(makeRep: (sel: string) => string) {
     const el = bodyRef.current;
@@ -5607,7 +5618,12 @@ function BlogRichEditor({
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = (ev) => insertLine(`[[img:${ev.target?.result}]]`);
+    r.onload = (ev) => {
+      const dataUrl = String(ev.target?.result || '');
+      const idx = images.length;
+      setImages([...images, dataUrl]);
+      insertLine(`[[img:#${idx}]]`);
+    };
     r.readAsDataURL(f); e.target.value = '';
   }
 
@@ -5643,6 +5659,19 @@ function BlogRichEditor({
         ))}
       </div>
 
+      {/* 👀 できあがりプレビュー（記事の見た目そのまま・常時表示） */}
+      <div className="overflow-hidden rounded-2xl border-2 border-pink/25">
+        <p className="bg-pink/10 px-3 py-1.5 text-[11px] font-black text-pink">👀 できあがりプレビュー</p>
+        <div className="p-4" style={(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style}>
+          {title.trim()
+            ? <h3 className="mb-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>✿ <RetroText text={title} /></h3>
+            : <p className="mb-2 text-sm font-bold text-muted/70">（タイトル未入力）</p>}
+          {body.trim()
+            ? <BlogBody body={resolvedBody} titleColor={titleColor} />
+            : <p className="text-sm font-bold text-muted/70">本文を書くと、ここに仕上がりが表示されます。</p>}
+        </div>
+      </div>
+
       {/* ツールバー */}
       <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
         <button type="button" className={btn} onClick={() => insertLine(`# ${''}`)}>見出し</button>
@@ -5663,13 +5692,26 @@ function BlogRichEditor({
         ))}
       </div>
 
-      {/* 本文 */}
-      <textarea
-        ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)}
-        rows={9} maxLength={4000}
-        placeholder={'本文を書こう。\n選択して「大」「マーカー」「文字色」、行頭で「見出し」「区切り」「写真」が使えます。'}
-        className={`w-full resize-none rounded-2xl border bg-white px-4 py-3 text-base font-bold leading-8 text-ink outline-none focus:border-pink ${ngError ? 'border-red-400' : 'border-purple/15'}`}
-      />
+      {/* 本文（入力欄。装飾は上のプレビューで実際の見た目になる） */}
+      <div>
+        <p className="mb-1 text-[11px] font-bold text-muted">本文（ここに入力。装飾は上のプレビューで確認）</p>
+        <textarea
+          ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)}
+          rows={8} maxLength={200000}
+          placeholder={'本文を書こう。\n文字を選んで「大」「マーカー」「文字色」、行頭で「見出し」「区切り」「写真」が使えます。'}
+          className={`w-full resize-none rounded-2xl border bg-white px-4 py-3 text-sm font-bold leading-7 text-ink outline-none focus:border-pink ${ngError ? 'border-red-400' : 'border-purple/15'}`}
+        />
+      </div>
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {images.map((src, i) => (
+            <span key={i} className="relative">
+              <img src={src} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-purple/15" />
+              <span className="absolute -left-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-pink text-[9px] font-black text-white">{i}</span>
+            </span>
+          ))}
+        </div>
+      )}
       {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}
 
       {/* 記事背景 */}
@@ -5683,19 +5725,6 @@ function BlogRichEditor({
           ))}
         </div>
       </div>
-
-      {/* プレビュー */}
-      {(title.trim() || body.trim()) && (
-        <div>
-          <p className="mb-1.5 text-[11px] font-black text-muted">プレビュー</p>
-          <div className="overflow-hidden rounded-2xl border border-purple/10">
-            <div className="p-4" style={(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style}>
-              {title.trim() && <h3 className="mb-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>✿ <RetroText text={title} /></h3>}
-              <BlogBody body={body} titleColor={titleColor} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5761,6 +5790,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   const [weather, setWeather] = useState('');
   const [titleColor, setTitleColor] = useState(DIARY_TITLE_COLORS[0].value);
   const [bgId, setBgId] = useState('plain');
+  const [images, setImages] = useState<string[]>([]);
   const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
   const [ngError, setNgError] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -5769,8 +5799,9 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   function submit() {
     if (containsNgWord(body)) { setNgError(true); return; }
     if (!canPost) return;
-    // 背景を本文先頭に埋め込んで保存（SQL不要）
-    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + body.trim();
+    // 画像トークン展開 → 背景を本文先頭に埋め込んで保存（SQL不要）
+    const resolved = resolveBlogImages(body.trim(), images);
+    const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + resolved;
     const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
     if (id) go('blog-detail', id);
   }
@@ -5787,6 +5818,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
             weather={weather} setWeather={setWeather}
             titleColor={titleColor} setTitleColor={setTitleColor}
             bgId={bgId} setBgId={setBgId}
+            images={images} setImages={setImages}
             bodyRef={bodyRef} ngError={ngError}
           />
         </section>
