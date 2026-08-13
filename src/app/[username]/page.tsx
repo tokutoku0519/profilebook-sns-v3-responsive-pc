@@ -5537,29 +5537,58 @@ function blogPlain(body: string): string {
   t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
-  t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]/g, '');
+  t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/g, '');
   return t.replace(/\n{2,}/g, '\n').trim();
 }
 
-const BLOG_INLINE_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]([\s\S]*?)\[\[\/(?:c|hl|big|small)\]\]/g;
-// 本文内のインライン装飾（色・ハイライト・大小）を描画。装飾外は RetroText（ガチャ絵文字対応）
-function renderBlogInline(text: string): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  let last = 0; let k = 0; let m: RegExpExecArray | null;
-  BLOG_INLINE_RE.lastIndex = 0;
-  while ((m = BLOG_INLINE_RE.exec(text))) {
-    if (m.index > last) out.push(<RetroText key={k++} text={text.slice(last, m.index)} />);
-    const tag = m[1]; const inner = m[2];
-    const style: React.CSSProperties = {};
-    if (tag.startsWith('c:#')) style.color = tag.slice(2);
-    else if (tag.startsWith('hl')) { style.backgroundColor = tag.includes(':#') ? tag.split(':')[1] : '#fff59d'; style.padding = '0 .14em'; style.borderRadius = '.25em'; }
-    else if (tag === 'big') style.fontSize = '1.35em';
-    else if (tag === 'small') style.fontSize = '0.82em';
-    out.push(<span key={k++} style={style}><RetroText text={inner} /></span>);
-    last = BLOG_INLINE_RE.lastIndex;
+// インライン装飾のスタイル
+function blogInlineStyle(tag: string): React.CSSProperties {
+  const style: React.CSSProperties = {};
+  if (tag.startsWith('c:#')) style.color = tag.slice(2);
+  else if (tag.startsWith('hl')) {
+    style.backgroundColor = tag.includes(':#') ? tag.split(':')[1] : '#fff59d';
+    style.borderRadius = '.15em';
+    (style as any).boxDecorationBreak = 'clone';
+    (style as any).WebkitBoxDecorationBreak = 'clone';
+    style.padding = '.02em .08em';
   }
-  if (last < text.length) out.push(<RetroText key={k++} text={text.slice(last)} />);
+  else if (tag === 'big') style.fontSize = '1.35em';
+  else if (tag === 'small') style.fontSize = '0.82em';
+  else if (tag === 'b') style.fontWeight = 900;
+  else if (tag === 'u') style.textDecoration = 'underline';
+  return style;
+}
+const BLOG_OPEN_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/;
+const BLOG_TOKEN_RE = /\[\[(\/)?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/g;
+let __blogKey = 0;
+// 本文内のインライン装飾（色・ハイライト・大小・太字・下線）を「入れ子対応」で描画。
+function renderBlogSeg(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const rest = text.slice(i);
+    const om = rest.match(BLOG_OPEN_RE);
+    if (!om || om.index === undefined) { out.push(<RetroText key={__blogKey++} text={rest} />); break; }
+    if (om.index > 0) out.push(<RetroText key={__blogKey++} text={rest.slice(0, om.index)} />);
+    const tag = om[1];
+    const contentStart = i + om.index + om[0].length;
+    // このタグに対応する閉じ（入れ子を数えて depth が 0 に戻る位置）を探す
+    BLOG_TOKEN_RE.lastIndex = contentStart;
+    let depth = 1; let mm: RegExpExecArray | null; let closeStart = -1; let closeEnd = -1;
+    while ((mm = BLOG_TOKEN_RE.exec(text))) {
+      if (mm[1] === '/') depth--; else depth++;
+      if (depth === 0) { closeStart = mm.index; closeEnd = BLOG_TOKEN_RE.lastIndex; break; }
+    }
+    if (closeStart === -1) { out.push(<RetroText key={__blogKey++} text={rest} />); break; }
+    const inner = text.slice(contentStart, closeStart);
+    out.push(<span key={__blogKey++} style={blogInlineStyle(tag)}>{renderBlogSeg(inner)}</span>);
+    i = closeEnd;
+  }
   return out;
+}
+function renderBlogInline(text: string): React.ReactNode[] {
+  __blogKey = 0;
+  return renderBlogSeg(text);
 }
 
 // ブログ本文レンダラ（詳細で使用）
@@ -5601,9 +5630,14 @@ function serializeInline(node: Node): string {
     if (el.tagName === 'BR') { out += '\n'; return; }
     let inner = serializeInline(el);
     const st = el.style;
+    const tag = el.tagName;
     const fs = parseFloat(st.fontSize) || 0;
     if (fs >= 1.2) inner = `[[big]]${inner}[[/big]]`;
     else if (fs > 0 && fs <= 0.95) inner = `[[small]]${inner}[[/small]]`;
+    const underline = tag === 'U' || (st.textDecoration || st.textDecorationLine || '').includes('underline');
+    if (underline) inner = `[[u]]${inner}[[/u]]`;
+    const bold = tag === 'B' || tag === 'STRONG' || st.fontWeight === 'bold' || (parseInt(st.fontWeight, 10) >= 600);
+    if (bold) inner = `[[b]]${inner}[[/b]]`;
     const bg = st.backgroundColor;
     if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') inner = `[[hl:${rgbToHex(bg)}]]${inner}[[/hl]]`;
     const col = st.color;
@@ -5655,13 +5689,53 @@ function BlogWysiwygEditor({
   const edRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const TEXT_COLORS = ['#EC4899', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#111827'];
-
   const MARKER_COLORS = ['#fff59d', '#ffc9de', '#bfe3ff', '#c8f0cf', '#ffd8a8'];
+  const [active, setActive] = useState<{ color: string; hl: string; bold: boolean; underline: boolean }>({ color: '', hl: '', bold: false, underline: false });
+
   useEffect(() => { getBodyRef.current = () => serializeEditor(edRef.current); }, [getBodyRef]);
   const notify = () => onTextChange(!!edRef.current?.textContent?.trim());
   // ツールバーをタップしても本文の選択を失わないように（iOSはpointerdownで抑止するのが確実）
   const keepSel = (e: React.SyntheticEvent) => e.preventDefault();
 
+  // 現在カーソル位置に効いている装飾を取得（パレットのチェック表示用）
+  function refreshActive() {
+    const root = edRef.current;
+    const sel = window.getSelection();
+    if (!root || !sel || sel.rangeCount === 0 || !root.contains(sel.anchorNode)) return;
+    try {
+      setActive({
+        color: rgbToHex(String(document.queryCommandValue('foreColor') || '')).toLowerCase(),
+        hl: rgbToHex(String(document.queryCommandValue('backColor') || document.queryCommandValue('hiliteColor') || '')).toLowerCase(),
+        bold: document.queryCommandState('bold'),
+        underline: document.queryCommandState('underline'),
+      });
+    } catch {}
+  }
+  useEffect(() => {
+    const h = () => refreshActive();
+    document.addEventListener('selectionchange', h);
+    return () => document.removeEventListener('selectionchange', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 色/ハイライト/太字/下線：execCommand で「選択に適用」も「以降の入力に継続」も両対応
+  function exec(cmd: string, val?: string) {
+    edRef.current?.focus();
+    document.execCommand('styleWithCSS', false, 'true');
+    document.execCommand(cmd, false, val);
+    notify(); refreshActive();
+  }
+  const setColor = (col: string) => exec('foreColor', col);
+  function setHl(col: string) {
+    edRef.current?.focus();
+    document.execCommand('styleWithCSS', false, 'true');
+    if (!document.execCommand('hiliteColor', false, col)) document.execCommand('backColor', false, col);
+    notify(); refreshActive();
+  }
+  const toggleBold = () => exec('bold');
+  const toggleUnderline = () => exec('underline');
+
+  // 大／小は選択範囲を span で包む
   function wrapInline(css: string) {
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return;
@@ -5712,44 +5786,58 @@ function BlogWysiwygEditor({
             style={{ background: c.value }} />
         ))}
       </div>
-      {/* 気分・天気 */}
-      <div className="flex flex-wrap gap-1">
-        {DIARY_MOODS.map((m) => (
-          <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
-            className={`grid h-8 w-8 place-items-center rounded-lg text-lg transition ${mood === m ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}>{m}</button>
-        ))}
-        <span className="mx-1 w-px self-stretch bg-purple/15" />
-        {DIARY_WEATHERS.map((w) => (
-          <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
-            className={`grid h-8 w-8 place-items-center rounded-lg text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-base'}`}>{w}</button>
-        ))}
+      {/* 気分（横1列・はみ出す分はスクロール） */}
+      <div className="flex items-center gap-1">
+        <span className="shrink-0 text-[11px] font-black text-muted">気分</span>
+        <div className="flex flex-nowrap gap-1 overflow-x-auto">
+          {DIARY_MOODS.map((m) => (
+            <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg transition ${mood === m ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}>{m}</button>
+          ))}
+        </div>
+      </div>
+      {/* 天気（横1列・はみ出す分はスクロール） */}
+      <div className="flex items-center gap-1">
+        <span className="shrink-0 text-[11px] font-black text-muted">天気</span>
+        <div className="flex flex-nowrap gap-1 overflow-x-auto">
+          {DIARY_WEATHERS.map((w) => (
+            <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-base'}`}>{w}</button>
+          ))}
+        </div>
       </div>
 
       {/* ツールバー（押しても本文の選択を保持＝onPointerDownで抑止） */}
       <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h2')}>見出し</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h3')}>小見出し</button>
+        <button type="button" className={`${btn} ${active.bold ? 'ring-2 ring-pink text-pink' : ''}`} onPointerDown={keepSel} onClick={toggleBold}><b>B</b> 太字</button>
+        <button type="button" className={`${btn} ${active.underline ? 'ring-2 ring-pink text-pink' : ''}`} onPointerDown={keepSel} onClick={toggleUnderline}><u>U</u> 下線</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('p')}>戻す</button>
         <button type="button" className={btn} onPointerDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
         <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
       </div>
-      {/* 文字色 */}
+      {/* 文字色（選択中の色にチェック。以降の入力もこの色になる） */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">文字色</span>
         {TEXT_COLORS.map((col) => (
-          <button key={col} type="button" onPointerDown={keepSel} onClick={() => wrapInline(`color:${col}`)} aria-label={`色 ${col}`}
-            className="h-6 w-6 rounded-full ring-2 ring-white transition active:scale-90" style={{ background: col }} />
+          <button key={col} type="button" onPointerDown={keepSel} onClick={() => setColor(col)} aria-label={`色 ${col}`}
+            className={`grid h-6 w-6 place-items-center rounded-full text-[10px] text-white transition active:scale-90 ${active.color === col.toLowerCase() ? 'ring-2 ring-ink scale-110' : 'ring-2 ring-white'}`}
+            style={{ background: col }}>{active.color === col.toLowerCase() ? '✓' : ''}</button>
         ))}
       </div>
-      {/* マーカー色（選んだ色で塗る） */}
+      {/* マーカー色（選択中の色にチェック。以降の入力もこの色でマーク） */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[11px] font-black text-muted">🖍 マーカー</span>
         {MARKER_COLORS.map((col) => (
-          <button key={col} type="button" onPointerDown={keepSel} onClick={() => wrapInline(`background-color:${col};border-radius:.25em;padding:0 .12em`)} aria-label={`マーカー ${col}`}
-            className="h-6 w-6 rounded-md ring-2 ring-white transition active:scale-90" style={{ background: col }} />
+          <button key={col} type="button" onPointerDown={keepSel} onClick={() => setHl(col)} aria-label={`マーカー ${col}`}
+            className={`grid h-6 w-6 place-items-center rounded-md text-[10px] text-ink transition active:scale-90 ${active.hl === col.toLowerCase() ? 'ring-2 ring-ink scale-110' : 'ring-2 ring-white'}`}
+            style={{ background: col }}>{active.hl === col.toLowerCase() ? '✓' : ''}</button>
         ))}
+        <button type="button" onPointerDown={keepSel} onClick={() => setHl('transparent')}
+          className="rounded-md bg-white px-2 py-0.5 text-[10px] font-black text-muted ring-1 ring-purple/15">なし</button>
       </div>
       {/* 区切り線（ギャルっぽい飾り線も） */}
       <div className="flex flex-wrap items-center gap-1.5">
@@ -5872,13 +5960,18 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
   const [visibility, setVisibility] = useState<'public' | 'followers'>('public');
   const [ngError, setNgError] = useState(false);
   const [hasText, setHasText] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const getBodyRef = useRef<() => string>(() => '');
-  const canPost = hasText;
+  const canPost = hasText && !submitting;
 
   function submit() {
+    if (submitting) return; // 連打防止
     const bodyText = (getBodyRef.current?.() ?? '').trim();
     if (!bodyText) return;
     if (containsNgWord(bodyText)) { setNgError(true); return; }
+    setSubmitting(true);
+    // 保存に失敗しても画面が固まらないよう、一定時間で解除
+    setTimeout(() => setSubmitting(false), 8000);
     const finalBody = (bgId && bgId !== 'plain' ? `[[bg:${bgId}]]\n` : '') + bodyText;
     const id = onCreate({ title: title.trim() || undefined, mood: mood || undefined, weather: weather || undefined, body: finalBody, textColor: titleColor, visibility });
     if (id) go('blog-detail', id);
@@ -5910,8 +6003,10 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
           </div>
         </section>
         <button onClick={submit} disabled={!canPost}
-          className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
-          記事を投稿する ✿
+          className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-pink text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
+          {submitting
+            ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> 投稿中…</>
+            : <>記事を投稿する ✿</>}
         </button>
       </div>
     </>
