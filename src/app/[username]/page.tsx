@@ -33,6 +33,7 @@ import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
+import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
@@ -2912,7 +2913,7 @@ function ProfileEditScreen({
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">🌐 言語 / Language</p>
           <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります（20言語対応）</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-2" data-noauto>
             {LANG_LIST.map((l) => (
               <button
                 key={l.id}
@@ -7727,6 +7728,9 @@ function AppContent() {
     setLang(l);
     localStorage.setItem('miri_lang', l);
   }
+
+  // 画面全体のハードコード日本語UIを自動翻訳（t()未対応の文字列を一括でカバー）
+  useAutoTranslateUI(lang);
 
   const localizedQuestions = useMemo(() => getQuestionsForLang(lang), [lang]);
 
