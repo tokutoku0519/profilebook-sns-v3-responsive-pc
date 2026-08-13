@@ -693,9 +693,27 @@ export function GarakeSticker({ keyId, size = 22, animated = true }: { keyId: st
   );
 }
 
+// ── ピクセル絵文字（画像素材：/public/pixel-emoji/*.png|gif）──────────
+// 通常の絵文字とは別カテゴリ。追加は PIXEL_EMOJIS に { key, file, label } を足すだけ。
+export const PIXEL_EMOJIS: { key: string; file: string; label: string }[] = [
+  { key: 'placeholder', file: 'placeholder.png', label: 'サンプル' },
+];
+const PIXEL_BY_KEY: Record<string, { key: string; file: string; label: string }> = Object.fromEntries(PIXEL_EMOJIS.map((p) => [p.key, p]));
+
+/** ピクセル絵文字を1つ描く（key指定）。画像は等倍・pixelatedでくっきり表示。 */
+export function PixelEmojiImg({ keyId, size = 24 }: { keyId: string; size?: number }) {
+  const p = PIXEL_BY_KEY[keyId];
+  if (!p) return null;
+  return (
+    <img src={`/pixel-emoji/${p.file}`} width={size} height={size} alt={p.label} title={p.label}
+      className="inline-block shrink-0 align-middle" style={{ imageRendering: 'pixelated' }} />
+  );
+}
+
 /** リアクション値を正しく描く共通部品。
- *  'g:heart'=ガラケースタンプ / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
+ *  'pe:xxx'=ピクセル絵文字(画像) / 'g:heart'=ガラケースタンプ / '[♥]'=ガチャ専用スプライト / それ以外=通常絵文字 */
 export function ReactionGlyph({ value, size = 20 }: { value: string; size?: number }) {
+  if (value.startsWith('pe:')) return <PixelEmojiImg keyId={value.slice(3)} size={size} />;
   if (value.startsWith('g:')) return <GarakeSticker keyId={value.slice(2)} size={size} />;
   if (isRetroCode(value)) return <RetroText text={value} />;
   // 旧仕様の 'px:😊' は通常絵文字として表示（自動ドット化は廃止）

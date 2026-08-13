@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
+import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { getQuestionsForLang } from '@/lib/localeQuestions';
@@ -4156,9 +4156,12 @@ function getOwnedStickerEmojis(ownedPackIds: string[], ownedGachaStickers: strin
 
 // アプリ内の全絵文字ピッカー（カテゴリタブ＋一覧＋自由入力）。myStickers があれば先頭に「マイスタンプ」タブ。
 function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => void; myStickers?: string[] }) {
+  const PIXEL_CAT = '__pixel';
   const categories = myStickers.length > 0
     ? [{ id: 'mine', label: 'マイスタンプ', icon: '🎁', emojis: myStickers }, ...EMOJI_CATEGORIES]
     : EMOJI_CATEGORIES;
+  // 末尾に「ピクセル絵文字」専用カテゴリ（通常絵文字とは別）
+  const tabs = [...categories, { id: PIXEL_CAT, label: 'ピクセル絵文字', icon: '▦', emojis: [] as string[] }];
   const [cat, setCat] = useState(categories[0].id);
   const [input, setInput] = useState('');
   const current = categories.find((c) => c.id === cat) ?? categories[0];
@@ -4167,6 +4170,7 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
   const q = input.trim();
   const searchHits = q ? searchEmojis(q) : [];
   const searching = q.length > 0;
+  const pixelTab = cat === PIXEL_CAT && !searching;
   return (
     <div className="space-y-2 rounded-2xl bg-white p-3 shadow-card">
       {/* 検索＆自由入力（端末キーボードからでも／キーワードでも） */}
@@ -4180,10 +4184,10 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
         />
         <button onClick={submitInput} disabled={!input.trim()} className="shrink-0 rounded-full bg-pink px-4 py-2 text-xs font-black text-white disabled:opacity-40">つける</button>
       </div>
-      {/* カテゴリタブ（検索中は隠す） */}
+      {/* カテゴリタブ（検索中は隠す）。末尾に▦ピクセル絵文字 */}
       {!searching && (
         <div className="flex gap-1 overflow-x-auto pb-1">
-          {categories.map((c) => (
+          {tabs.map((c) => (
             <button
               key={c.id}
               onClick={() => setCat(c.id)}
@@ -4195,8 +4199,21 @@ function EmojiPicker({ onPick, myStickers = [] }: { onPick: (emoji: string) => v
           ))}
         </div>
       )}
-      {/* 絵文字一覧（検索中は検索結果、そうでなければカテゴリ） */}
-      {searching && searchHits.length === 0 ? (
+      {/* 一覧：ピクセル絵文字カテゴリなら画像、そうでなければ通常絵文字（検索中は検索結果） */}
+      {pixelTab ? (
+        PIXEL_EMOJIS.length === 0 ? (
+          <p className="px-1 py-6 text-center text-xs font-bold text-muted">ピクセル絵文字はまだありません。</p>
+        ) : (
+          <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+            {PIXEL_EMOJIS.map((p) => (
+              <button key={p.key} onClick={() => onPick(`pe:${p.key}`)} aria-label={p.label}
+                className="grid h-12 w-full place-items-center rounded-xl transition hover:bg-pink/10 active:scale-90">
+                <PixelEmojiImg keyId={p.key} size={30} />
+              </button>
+            ))}
+          </div>
+        )
+      ) : searching && searchHits.length === 0 ? (
         <p className="px-1 py-6 text-center text-xs font-bold text-muted">「{q}」に一致する絵文字はありません。<br />そのまま「つける」で直接入力できます。</p>
       ) : (
         <div className="grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto">
