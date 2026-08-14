@@ -1,7 +1,10 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { siteUrl } from '@/lib/siteUrl';
 
 export const metadata: Metadata = {
+  // OGP・canonical・相対画像パスの基準URL（NEXT_PUBLIC_SITE_URL があればそれ、無ければVercel/既定）
+  metadataBase: new URL(siteUrl()),
   title: 'Miri — みんなのプロフィール帳SNS',
   description: '平成プロフィール帳 × シール帳 × SNS。お題に答えて、プロフ帳を交換しよう。',
   icons: {
