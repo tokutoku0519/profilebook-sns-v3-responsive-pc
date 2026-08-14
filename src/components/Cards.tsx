@@ -29,6 +29,14 @@ export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
     );
   }
 
+  if (type === 'pioneer') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-2.5 py-0.5 text-[10px] font-black tracking-widest text-white ring-1 ring-white/50 shadow-sm">
+        {def.emoji} {def.label}
+      </span>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 text-[10px] font-black text-sky-600 ring-1 ring-sky-200">
       {def.emoji} {def.label}

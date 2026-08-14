@@ -5,6 +5,28 @@
 // supabase 未設定（null）の場合は安全に空を返す or 何もしない。
 // ============================================================
 import { supabase } from './supabase';
+import { isPioneerAccount, registerUserTitles } from './titles';
+
+// DBから読んだ profiles の称号を、画面表示用に "@username" キーで登録する。
+function registerProfileTitles(p?: { username?: string | null; titles?: string[] | null } | null): void {
+  if (!p?.username) return;
+  registerUserTitles('@' + p.username, p.titles ?? []);
+}
+
+// テスト公開以降に登録した本人アカウントに「先駆者」称号を一度だけ付与する（自分の行のみ）。
+async function grantPioneerIfEligible(row: ProfileRow | null): Promise<ProfileRow | null> {
+  if (!supabase || !row) return row;
+  const titles = Array.isArray(row.titles) ? row.titles : [];
+  if (titles.includes('pioneer')) return row;
+  const { data: sess } = await supabase.auth.getSession();
+  const user = sess.session?.user;
+  if (!user || user.id !== row.id) return row; // 付与できるのは自分の行だけ（RLS前提）
+  if (!isPioneerAccount(user.created_at)) return row;
+  const next = [...titles, 'pioneer'];
+  const { error } = await supabase.from('profiles').update({ titles: next }).eq('id', row.id);
+  if (error) return row;
+  return { ...row, titles: next };
+}
 
 export type ProfileRow = {
   id: string;
@@ -85,7 +107,9 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
   if (!uid) return null;
   const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
   if (error) return null;
-  return data as ProfileRow;
+  const row = await grantPioneerIfEligible(data as ProfileRow);
+  registerProfileTitles(row);
+  return row;
 }
 
 /**
@@ -103,7 +127,11 @@ export async function ensureProfile(): Promise<ProfileRow | null> {
     .select('*')
     .eq('id', user.id)
     .maybeSingle();
-  if (existing) return existing as ProfileRow;
+  if (existing) {
+    const row = await grantPioneerIfEligible(existing as ProfileRow);
+    registerProfileTitles(row);
+    return row;
+  }
   // 行が無い＝旧アカウント等。フォールバックのID/表示名で作成する。
   const base =
     (user.email?.split('@')[0] || 'user').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'user';
@@ -114,14 +142,18 @@ export async function ensureProfile(): Promise<ProfileRow | null> {
     .select('*')
     .single();
   if (error) return null;
-  return created as ProfileRow;
+  const row = await grantPioneerIfEligible(created as ProfileRow);
+  registerProfileTitles(row);
+  return row;
 }
 
 export async function getProfileByUsername(username: string): Promise<ProfileRow | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.from('profiles').select('*').eq('username', username).single();
   if (error) return null;
-  return data as ProfileRow;
+  const row = await grantPioneerIfEligible(data as ProfileRow);
+  registerProfileTitles(row);
+  return row;
 }
 
 /** プロフィール帳（book）を保存 */
@@ -240,6 +272,7 @@ async function attachProfilesAndReactions(rows: any[]): Promise<AnswerRow[]> {
     supabase.from('reactions').select('answer_id,type,user_id').in('answer_id', answerIds),
   ]);
   const profMap = new Map((profRes.data ?? []).map((p: any) => [p.id, p]));
+  for (const p of (profRes.data ?? []) as any[]) registerProfileTitles(p); // フィードの著者バッジ用
   const reactByAnswer = new Map<string, { type: string; user_id: string }[]>();
   for (const r of (reactRes.data ?? []) as any[]) {
     const arr = reactByAnswer.get(r.answer_id) ?? [];
@@ -300,7 +333,9 @@ export async function searchProfiles(query: string, limit = 20): Promise<Profile
       .or(`username.ilike.%${safe}%,display_name.ilike.%${safe}%`)
       .limit(limit);
   }
-  return (res.data ?? []) as ProfileRow[];
+  const rows = (res.data ?? []) as ProfileRow[];
+  for (const p of rows) registerProfileTitles(p);
+  return rows;
 }
 
 /** 特定ユーザーの回答一覧 */
