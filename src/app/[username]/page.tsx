@@ -34,6 +34,12 @@ import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
+import { COIN_PACKAGES } from '@/lib/coinPackages';
+import { getAccessToken } from '@/lib/db';
+
+// 決済（Stripe）が有効かのフラグ。Vercel に NEXT_PUBLIC_STRIPE_ENABLED=1 を設定すると
+// 購入ボタンが実際の Checkout を開始する。未設定なら「準備中」表示で安全に無効化される。
+const STRIPE_ENABLED = process.env.NEXT_PUBLIC_STRIPE_ENABLED === '1';
 import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/lib/shareTargets';
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
@@ -7307,16 +7313,11 @@ function EmptyState({ text }: { text: string }) {
 }
 
 // ── コインウォレット画面 ────────────────────────────────────────
-const COIN_PACKAGES = [
-  { coins: 100,  price: 120,  bonus: 0,   popular: false },
-  { coins: 500,  price: 480,  bonus: 50,  popular: true  },
-  { coins: 1000, price: 980,  bonus: 200, popular: false },
-  { coins: 3000, price: 2800, bonus: 800, popular: false },
-];
+// コインパッケージ定義は @/lib/coinPackages に集約（サーバー検証と共通化）。
 
-function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void; coins: number; onPurchaseCoins: (amount: number) => void }) {
-  // 購入は確認をはさむ（誤タップでの無限増殖を防ぐ）
-  const [pendingPkg, setPendingPkg] = useState<{ coins: number; bonus: number; price: number } | null>(null);
+function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coins: number; onCheckout: (packageId: string) => void }) {
+  // 購入は確認をはさむ
+  const [pendingPkg, setPendingPkg] = useState<(typeof COIN_PACKAGES)[number] | null>(null);
   const history: Array<{ amount: number; reason: string; date: string }> = (() => {
     if (typeof window === 'undefined') return [];
     try { return JSON.parse(localStorage.getItem('miri_coin_history') || '[]'); } catch { return []; }
@@ -7344,11 +7345,13 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
         {/* コイン購入 */}
         <section className="rounded-[28px] bg-white p-5 shadow-card">
           <p className="mb-1 text-sm font-black text-ink">💳 コインを購入する</p>
-          <p className="mb-4 text-xs font-bold text-muted">※ 現在はテスト購入（実際の決済は発生しません）</p>
+          <p className="mb-4 text-xs font-bold text-muted">
+            {STRIPE_ENABLED ? '※ 決済はStripe（テストモード）で処理されます' : '※ 決済は準備中です（正式版で対応予定）'}
+          </p>
           <div className="space-y-2">
             {COIN_PACKAGES.map((pkg) => (
               <button
-                key={pkg.coins}
+                key={pkg.id}
                 onClick={() => setPendingPkg(pkg)}
                 className={`flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition active:scale-[0.98] ${pkg.popular ? 'bg-gradient-to-r from-amber-400 to-orange-400 shadow-card' : 'bg-base hover:bg-amber-50'}`}
               >
@@ -7366,6 +7369,9 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
               </button>
             ))}
           </div>
+          <p className="mt-3 text-center text-[10px] font-bold text-muted">
+            <a href="/tokushoho" target="_blank" rel="noopener noreferrer" className="underline">特定商取引法に基づく表記</a>
+          </p>
         </section>
 
         {/* 使い道 */}
@@ -7434,13 +7440,15 @@ function WalletScreen({ go, coins, onPurchaseCoins }: { go: (s: Screen) => void;
           <div className="w-full max-w-xs rounded-[28px] bg-white p-6 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-3xl"><CoinIcon size={32} /></p>
             <p className="mt-2 text-lg font-black text-ink">{(pendingPkg.coins + pendingPkg.bonus).toLocaleString()}コイン</p>
-            <p className="mt-1 text-xs font-bold text-muted">テスト購入（実際の決済は発生しません）</p>
+            <p className="mt-1 text-xs font-bold text-muted">
+              {STRIPE_ENABLED ? `¥${pendingPkg.price.toLocaleString()}（Stripeテストモード）` : '決済は準備中です（正式版で対応予定）'}
+            </p>
             <div className="mt-4 flex gap-2">
               <button onClick={() => setPendingPkg(null)} className="flex-1 rounded-full bg-base py-3 text-sm font-black text-muted active:scale-[0.98]">キャンセル</button>
               <button
-                onClick={() => { onPurchaseCoins(pendingPkg.coins + pendingPkg.bonus); setPendingPkg(null); }}
+                onClick={() => { onCheckout(pendingPkg.id); setPendingPkg(null); }}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-black text-white shadow-card active:scale-[0.98]"
-              >購入する</button>
+              >{STRIPE_ENABLED ? '購入手続きへ' : 'OK'}</button>
             </div>
           </div>
         </div>
@@ -8104,6 +8112,25 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     return true;
   }
 
+  // コイン購入：Stripe Checkout を開始（有効時のみ）。付与は決済検証後にサーバー側で行う。
+  async function startCheckout(packageId: string) {
+    if (!STRIPE_ENABLED) { showToast('💳 決済は準備中です（正式版で対応予定）'); return; }
+    try {
+      const token = await getAccessToken();
+      if (!token) { showToast('ログインが必要です。ログインし直してからお試しください'); return; }
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ packageId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.url) { window.location.href = json.url; return; }
+      showToast('決済を開始できませんでした。時間をおいて再度お試しください');
+    } catch {
+      showToast('決済を開始できませんでした。通信環境をご確認ください');
+    }
+  }
+
   // ── ゲームデータ（コイン/スタンプ/背景/かけら/テーマ）のSupabase同期 ──
   // 既存の book 列に __game として保存するため、SQL/テーブル追加は不要。
   const gameSyncReady = useRef(false);
@@ -8172,6 +8199,40 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     const t = setTimeout(() => { persistGame(); }, 1500);
     return () => clearTimeout(t);
   }, [coins, ownedPackIds, ownedGachaStickers, ownedBgIds, equippedBgId, bgShards, ownedThemeIds, appTheme]);
+
+  // Stripe からの戻り（?checkout=success|cancel）を処理：付与済みコインをサーバーから取り込む。
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const cs = params.get('checkout');
+    if (!cs) return;
+    // URL からパラメータを消す（再実行防止・見た目）
+    const url = new URL(window.location.href);
+    url.searchParams.delete('checkout');
+    window.history.replaceState({}, '', url.toString());
+    if (cs === 'cancel') { showToast('決済をキャンセルしました'); return; }
+    if (cs !== 'success') return;
+    showToast('🎁 ご購入ありがとうございます！コインを反映しています…');
+    if (!dbReady()) return;
+    let stop = false;
+    (async () => {
+      // Webhook 付与が反映されるまで数回リトライしてサーバー残高を取り込む
+      for (let tries = 0; !stop && tries < 6; tries++) {
+        const p = await getMyProfile();
+        const g = (p?.book as any)?.__game;
+        const localCoins = Number(localStorage.getItem('miri_coins') || '0');
+        if (g && typeof g.coins === 'number' && g.coins > localCoins) {
+          setCoins(g.coins);
+          localStorage.setItem('miri_coins', String(g.coins));
+          showToast('✅ コインを反映しました');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    })();
+    return () => { stop = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── 通知設定 ────────────────────────────────────────────────
   const [notifyOdai, setNotifyOdai] = useState<boolean>(() => {
@@ -9268,7 +9329,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     />
   );
     
-    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} onPurchaseCoins={(amount) => { addCoins(amount, 'コイン購入'); addNotification('💳', `コインを ${amount} 枚購入しました`); }} />;
+    if (screen === 'wallet') return <WalletScreen go={go} coins={coins} onCheckout={startCheckout} />;
     if (screen === 'circles') return <CirclesScreen go={go} circles={circles} circlePosts={circlePosts} />;
     if (screen === 'circle-create') return <CircleCreateScreen go={go} onCreate={createCircle} />;
     if (screen === 'circle-detail') {

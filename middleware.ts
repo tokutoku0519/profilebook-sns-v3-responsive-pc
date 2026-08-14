@@ -19,7 +19,11 @@ export function middleware(request: NextRequest) {
     // 公開ブログ記事（外部共有・検索インデックス用）と SEO ファイルはログイン不要で見せる
     pathname.startsWith('/b/') ||
     pathname === '/robots.txt' ||
-    pathname === '/sitemap.xml'
+    pathname === '/sitemap.xml' ||
+    // APIルート（決済・Webhook）は自前で認証/署名検証するのでクッキーゲート対象外
+    pathname.startsWith('/api/') ||
+    // 特定商取引法に基づく表記（有料課金の法定表示）は公開
+    pathname.startsWith('/tokushoho')
   ) {
     return NextResponse.next();
   }

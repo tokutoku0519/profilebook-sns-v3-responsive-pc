@@ -80,6 +80,13 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+/** 現在のアクセストークン（サーバーAPIへ Bearer で渡す用）。無ければ null。 */
+export async function getAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 /** 有効な Supabase セッションがあるか（自動ログインでも期限切れなら false）。 */
 export async function hasValidSession(): Promise<boolean> {
   if (!supabase) return false;
