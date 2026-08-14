@@ -15,7 +15,11 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/auth') ||
     pathname.startsWith('/setup') ||
     pathname.startsWith('/terms') ||
-    pathname.startsWith('/privacy')
+    pathname.startsWith('/privacy') ||
+    // 公開ブログ記事（外部共有・検索インデックス用）と SEO ファイルはログイン不要で見せる
+    pathname.startsWith('/b/') ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml'
   ) {
     return NextResponse.next();
   }
