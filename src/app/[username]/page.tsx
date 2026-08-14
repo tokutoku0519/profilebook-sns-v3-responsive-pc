@@ -7841,15 +7841,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       if (!isDev && (u || dn)) me.isOfficial = false;
     } catch {}
     setMeVersion((v) => v + 1);
-
-    // 初期設定(/setup)完了ボーナス（初回のみ）
-    try {
-      if (localStorage.getItem('miri_username') && !localStorage.getItem('miri_setup_bonus')) {
-        localStorage.setItem('miri_setup_bonus', '1');
-        addCoins(SETUP_BONUS, '初期設定ボーナス');
-        showToast(`初期設定ボーナス ＋${SETUP_BONUS} コイン！プロフィールを埋めるともっと貯まるよ`);
-      }
-    } catch {}
+    // ※ 初期設定ボーナスは「ゲームデータ復元後」に別effectで付与する（再ログインでの再取得防止）
 
     // ② Supabase から正式なプロフィールを読み込んで上書き（あれば）
     if (!dbReady()) return;
@@ -7966,6 +7958,9 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     const s = localStorage.getItem('miri_coins');
     return s ? Number(s) : initial;
   });
+  // ゲームデータ（コイン＋報酬ガード）の復元が終わったか。
+  // これが true になるまでボーナス付与を待たせ、再ログイン直後の「ガード未復元での再取得」を防ぐ。
+  const [gameLoaded, setGameLoaded] = useState(false);
 
   // ── PR案件 ────────────────────────────────────────────────
   const [prQuestion] = useState<PRQuestion>(() => getTodaysPRQuestion());
@@ -8117,7 +8112,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   //   セッション未確立で getMyProfile が null のときに保存を有効化すると、
   //   空データでサーバーを上書きしてしまうため、成功するまでリトライする。
   useEffect(() => {
-    if (!dbReady()) { gameSyncReady.current = true; return; }
+    if (!dbReady()) { gameSyncReady.current = true; setGameLoaded(true); return; }
     let cancelled = false;
     let tries = 0;
     async function loadOnce(): Promise<boolean> {
@@ -8136,6 +8131,23 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
         if (g.bg !== undefined) { setEquippedBgId(g.bg); if (g.bg) localStorage.setItem('miri_equipped_bg', g.bg); else localStorage.removeItem('miri_equipped_bg'); }
         if (g.appTheme) { setAppTheme(g.appTheme); localStorage.setItem('appTheme', g.appTheme); applyTheme(g.appTheme); }
         if (g.freeGacha) { try { localStorage.setItem('miri_free_gacha_used', g.freeGacha); } catch {} }
+        // ── 報酬の重複防止ガードを復元（コイン無限増殖対策）──
+        // 配列は「取得済みを絶対に減らさない」ためローカルとサーバーを統合（union）してから保存。
+        const mergeArr = (key: string, serverVal: any) => {
+          let local: string[] = [];
+          try { local = JSON.parse(localStorage.getItem(key) || '[]'); } catch {}
+          const server = Array.isArray(serverVal) ? serverVal : [];
+          localStorage.setItem(key, JSON.stringify([...new Set([...server, ...local])]));
+        };
+        mergeArr('miri_earned_fields', g.earnedFields);   // プロフィール入力報酬
+        mergeArr('miri_rewarded_qids', g.rewardedQids);   // お題回答報酬
+        if (g.setupBonus) localStorage.setItem('miri_setup_bonus', g.setupBonus); // 初期設定ボーナス（1回のみ）
+        if (g.prAnswered) localStorage.setItem('miri_pr_answered', g.prAnswered); // PR案件（日次）
+        if (g.dailyLogin) localStorage.setItem('miri_daily_login', g.dailyLogin); // デイリーログイン（日次）
+        if (typeof g.loginStreak === 'number' && g.loginStreak > 0) {
+          const localStreak = parseInt(localStorage.getItem('miri_streak') || '0');
+          localStorage.setItem('miri_streak', String(Math.max(localStreak, g.loginStreak)));
+        }
       }
       return true;                       // 取得できた（__game が無い新規アカウントも成功扱い）
     }
@@ -8144,7 +8156,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       // 保存を有効化しない＝サーバーを空で上書きしない安全側に倒す。
       while (!cancelled && tries < 5) {
         const ok = await loadOnce();
-        if (ok) { gameSyncReady.current = true; return; }
+        if (ok) { gameSyncReady.current = true; setGameLoaded(true); return; }
         tries++;
         await new Promise((r) => setTimeout(r, 600));
       }
@@ -8198,8 +8210,24 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifyOdai, dailyQuestion]);
 
-  // デイリーログインボーナス（連続日数は「前日にログインしていたか」で判定。1日でも空くとリセット）
+  // 初期設定(/setup)完了ボーナス（初回のみ）。
+  // ゲームデータ復元後にだけ判定＝再ログイン/端末クリアでガードが空のうちに再取得されるのを防ぐ。
   useEffect(() => {
+    if (!gameLoaded) return;
+    try {
+      if (localStorage.getItem('miri_username') && !localStorage.getItem('miri_setup_bonus')) {
+        localStorage.setItem('miri_setup_bonus', '1');
+        addCoins(SETUP_BONUS, '初期設定ボーナス');
+        showToast(`初期設定ボーナス ＋${SETUP_BONUS} コイン！プロフィールを埋めるともっと貯まるよ`);
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameLoaded]);
+
+  // デイリーログインボーナス（連続日数は「前日にログインしていたか」で判定。1日でも空くとリセット）
+  // ゲームデータ復元後にだけ判定＝日次ガードが空のうちに再取得されるのを防ぐ。
+  useEffect(() => {
+    if (!gameLoaded) return;
     const now = new Date();
     const today = now.toDateString();
     const last = localStorage.getItem('miri_daily_login');
@@ -8218,7 +8246,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${bonus ? `（${streak}日連続！）` : ''}`);
     }, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [gameLoaded]);
 
   const ownedStickerCount = useMemo(() =>
     STICKER_PACKS.reduce((total, pack) => {
@@ -8477,6 +8505,13 @@ function composeGameData(): Record<string, any> {
     themes: arr('miri_owned_themes'),
     appTheme: localStorage.getItem('appTheme') || 'default',
     freeGacha: localStorage.getItem('miri_free_gacha_used') || null,
+    // ── 報酬の重複防止ガード（端末クリア/再ログインでリセットさせない＝コイン無限増殖対策）──
+    earnedFields: arr('miri_earned_fields'),
+    rewardedQids: arr('miri_rewarded_qids'),
+    setupBonus: localStorage.getItem('miri_setup_bonus') || null,
+    dailyLogin: localStorage.getItem('miri_daily_login') || null,
+    loginStreak: num('miri_streak'),
+    prAnswered: localStorage.getItem('miri_pr_answered') || null,
   };
 }
 
