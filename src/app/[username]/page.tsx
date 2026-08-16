@@ -3589,8 +3589,18 @@ function drawCardAvatar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r
   ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
   ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, Math.PI * 2); ctx.strokeStyle = CARD_BLUE; ctx.lineWidth = 3; ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
-  if (d.avatarImg) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(d.avatarImg, cx - r, cy - r, r * 2, r * 2); }
-  else if (d.avatar) { ctx.font = `${r}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.avatar, cx, cy); }
+  if (d.avatarImg) {
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
+    ctx.drawImage(d.avatarImg, cx - r, cy - r, r * 2, r * 2);
+  } else {
+    // 画像が無ければ絵文字→名前の頭文字の順でフォールバック（必ず何か表示する）
+    const glyph = (d.avatar && d.avatar.trim()) ? d.avatar : (d.name?.trim()?.[0] || '🙂');
+    ctx.fillStyle = '#6B5CA5';
+    ctx.font = `${Math.round(r * 1.05)}px "Klee One", serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, cx, cy + 2);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  }
   ctx.restore();
 }
 
@@ -3672,16 +3682,16 @@ function drawShareCardC(ctx: CanvasRenderingContext2D, W: number, H: number, d: 
   ctx.fillStyle = CARD_INK; ctx.font = `600 46px ${CARD_HAND}`; ctx.fillText(truncateStr(d.name, 8), 270, 160);
   ctx.fillStyle = CARD_MUTED; ctx.font = `600 24px ${CARD_HAND}`; ctx.fillText(d.id, 272, 200);
   // 見出し
-  ctx.fillStyle = CARD_INK; ctx.font = `600 48px ${CARD_HAND}`; ctx.fillText('私との一致率、何%？', 80, 300);
-  cardUnderline(ctx, 80, 560, 320, CARD_PURPLE, 5);
-  // チェックリスト
+  ctx.fillStyle = CARD_INK; ctx.font = `600 46px ${CARD_HAND}`; ctx.fillText('私との一致率、何%？', 80, 288);
+  cardUnderline(ctx, 80, 540, 308, CARD_PURPLE, 5);
+  // チェックリスト（ロゴと被らないよう間隔を詰める）
   CARD_C_TRAITS.forEach((tr, i) => {
-    const y = 370 + i * 50;
-    cardCheckbox(ctx, 100, y - 22, 26, CARD_PURPLE);
-    ctx.fillStyle = CARD_INK; ctx.font = `600 30px ${CARD_HAND}`; ctx.fillText(tr, 145, y);
+    const y = 352 + i * 42;
+    cardCheckbox(ctx, 100, y - 20, 24, CARD_PURPLE);
+    ctx.fillStyle = CARD_INK; ctx.font = `600 28px ${CARD_HAND}`; ctx.fillText(tr, 142, y);
   });
-  drawCardQr(ctx, 740, 120, 380, 380, d, 'QRで診断', '#C9B8EC', '一致率をチェック！');
-  drawCardLogo(ctx, 80, H - 50);
+  drawCardQr(ctx, 740, 120, 380, 360, d, 'QRで診断', '#C9B8EC', '一致率をチェック！');
+  drawCardLogo(ctx, 80, H - 44);
 }
 
 // ── D：穴埋めクイズ ──
@@ -3809,10 +3819,20 @@ function ProfileShareModal({
   function handleGenerateImage() {
     setImageGenerated(false);
     const doDraw = (avatarImg?: HTMLImageElement, qrImg?: HTMLImageElement) => {
-      // 手書き風フォントが読み込まれてから描画（Canvasは未ロードだと標準フォントになる）
+      // 手書き風フォント（Google FontsのCJK）は「描画する文字」を指定してロードしないと
+      // 未取得グリフがシステムフォントに化ける（部分的に太字に見える原因）。全文字を渡して読む。
+      const cardText =
+        'Miriつながるひろがるプロフィールをみてね答えを見る答えはMiriでQRで開くQRで診断一致率をチェック穴埋めで予想してみて親友なのに意外と知らない知ってる私とのは何朝型犬派海派旅行計画甘党つづき私の' +
+        '0123456789%？?。、！ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@_-' +
+        [name, userId, info.favoriteFood, info.hobby, info.dream, info.favoriteMusic, info.nickname, info.birthday, info.mbti, info.favoriteCharacter,
+          t('field_favoriteFood', lang), t('field_hobby', lang), t('field_dream', lang), t('field_favoriteMusic', lang),
+          t('field_nickname', lang), t('field_birthday', lang), t('field_mbti', lang), t('field_favoriteCharacter', lang)].join('');
       const fonts = (document as any).fonts;
       const ready = fonts?.load
-        ? Promise.all([fonts.load(`600 60px "Klee One"`), fonts.load(`400 40px "Zen Kurenaido"`)]).catch(() => {})
+        ? Promise.all([
+            fonts.load(`600 48px "Klee One"`, cardText),
+            fonts.load(`400 40px "Klee One"`, cardText),
+          ]).catch(() => {})
         : Promise.resolve();
       ready.then(() => drawCard(avatarImg, qrImg));
     };
