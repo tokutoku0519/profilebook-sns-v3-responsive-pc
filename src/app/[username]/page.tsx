@@ -35,8 +35,9 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
-import { getAccessToken, submitFeedback } from '@/lib/db';
+import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices } from '@/lib/db';
 import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
+import { CHOICE_QUESTIONS, matchPercent } from '@/lib/choiceQuiz';
 
 // 決済（Stripe）が有効かのフラグ。Vercel に NEXT_PUBLIC_STRIPE_ENABLED=1 を設定すると
 // 購入ボタンが実際の Checkout を開始する。未設定なら「準備中」表示で安全に無効化される。
@@ -47,7 +48,7 @@ import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGach
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
 import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'collab';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'collab' | 'diagnosis';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -2525,6 +2526,16 @@ function OtherProfileScreen({
         </button>
       </div>
 
+      {/* 一致率しんだん */}
+      <div className="px-4 pt-2">
+        <button
+          onClick={() => go('diagnosis', profile.id)}
+          className="w-full rounded-full bg-gradient-to-r from-pink to-purple-400 py-3 text-sm font-black text-white shadow-card active:scale-[0.99]"
+        >
+          💯 {profile.name}との一致率しんだん
+        </button>
+      </div>
+
       {/* なかよし度 */}
       <div className="px-4 pt-3">
         <section className="prof-pill p-4">
@@ -2737,6 +2748,13 @@ function ProfileScreen({
           className="rounded-full bg-white px-4 py-3 text-sm font-black text-muted shadow-card active:scale-[0.99]"
         >
           <Share2 size={17} />
+        </button>
+        <button
+          onClick={() => go('diagnosis')}
+          className="rounded-full bg-white px-4 py-3 text-sm font-black text-purple shadow-card active:scale-[0.99]"
+          title="一致率しんだんに答える"
+        >
+          💯
         </button>
         {me.isOfficial && (
           <button
@@ -7095,6 +7113,116 @@ const SHOP_CATEGORY_LABELS: { key: ShopCategory; label: string; emoji: string }[
 
 type GachaResult = { sticker: StickerItem; isNew: boolean }[];
 
+// ── 一致率しんだん（相性診断）画面 ───────────────────────────
+function DiagnosisScreen({ go, target }: { go: (s: Screen, payload?: any) => void; target: string | null }) {
+  const isSelf = !target || target === me.id;
+  const [loading, setLoading] = useState(true);
+  const [targetChoices, setTargetChoices] = useState<Record<string, string>>({});
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState(false);
+  const [result, setResult] = useState<{ percent: number; same: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const mine = await getMyChoices();
+      if (cancelled) return;
+      if (isSelf) { setPicks(mine); }
+      else { const th = await getUserChoices(target!); if (!cancelled) setTargetChoices(th); }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  const back = () => go('profile', isSelf ? undefined : (target ?? undefined));
+  if (loading) return (<><AppHeader title="一致率しんだん" back onBack={back} /><div className="p-10 text-center text-sm font-bold text-muted">読み込み中…</div></>);
+
+  const QChoice = ({ q, accent }: { q: (typeof CHOICE_QUESTIONS)[number]; accent: string }) => (
+    <div className="rounded-2xl bg-white p-3 shadow-card">
+      <p className="mb-2 text-xs font-black text-muted">{q.label}</p>
+      <div className="grid grid-cols-2 gap-2">
+        {(['a', 'b'] as const).map((opt) => (
+          <button key={opt} onClick={() => setPicks((p) => ({ ...p, [q.key]: opt }))}
+            className={`rounded-xl py-3 text-sm font-black transition ${picks[q.key] === opt ? `${accent} text-white shadow-card` : 'bg-base text-ink'}`}>
+            {q[opt]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // 自分の答えを登録（他の人が診断できるように）
+  if (isSelf) {
+    const answered = CHOICE_QUESTIONS.filter((q) => picks[q.key]).length;
+    return (
+      <>
+        <AppHeader title="一致率しんだん" back onBack={back} />
+        <div className="space-y-4 px-4 pt-3 pb-32">
+          <div className="rounded-[24px] bg-gradient-to-r from-blue-400 to-purple-400 p-5 text-white shadow-card">
+            <p className="text-sm font-black">💯 あなたの答えを登録</p>
+            <p className="mt-1 text-xs font-bold opacity-90">答えておくと、友達があなたとの一致率を診断できます！</p>
+          </div>
+          {CHOICE_QUESTIONS.map((q) => <QChoice key={q.key} q={q} accent="bg-pink" />)}
+          <button onClick={async () => setSaved(await saveMyChoices(picks))} disabled={answered === 0}
+            className="w-full rounded-full bg-pink py-4 text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
+            登録する（{answered}/{CHOICE_QUESTIONS.length}）
+          </button>
+          {saved && <p className="text-center text-sm font-black text-green-500">✅ 登録しました！シェア画像の「一致率しんだん」から友達に広めよう</p>}
+        </div>
+      </>
+    );
+  }
+
+  // 相手を診断
+  const answerable = CHOICE_QUESTIONS.filter((q) => targetChoices[q.key]);
+  if (answerable.length === 0) {
+    return (
+      <>
+        <AppHeader title="一致率しんだん" back onBack={back} />
+        <div className="p-10 text-center">
+          <p className="text-3xl">🥺</p>
+          <p className="mt-3 text-sm font-black text-ink">{target} さんはまだ一致率しんだんに答えていません。</p>
+          <p className="mt-1 text-xs font-bold text-muted">相手が答えると診断できるようになります。</p>
+        </div>
+      </>
+    );
+  }
+  if (result) {
+    return (
+      <>
+        <AppHeader title="一致率しんだん" back onBack={back} />
+        <div className="flex flex-col items-center gap-5 px-6 pt-12 pb-32 text-center">
+          <p className="text-sm font-black text-muted">{target} との一致率は…</p>
+          <p className="text-7xl font-black text-pink">{result.percent}<span className="text-3xl">%</span></p>
+          <p className="text-sm font-bold text-ink">{result.total}問中 {result.same}問が同じ！</p>
+          <div className="flex flex-col gap-2 w-full max-w-xs">
+            <button onClick={() => { setResult(null); setPicks({}); }} className="rounded-full bg-base px-6 py-3 text-sm font-black text-ink">もう一度</button>
+            <button onClick={() => go('diagnosis', null)} className="rounded-full bg-pink px-6 py-3 text-sm font-black text-white">自分も答えて診断されよう ✿</button>
+          </div>
+        </div>
+      </>
+    );
+  }
+  const done = answerable.filter((q) => picks[q.key]).length;
+  return (
+    <>
+      <AppHeader title="一致率しんだん" back onBack={back} />
+      <div className="space-y-4 px-4 pt-3 pb-32">
+        <div className="rounded-[24px] bg-gradient-to-r from-pink to-purple-400 p-5 text-white shadow-card">
+          <p className="text-sm font-black">💯 {target} との一致率しんだん</p>
+          <p className="mt-1 text-xs font-bold opacity-90">あなたはどっち？答えると一致率が出るよ！</p>
+        </div>
+        {answerable.map((q) => <QChoice key={q.key} q={q} accent="bg-blue-400" />)}
+        <button onClick={() => setResult(matchPercent(picks, targetChoices))} disabled={done < answerable.length}
+          className="w-full rounded-full bg-pink py-4 text-base font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
+          結果を見る（{done}/{answerable.length}）
+        </button>
+      </div>
+    </>
+  );
+}
+
 // ── コラボ特集（企業コラボの一覧・入口） ───────────────────────
 function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
   const campaigns = activeBrandCampaigns();
@@ -8202,6 +8330,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   });
   const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0]?.id ?? '');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [diagTarget, setDiagTarget] = useState<string | null>(null); // 一致率しんだんの相手（@username）／null=自分
   // モックに居ない（＝Supabase上の実ユーザー）を開いたときに読み込むプロフィール
   const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
   // 開いている他ユーザーの Supabase プロフ帳（info/BEST3/今月/しつもん）
@@ -9294,6 +9423,11 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setSelectedAnswerId(payload);
   }
 
+  if (next === 'diagnosis') {
+    // payload は相手の @username（無ければ自分の回答登録モード）
+    setDiagTarget(payload && typeof payload === 'string' ? payload : null);
+  }
+
   if (next === 'create') {
     // お題を指定して開いたらそれを。指定なし（＋ボタン）は「今まだ回答していないお題」を既定に
     // （今日のお題が未回答ならそれ、済みなら未回答の先頭）。
@@ -9907,6 +10041,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
 
     if (screen === 'collab') return <CollabScreen go={go} />;
+    if (screen === 'diagnosis') return <DiagnosisScreen go={go} target={diagTarget} />;
 
 return <ProfileScreen
   go={go}

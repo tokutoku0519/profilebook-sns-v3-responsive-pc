@@ -80,6 +80,33 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+// ── 一致率しんだん（相性診断）の回答 book.__choices ────────────
+/** 自分の二択回答を book.__choices に保存（他項目は消さない read-merge-write）。 */
+export async function saveMyChoices(choices: Record<string, string>): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
+  const book: Record<string, any> = (data?.book && typeof data.book === 'object') ? data.book : {};
+  book.__choices = choices;
+  const { error } = await supabase.from('profiles').update({ book, updated_at: new Date().toISOString() }).eq('id', uid);
+  return !error;
+}
+/** 自分の二択回答を取得。 */
+export async function getMyChoices(): Promise<Record<string, string>> {
+  if (!supabase) return {};
+  const uid = await getCurrentUserId();
+  if (!uid) return {};
+  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
+  return ((data?.book as any)?.__choices ?? {}) as Record<string, string>;
+}
+/** 指定ユーザー（username）の二択回答を取得。 */
+export async function getUserChoices(username: string): Promise<Record<string, string>> {
+  if (!supabase) return {};
+  const { data } = await supabase.from('profiles').select('book').eq('username', username.replace(/^@/, '')).maybeSingle();
+  return ((data?.book as any)?.__choices ?? {}) as Record<string, string>;
+}
+
 /** テスターのフィードバック（意見・要望・不具合）を feedback テーブルへ投稿。 */
 export async function submitFeedback(kind: 'bug' | 'request' | 'question', body: string): Promise<boolean> {
   if (!supabase) return false;
