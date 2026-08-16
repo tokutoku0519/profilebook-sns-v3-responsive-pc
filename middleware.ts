@@ -25,7 +25,9 @@ export function middleware(request: NextRequest) {
     // APIルート（決済・Webhook）は自前で認証/署名検証するのでクッキーゲート対象外
     pathname.startsWith('/api/') ||
     // 特定商取引法に基づく表記（有料課金の法定表示）は公開
-    pathname.startsWith('/tokushoho')
+    pathname.startsWith('/tokushoho') ||
+    // 企業向け Creator Kit 紹介ページは公開（営業・検索インデックス用）
+    pathname.startsWith('/creator-kit')
   ) {
     return NextResponse.next();
   }
