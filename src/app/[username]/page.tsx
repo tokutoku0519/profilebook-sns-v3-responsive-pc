@@ -3836,44 +3836,43 @@ function drawShareCardB(ctx: CanvasRenderingContext2D, W: number, H: number, d: 
 // ── C：一致率診断（二択。本人の答えは伏せる） ──
 function drawShareCardC(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
   drawCardBase(ctx, W, H, '');
-  const L = 100, R = W - 60, CW = R - L;
+  const L = 100, R = W - 60;
   ctx.textAlign = 'center';
-  ctx.fillStyle = CV_MUTE; ctx.font = `700 30px ${CARD_HAND}`; ctx.fillText('私との一致率、何％？', W / 2, 140);
-  cvBanner(ctx, W / 2, 210, '一致率しんだん', 52, CV_BLUE);
-  ctx.fillStyle = CV_INK; ctx.font = `700 34px ${CARD_HAND}`; ctx.fillText('あなたと私、どっちが近い？', W / 2, 290);
-  ctx.fillStyle = CV_MUTE; ctx.font = `700 24px ${CARD_HAND}`; ctx.fillText('当てはまる方に○をしてね！', W / 2, 330); ctx.textAlign = 'left';
-  // 二択の行
+  ctx.fillStyle = CV_MUTE; ctx.font = `700 28px ${CARD_HAND}`; ctx.fillText('私との一致率、何％？', W / 2, 132);
+  cvBanner(ctx, W / 2, 198, '一致率しんだん', 50, CV_BLUE);
+  ctx.fillStyle = CV_INK; ctx.font = `700 32px ${CARD_HAND}`; ctx.fillText('あなたと私、どっちが近い？', W / 2, 272);
+  ctx.fillStyle = CV_MUTE; ctx.font = `700 23px ${CARD_HAND}`; ctx.fillText('あなたはどっち？予想してね！', W / 2, 308); ctx.textAlign = 'left';
   const pairs: [string, string, string][] = [
     ['朝・夜', '朝型', '夜型'], ['どっち？', '犬派', '猫派'], ['自然', '海', '山'],
     ['休日', 'インドア', 'アウトドア'], ['味', '辛いもの', '甘いもの'], ['旅行', '計画派', 'ノープラン'],
-    ['連絡', 'マメに連絡', '気まぐれ'], ['音楽', 'J-POP', '洋楽・ロック'], ['SNS', 'よく投稿', '見る専門'],
+    ['連絡', 'マメ', '気まぐれ'], ['音楽', 'J-POP', '洋楽・ロック'], ['SNS', 'よく投稿', '見る専門'],
     ['性格', 'わいわい', 'まったり'],
   ];
+  const rowH = 50, step = 82, y0 = 356;
   pairs.forEach((p, i) => {
-    const y = 380 + i * 96;
-    // ラベルタブ
-    ctx.fillStyle = CV_PURP; ctx.globalAlpha = 0.9; canvasRoundRect(ctx, L, y, 140, 54, 16); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff'; ctx.font = `700 24px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(p[0], L + 70, y + 27);
-    // 左の選択肢
-    ctx.fillStyle = 'rgba(143,176,232,0.16)'; canvasRoundRect(ctx, L + 156, y, 300, 54, 16); ctx.fill();
-    ctx.fillStyle = CV_BLUE; ctx.font = `700 30px ${CARD_HAND}`; ctx.fillText(p[1], L + 156 + 150, y + 27);
-    // or
-    ctx.fillStyle = CV_PINK; ctx.font = `700 26px ${CARD_HAND}`; ctx.fillText('or', L + 156 + 300 + 34, y + 27);
-    // 右の選択肢
-    ctx.fillStyle = 'rgba(238,158,199,0.16)'; canvasRoundRect(ctx, R - 300, y, 300, 54, 16); ctx.fill();
-    ctx.fillStyle = CV_PINK; ctx.font = `700 30px ${CARD_HAND}`; ctx.fillText(p[2], R - 150, y + 27);
+    const y = y0 + i * step;
+    ctx.fillStyle = CV_PURP; ctx.globalAlpha = 0.9; canvasRoundRect(ctx, L, y, 128, rowH, 15); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff'; ctx.font = `700 22px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p[0], L + 64, y + rowH / 2);
+    ctx.fillStyle = 'rgba(143,176,232,0.16)'; canvasRoundRect(ctx, L + 142, y, 300, rowH, 15); ctx.fill();
+    ctx.fillStyle = CV_BLUE; ctx.font = `700 28px ${CARD_HAND}`; ctx.fillText(p[1], L + 142 + 150, y + rowH / 2);
+    ctx.fillStyle = CV_PINK; ctx.font = `700 24px ${CARD_HAND}`; ctx.fillText('or', W / 2 + 32, y + rowH / 2);
+    ctx.fillStyle = 'rgba(238,158,199,0.16)'; canvasRoundRect(ctx, R - 300, y, 300, rowH, 15); ctx.fill();
+    ctx.fillStyle = CV_PINK; ctx.font = `700 28px ${CARD_HAND}`; ctx.fillText(p[2], R - 150, y + rowH / 2);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   });
-  // 結果＋QR
-  cvBox(ctx, L, 1380, CW, 150, '結果を言ってね！', CV_PURP);
-  ctx.fillStyle = CV_INK; ctx.font = `700 40px ${CARD_HAND}`; ctx.fillText('一致率は', L + 44, 1460);
-  ctx.fillStyle = CV_PINK; ctx.font = `700 56px ${CARD_HAND}`; ctx.fillText('＿＿ ％', L + 240, 1466);
-  drawCardQr(ctx, W / 2 - 180, 1570, 360, 360, d, 'QRで診断', '#AEC4EE', '#Miriプロフィール');
-  drawCardLogo(ctx, W / 2, H - 40, '');
+  const rowsBottom = y0 + (pairs.length - 1) * step + rowH;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = CV_INK; ctx.font = `700 30px ${CARD_HAND}`;
+  ctx.fillText('QRを読み取って、一致率を診断！', W / 2, rowsBottom + 66);
+  ctx.fillStyle = CV_MUTE; ctx.font = `700 22px ${CARD_HAND}`;
+  ctx.fillText('同じ質問にあなたも答えると、Miriが一致率を出すよ♡', W / 2, rowsBottom + 106); ctx.textAlign = 'left';
+  const qy = rowsBottom + 148;
+  drawCardQr(ctx, W / 2 - 190, qy, 380, 380, d, 'QRで診断', '#AEC4EE', '#Miriプロフィール');
+  drawCardLogo(ctx, W / 2, qy + 380 + 62, 'つながる、ひろがる。Miri');
 }
 
-// ── D：穴埋め（答えは全部伏せる） ──
+// ── D：穴埋め（本人が答えた項目だけ出題。答えは伏せる） ──
 function drawShareCardD(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
   drawCardBase(ctx, W, H, '');
   const L = 100, R = W - 60, CW = R - L;
@@ -3881,29 +3880,45 @@ function drawShareCardD(ctx: CanvasRenderingContext2D, W: number, H: number, d: 
   ctx.textAlign = 'center';
   ctx.fillStyle = CV_BLUE; ctx.font = `700 32px ${CARD_HAND}`; ctx.fillText('予想してみて！', W / 2, 215);
   ctx.fillStyle = CV_MUTE; ctx.font = `700 26px ${CARD_HAND}`; ctx.fillText('わたしのこと、どれくらい知ってる？', W / 2, 258); ctx.textAlign = 'left';
-  // アイコン＋なまえ（空欄）
   drawCardAvatar(ctx, L + 110, 400, 100, d);
-  cvField(ctx, L + 250, 360, R - (L + 250), 'なまえ', '', CV_PINK);
-  cvField(ctx, L + 250, 430, (R - (L + 250)) / 2 - 10, '誕生日', '', CV_BLUE);
-  cvField(ctx, L + 250 + (R - (L + 250)) / 2 + 10, 430, (R - (L + 250)) / 2 - 10, '血液型', '', CV_PURP);
-  cvField(ctx, L + 250, 500, (R - (L + 250)) / 2 - 10, 'MBTI', '', CV_PURP);
-  cvField(ctx, L + 250 + (R - (L + 250)) / 2 + 10, 500, (R - (L + 250)) / 2 - 10, '出身', '', CV_BLUE);
-  // 穴埋めQ&A
-  cvBox(ctx, L, 610, CW, 760, '穴埋めチャレンジ！ Q&A', CV_PINK);
-  const qs = ['私の好きな食べ物は', '休日はよく', 'いま一番ほしいものは', '落ち着く場所は', '苦手なものは',
-    '最近ハマってることは', 'もし旅行に行くなら', '好きな季節は', '子どものころの夢は', '私を動物にたとえると'];
+  const bx = L + 250, bw = R - bx;
+  cvField(ctx, bx, 370, bw, 'なまえ', '', CV_PINK);
+  const basics = ([['birthday', '誕生日'], ['mbti', 'MBTI'], ['hometown', '出身']] as [string, string][]).filter(([k]) => cvVal(d, k));
+  basics.slice(0, 2).forEach(([, lab], i) => {
+    cvField(ctx, bx + (i % 2) * (bw / 2 + 10), 445, bw / 2 - 10, lab, '', i % 2 ? CV_PURP : CV_BLUE);
+  });
+  const dPrompts: [string, string][] = [
+    ['favoriteFood', '私の好きな食べ物は'], ['hobby', '趣味は'], ['dream', '将来の夢は'],
+    ['favoriteMusic', '好きな音楽は'], ['favoriteArtist', '好きなアーティストは'],
+    ['favoriteCharacter', '好きなキャラは'], ['favoriteColor', '好きな色は'],
+    ['charmPoint', 'チャームポイントは'], ['specialty', '得意なことは'], ['personality', '性格は'],
+    ['dislikeFood', '苦手な食べ物は'], ['favoriteTv', '好きなTV・映画は'],
+    ['favoriteManga', '好きなマンガ・本は'], ['favoriteGame', '好きなゲームは'],
+  ];
+  const qs = dPrompts.filter(([k]) => cvVal(d, k)).map(([, p]) => p).slice(0, 10);
+  const boxTop = 590, rowH2 = 62;
+  if (qs.length === 0) {
+    cvBox(ctx, L, boxTop, CW, 200, '穴埋めチャレンジ！ Q&A', CV_PINK);
+    ctx.fillStyle = CV_MUTE; ctx.font = `700 26px ${CARD_HAND}`; ctx.textAlign = 'center';
+    ctx.fillText('プロフィールを埋めると穴埋めが作られます♪', W / 2, boxTop + 110); ctx.textAlign = 'left';
+    drawCardQr(ctx, W / 2 - 180, boxTop + 250, 360, 360, d, '答えを見る', '#AEC4EE', 'つづきはMiriで👀');
+    drawCardLogo(ctx, W / 2, boxTop + 250 + 360 + 56, 'つながる、ひろがる。Miri');
+    return;
+  }
+  const boxH = qs.length * rowH2 + 80;
+  cvBox(ctx, L, boxTop, CW, boxH, '穴埋めチャレンジ！ Q&A', CV_PINK);
   qs.forEach((q, i) => {
-    const y = 685 + i * 66;
-    ctx.fillStyle = CV_PINK; ctx.font = `700 28px ${CARD_HAND}`; ctx.textAlign = 'center';
-    ctx.beginPath(); ctx.arc(L + 54, y - 9, 19, 0, Math.PI * 2); ctx.fillStyle = 'rgba(238,158,199,0.2)'; ctx.fill();
-    ctx.fillStyle = CV_PINK; ctx.fillText(String(i + 1), L + 54, y - 8); ctx.textAlign = 'left';
-    ctx.fillStyle = CV_INK; ctx.font = `600 28px ${CARD_HAND}`;
-    ctx.fillText(q, L + 86, y);
+    const y = boxTop + 66 + i * rowH2;
+    ctx.fillStyle = 'rgba(238,158,199,0.2)'; ctx.beginPath(); ctx.arc(L + 54, y - 9, 19, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = CV_PINK; ctx.font = `700 26px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(String(i + 1), L + 54, y - 1); ctx.textAlign = 'left';
+    ctx.fillStyle = CV_INK; ctx.font = `600 27px ${CARD_HAND}`; ctx.fillText(q, L + 86, y);
     const lx = L + 86 + ctx.measureText(q).width + 16;
     cvDot(ctx, lx, R - 40, y + 4);
   });
-  drawCardQr(ctx, W / 2 - 180, 1430, 360, 360, d, '答えを見る', '#AEC4EE', 'つづきはMiriで👀');
-  drawCardLogo(ctx, W / 2, H - 44, '');
+  const qy = boxTop + boxH + 46;
+  drawCardQr(ctx, W / 2 - 180, qy, 360, 360, d, '答えを見る', '#AEC4EE', 'つづきはMiriで👀');
+  drawCardLogo(ctx, W / 2, qy + 360 + 56, 'つながる、ひろがる。Miri');
 }
 
 // ── プロフィールシェアモーダル ───────────────────────────────
@@ -3985,7 +4000,9 @@ function ProfileShareModal({
       favoriteFood: info.favoriteFood, favoriteColor: info.favoriteColor,
       favoriteMusic: info.favoriteMusic, favoriteArtist: info.favoriteArtist,
       favoriteCharacter: info.favoriteCharacter, favoriteTv: info.favoriteTv,
-      favoriteManga: info.favoriteManga, hobby: info.hobby,
+      favoriteManga: info.favoriteManga, favoriteGame: info.favoriteGame, hobby: info.hobby,
+      dislikeFood: info.dislikeFood, specialty: info.specialty, personality: info.personality,
+      charmPoint: info.charmPoint, dream: info.dream,
     };
     return { name, id: userId, avatar, avatarImg: imgEl, qrEl, fields, hookLabel: t(hookPick, lang), raw };
   }
