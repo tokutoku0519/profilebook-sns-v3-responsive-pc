@@ -36,6 +36,7 @@ import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback } from '@/lib/db';
+import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
 
 // 決済（Stripe）が有効かのフラグ。Vercel に NEXT_PUBLIC_STRIPE_ENABLED=1 を設定すると
 // 購入ボタンが実際の Checkout を開始する。未設定なら「準備中」表示で安全に無効化される。
@@ -46,7 +47,7 @@ import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGach
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
 import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
-type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet';
+type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'collab';
 type Question = (typeof questions)[number];
 type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
@@ -937,6 +938,9 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
       <div className="mt-4 space-y-2">
         <button onClick={() => go('shop')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'shop' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <ShoppingBag size={20} />{t('nav_shop', lang)}
+        </button>
+        <button onClick={() => go('collab')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'collab' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
+          <span className="text-base">🤝</span>コラボ
         </button>
         <button onClick={() => go('circles')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'circles' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
           <span className="text-base">🔒</span>{t('nav_circles', lang)}
@@ -6944,6 +6948,63 @@ const SHOP_CATEGORY_LABELS: { key: ShopCategory; label: string; emoji: string }[
 
 type GachaResult = { sticker: StickerItem; isNew: boolean }[];
 
+// ── コラボ特集（企業コラボの一覧・入口） ───────────────────────
+function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
+  const campaigns = activeBrandCampaigns();
+  return (
+    <>
+      <AppHeader title="コラボ特集" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <div className="space-y-4 px-4 pt-3 pb-32">
+        <div className="rounded-[24px] bg-gradient-to-r from-blue-400 to-purple-400 p-5 text-white shadow-card">
+          <p className="text-sm font-black">🤝 ブランドコラボ</p>
+          <p className="mt-1 text-xs font-bold opacity-90">お気に入りブランドの限定スタンプ・背景・お題をチェック！</p>
+        </div>
+        {campaigns.length === 0 && <EmptyState text="いまは開催中のコラボはありません。" />}
+        {campaigns.map((c) => {
+          const a = campaignAssets(c);
+          return (
+            <section key={c.id} className="overflow-hidden rounded-[28px] bg-white shadow-card">
+              <div className="flex items-center gap-3 px-5 py-4" style={{ background: `${c.color}14` }}>
+                <span className="grid h-11 w-11 place-items-center overflow-hidden rounded-2xl text-2xl" style={{ background: `${c.color}22` }}>
+                  {c.logo.startsWith('http') ? <img src={c.logo} alt="" className="h-full w-full rounded-2xl object-cover" /> : c.logo}
+                </span>
+                <div>
+                  <p className="text-base font-black text-ink">{c.brand}</p>
+                  <p className="text-[11px] font-bold text-muted">コラボ開催中</p>
+                </div>
+              </div>
+              <div className="space-y-3 p-5">
+                <p className="text-sm font-bold leading-6 text-ink">{c.blurb}</p>
+                {a.sticker && (
+                  <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
+                    <span className="text-2xl">{a.sticker.thumbnail}</span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.sticker.name}</b><br /><span className="text-[11px] text-muted">スタンプ・ショップで見る →</span></span>
+                  </button>
+                )}
+                {a.bg && (
+                  <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
+                    <span className={`grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${a.bg.gradient} text-lg`}>{a.bg.emoji}</span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.bg.name}</b><br /><span className="text-[11px] text-muted">背景テーマ →</span></span>
+                  </button>
+                )}
+                {a.pr && (
+                  <button onClick={() => go('home')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
+                    <span className="text-2xl">{a.pr.brandEmoji}</span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.pr.question}</b><br /><span className="text-[11px] text-muted">PR質問に答える（+{a.pr.reward}コイン）→</span></span>
+                  </button>
+                )}
+              </div>
+            </section>
+          );
+        })}
+        <p className="px-2 text-center text-[11px] font-bold text-muted">
+          企業の方へ：コラボ掲載は <a href="/creator-kit" className="text-blue-500 underline">Miri Creator Kit</a> から
+        </p>
+      </div>
+    </>
+  );
+}
+
 function ShopScreen({
   go,
   coins,
@@ -9697,6 +9758,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         lang={lang}
       />
     );
+
+    if (screen === 'collab') return <CollabScreen go={go} />;
 
 return <ProfileScreen
   go={go}
