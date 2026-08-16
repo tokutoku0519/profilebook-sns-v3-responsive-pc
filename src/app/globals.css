@@ -312,12 +312,14 @@ button, input, textarea { font: inherit; }
 }
 /* 既定（テーマ未設定）のプロフ帳の紙地：やわらかいドット方眼。海には寄せない中立デザイン */
 .prof-paper {
-  background-color: #fff6fb;
+  /* 淡いラベンダー×ブルーのパステル地（参考テンプレのトーンに合わせる） */
+  background-color: #f1f0fb;
   background-image:
-    radial-gradient(circle at 12% 16%, rgba(255,150,195,.14), transparent 42%),
-    radial-gradient(circle at 86% 78%, rgba(150,185,255,.14), transparent 42%),
-    radial-gradient(rgba(120,90,110,.06) 1.4px, transparent 1.4px);
-  background-size: auto, auto, 15px 15px;
+    radial-gradient(circle at 14% 14%, rgba(178,160,224,.16), transparent 44%),
+    radial-gradient(circle at 84% 80%, rgba(143,176,232,.16), transparent 44%),
+    radial-gradient(circle at 50% 50%, rgba(238,158,199,.08), transparent 60%),
+    radial-gradient(rgba(120,110,170,.07) 1.4px, transparent 1.4px);
+  background-size: auto, auto, auto, 16px 16px;
 }
 /* ピンクテーマなど、他色でも成立するように accent はJS側で切替 */
 .prof-pool-pink {
