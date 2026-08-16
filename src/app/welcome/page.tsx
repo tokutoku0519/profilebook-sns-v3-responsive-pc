@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { getCurrentUserId, ensureProfile } from '@/lib/db';
 
 function getStoredUsername(): string {
   try { return localStorage.getItem('miri_username') || 'me'; } catch { return 'me'; }
@@ -17,6 +19,33 @@ export default function WelcomePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const isLast = step === steps.length - 1;
+
+  // OAuth（Google等）からの着地を確定：セッション確立→認証クッキー→ユーザー名の用意。
+  // メール導線ではすでに設定済みなので何もしない（冪等）。
+  useEffect(() => {
+    (async () => {
+      if (!supabase) return;
+      try {
+        // PKCEで ?code= が付いて戻る場合は交換（implicit の場合は自動処理済み）
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('code')) {
+          try { await supabase.auth.exchangeCodeForSession(params.get('code')!); } catch {}
+          window.history.replaceState({}, '', '/welcome');
+        }
+        const uid = await getCurrentUserId();
+        if (!uid) return; // 未ログインならそのまま（アプリ側ゲートで弾かれる）
+        // 認証ゲート通過用クッキー
+        const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+        document.cookie = `miri_auth=1; path=/; expires=${expires}; SameSite=Strict`;
+        // 正しいユーザー名でルーティングできるように（無ければプロフィール行を保証して取得）
+        if (!localStorage.getItem('miri_username')) {
+          const p = await ensureProfile();
+          if (p?.username) localStorage.setItem('miri_username', p.username);
+          if (p?.display_name) localStorage.setItem('miri_displayname', p.display_name);
+        }
+      } catch {}
+    })();
+  }, []);
 
   function done() {
     // 壊れた localStorage データを除去する

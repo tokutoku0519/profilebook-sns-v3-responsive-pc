@@ -16,6 +16,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/setup') ||
     pathname.startsWith('/terms') ||
     pathname.startsWith('/privacy') ||
+    // OAuth（ソーシャルログイン）の着地先。ここで認証確定するのでクッキー前提にしない
+    pathname.startsWith('/welcome') ||
     // 公開ブログ記事（外部共有・検索インデックス用）と SEO ファイルはログイン不要で見せる
     pathname.startsWith('/b/') ||
     pathname === '/robots.txt' ||
