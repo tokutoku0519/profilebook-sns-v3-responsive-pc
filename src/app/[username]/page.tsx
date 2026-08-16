@@ -3486,6 +3486,233 @@ function truncateStr(str: string, max: number) {
   return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
+// ── 共有カード（A〜D）用の描画ヘルパー ───────────────────────
+// 平成プロフ帳っぽい世界観：ノート罫線・マスキングテープ・手書き風フォント・手描き飾り。
+const CARD_HAND = '"Klee One", "Zen Kurenaido", "Hiragino Maru Gothic ProN", sans-serif';
+const CARD_INK = '#2B2E4A';
+const CARD_MUTED = '#8A93AD';
+const CARD_PURPLE = '#A88FE0';
+const CARD_BLUE = '#8FB0E8';
+
+export type ShareCardType = 'A' | 'B' | 'C' | 'D';
+type ShareCardData = {
+  name: string; id: string; avatar: string;
+  avatarImg?: HTMLImageElement; qrEl?: HTMLImageElement;
+  fields: { label: string; value: string }[]; // 埋まっている項目
+  hookLabel: string; // B/D の設問に使う項目ラベル（例：好きな食べ物）
+};
+
+function cardSparkle(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
+  ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = Math.max(2, s * 0.12);
+  ctx.beginPath();
+  ctx.moveTo(x, y - s); ctx.quadraticCurveTo(x + s * 0.18, y - s * 0.18, x + s, y);
+  ctx.quadraticCurveTo(x + s * 0.18, y + s * 0.18, x, y + s);
+  ctx.quadraticCurveTo(x - s * 0.18, y + s * 0.18, x - s, y);
+  ctx.quadraticCurveTo(x - s * 0.18, y - s * 0.18, x, y - s);
+  ctx.fill(); ctx.restore();
+}
+function cardHeart(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * 0.18);
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 0.7);
+  ctx.bezierCurveTo(x - s, y - s * 0.2, x - s * 0.5, y - s, x, y - s * 0.35);
+  ctx.bezierCurveTo(x + s * 0.5, y - s, x + s, y - s * 0.2, x, y + s * 0.7);
+  ctx.stroke(); ctx.restore();
+}
+function cardStar(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, s * 0.16); ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+    const px = x + Math.cos(a) * s, py = y + Math.sin(a) * s;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    const a2 = a + Math.PI / 5;
+    ctx.lineTo(x + Math.cos(a2) * s * 0.45, y + Math.sin(a2) * s * 0.45);
+  }
+  ctx.closePath(); ctx.stroke(); ctx.restore();
+}
+function cardWashi(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, angle: number, color: string) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.globalAlpha = 0.7; ctx.fillStyle = color; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.globalAlpha = 0.9; ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  for (let i = -w / 2 + 8; i < w / 2; i += 16) ctx.fillRect(i, -h / 2 + 2, 3, h - 4);
+  ctx.restore();
+}
+// 手書き風の下線（少し波打つ）
+function cardUnderline(ctx: CanvasRenderingContext2D, x1: number, x2: number, y: number, color: string, lw = 5) {
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y);
+  const seg = (x2 - x1) / 4;
+  for (let i = 1; i <= 4; i++) ctx.quadraticCurveTo(x1 + seg * (i - 0.5), y + (i % 2 ? 4 : -4), x1 + seg * i, y);
+  ctx.stroke(); ctx.restore();
+}
+function cardCheckbox(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string) {
+  ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  canvasRoundRect(ctx, x, y, s, s, 5); ctx.stroke(); ctx.restore();
+}
+
+// ノート紙のベース（全カード共通）
+function drawCardBase(ctx: CanvasRenderingContext2D, W: number, H: number, tapeColor: string) {
+  const outer = ctx.createLinearGradient(0, 0, W, H);
+  outer.addColorStop(0, '#ECEAF9'); outer.addColorStop(1, '#EAF0FB');
+  ctx.fillStyle = outer; ctx.fillRect(0, 0, W, H);
+  // 紙カード
+  const px = 24, py = 24, pw = W - 48, ph = H - 48;
+  ctx.fillStyle = '#FBF8EE'; canvasRoundRect(ctx, px, py, pw, ph, 28); ctx.fill();
+  // 罫線
+  ctx.save(); canvasRoundRect(ctx, px, py, pw, ph, 28); ctx.clip();
+  ctx.strokeStyle = 'rgba(120,150,220,0.16)'; ctx.lineWidth = 2;
+  for (let y = py + 70; y < py + ph; y += 58) { ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px + pw, y); ctx.stroke(); }
+  // 左の赤マージン線
+  ctx.strokeStyle = 'rgba(232,120,150,0.5)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(px + 96, py); ctx.lineTo(px + 96, py + ph); ctx.stroke();
+  ctx.restore();
+  // パンチ穴
+  ctx.fillStyle = '#E3E1F0';
+  const holes = 9;
+  for (let i = 0; i < holes; i++) {
+    const hy = py + 40 + (i * (ph - 80)) / (holes - 1);
+    ctx.beginPath(); ctx.arc(px + 48, hy, 12, 0, Math.PI * 2); ctx.fill();
+  }
+  // 右上マスキングテープ
+  cardWashi(ctx, W - 150, 60, 220, 46, -0.32, tapeColor);
+  // 手描き飾り
+  cardSparkle(ctx, px + 150, py + 60, 12, CARD_PURPLE);
+  cardHeart(ctx, px + 120, H - 90, 16, CARD_PURPLE);
+  cardStar(ctx, W - 90, H - 90, 16, CARD_PURPLE);
+}
+
+// アバター円（枠つき）
+function drawCardAvatar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, d: ShareCardData) {
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, '#DDE7FF'); g.addColorStop(1, '#E7DEFB');
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r + 8, 0, Math.PI * 2); ctx.strokeStyle = CARD_BLUE; ctx.lineWidth = 3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+  if (d.avatarImg) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(d.avatarImg, cx - r, cy - r, r * 2, r * 2); }
+  else if (d.avatar) { ctx.font = `${r}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.avatar, cx, cy); }
+  ctx.restore();
+}
+
+// 右側の大きなQRパネル（テープ枠＋ラベル）
+function drawCardQr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, d: ShareCardData, tapeLabel: string, tapeColor: string, sub?: string) {
+  ctx.save();
+  ctx.fillStyle = '#ffffff'; canvasRoundRect(ctx, x, y, w, h, 26); ctx.fill();
+  ctx.setLineDash([9, 8]); ctx.strokeStyle = 'rgba(150,160,210,0.7)'; ctx.lineWidth = 3;
+  canvasRoundRect(ctx, x + 12, y + 12, w - 24, h - 24, 18); ctx.stroke(); ctx.setLineDash([]);
+  if (d.qrEl) { const q = Math.min(w, h) - 96; ctx.drawImage(d.qrEl, x + (w - q) / 2, y + 34, q, q); }
+  ctx.restore();
+  // ラベルテープ
+  cardWashi(ctx, x + w / 2, y + h - 30, 190, 46, 0, tapeColor);
+  ctx.fillStyle = CARD_INK; ctx.font = `600 26px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(tapeLabel, x + w / 2, y + h - 30);
+  if (sub) { ctx.fillStyle = CARD_MUTED; ctx.font = `600 20px ${CARD_HAND}`; ctx.fillText(sub, x + w / 2, y + h + 18); }
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Miri ロゴ（左下）
+function drawCardLogo(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.save(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_BLUE; ctx.font = `600 40px ${CARD_HAND}`; ctx.fillText('Miri', x, y);
+  ctx.strokeStyle = 'rgba(120,130,170,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 96, y - 26); ctx.lineTo(x + 96, y + 2); ctx.stroke();
+  ctx.fillStyle = CARD_MUTED; ctx.font = `600 22px ${CARD_HAND}`; ctx.fillText('つながる、ひろがる。', x + 112, y - 2);
+  ctx.restore();
+}
+
+// ── A：プロフィールカード ──
+function drawShareCardA(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
+  drawCardBase(ctx, W, H, '#B8C6EE');
+  drawCardAvatar(ctx, 200, 250, 120, d);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_INK; ctx.font = `600 70px ${CARD_HAND}`;
+  ctx.fillText(truncateStr(d.name, 8), 360, 265);
+  cardUnderline(ctx, 360, 640, 292, CARD_PURPLE);
+  ctx.fillStyle = CARD_MUTED; ctx.font = `600 30px ${CARD_HAND}`; ctx.fillText(d.id, 362, 340);
+  // テープチップ「プロフィールをみてね👀」
+  cardWashi(ctx, 520, 430, 360, 54, -0.02, '#AEC4EE');
+  ctx.fillStyle = CARD_INK; ctx.font = `600 30px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('プロフィールをみてね 👀', 520, 430);
+  // チェック＋キャッチ
+  ctx.textAlign = 'left'; cardCheckbox(ctx, 360, 500, 30, CARD_BLUE);
+  ctx.fillStyle = CARD_INK; ctx.font = `600 34px ${CARD_HAND}`; ctx.textBaseline = 'middle';
+  ctx.fillText('つながる、ひろがる。', 405, 517);
+  cardUnderline(ctx, 405, 720, 545, CARD_PURPLE, 4);
+  ctx.textBaseline = 'alphabetic';
+  drawCardQr(ctx, 720, 120, 400, 400, d, 'QRで開く', '#C9B8EC');
+  drawCardLogo(ctx, 80, H - 60);
+}
+
+// ── B：意外と知らない ──
+function drawShareCardB(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
+  drawCardBase(ctx, W, H, '#AEC4EE');
+  drawCardAvatar(ctx, 170, 150, 74, d);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_INK; ctx.font = `600 46px ${CARD_HAND}`; ctx.fillText(truncateStr(d.name, 8), 270, 150);
+  ctx.fillStyle = CARD_MUTED; ctx.font = `600 24px ${CARD_HAND}`; ctx.fillText(d.id, 272, 190);
+  // 見出し2行
+  ctx.fillStyle = CARD_INK; ctx.font = `600 62px ${CARD_HAND}`;
+  ctx.fillText('親友なのに、', 80, 300);
+  ctx.fillText('意外と知らない。', 80, 380);
+  cardUnderline(ctx, 80, 620, 400, CARD_PURPLE, 6);
+  // 設問ボックス
+  ctx.save(); ctx.setLineDash([8, 7]); ctx.strokeStyle = 'rgba(150,160,210,0.8)'; ctx.lineWidth = 3;
+  canvasRoundRect(ctx, 80, 440, 560, 90, 16); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  ctx.fillStyle = CARD_INK; ctx.font = `600 32px ${CARD_HAND}`;
+  ctx.fillText(truncateStr(`${d.hookLabel}、知ってる？`, 16), 110, 498);
+  drawCardQr(ctx, 730, 120, 390, 390, d, '答えはMiriで', '#C9B8EC');
+  drawCardLogo(ctx, 80, H - 56);
+}
+
+// ── C：診断・一致率 ──
+const CARD_C_TRAITS = ['朝型 ☀', '犬派 🐶', '海派 〜', '旅行は計画派 🧳', '甘党 🧁'];
+function drawShareCardC(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
+  drawCardBase(ctx, W, H, '#AEC4EE');
+  drawCardAvatar(ctx, 170, 160, 74, d);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_INK; ctx.font = `600 46px ${CARD_HAND}`; ctx.fillText(truncateStr(d.name, 8), 270, 160);
+  ctx.fillStyle = CARD_MUTED; ctx.font = `600 24px ${CARD_HAND}`; ctx.fillText(d.id, 272, 200);
+  // 見出し
+  ctx.fillStyle = CARD_INK; ctx.font = `600 48px ${CARD_HAND}`; ctx.fillText('私との一致率、何%？', 80, 300);
+  cardUnderline(ctx, 80, 560, 320, CARD_PURPLE, 5);
+  // チェックリスト
+  CARD_C_TRAITS.forEach((tr, i) => {
+    const y = 370 + i * 50;
+    cardCheckbox(ctx, 100, y - 22, 26, CARD_PURPLE);
+    ctx.fillStyle = CARD_INK; ctx.font = `600 30px ${CARD_HAND}`; ctx.fillText(tr, 145, y);
+  });
+  drawCardQr(ctx, 740, 120, 380, 380, d, 'QRで診断', '#C9B8EC', '一致率をチェック！');
+  drawCardLogo(ctx, 80, H - 50);
+}
+
+// ── D：穴埋めクイズ ──
+function drawShareCardD(ctx: CanvasRenderingContext2D, W: number, H: number, d: ShareCardData) {
+  drawCardBase(ctx, W, H, '#C9B8EC');
+  drawCardAvatar(ctx, 170, 170, 74, d);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_INK; ctx.font = `600 46px ${CARD_HAND}`; ctx.fillText(truncateStr(d.name, 8), 270, 175);
+  ctx.fillStyle = CARD_MUTED; ctx.font = `600 24px ${CARD_HAND}`; ctx.fillText(d.id, 272, 215);
+  // ふきだし
+  cardWashi(ctx, 470, 120, 300, 60, -0.02, '#C9B8EC');
+  ctx.fillStyle = CARD_INK; ctx.font = `600 26px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('穴埋めで予想してみて！', 470, 120);
+  // 設問ボックス
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.save(); ctx.setLineDash([8, 7]); ctx.strokeStyle = 'rgba(150,160,210,0.8)'; ctx.lineWidth = 3;
+  canvasRoundRect(ctx, 80, 300, 580, 210, 18); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  cardWashi(ctx, 130, 300, 90, 46, 0, '#B8A8E4');
+  ctx.fillStyle = CARD_INK; ctx.font = `600 24px ${CARD_HAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('Q.', 130, 300);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = CARD_INK; ctx.font = `600 40px ${CARD_HAND}`;
+  ctx.fillText(truncateStr(`私の${d.hookLabel}は`, 14), 120, 390);
+  // 空欄
+  ctx.strokeStyle = 'rgba(150,160,210,0.9)'; ctx.lineWidth = 3; ctx.setLineDash([2, 8]); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(120, 460); ctx.lineTo(520, 460); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = CARD_PURPLE; ctx.font = `600 60px ${CARD_HAND}`; ctx.fillText('？', 540, 470);
+  drawCardQr(ctx, 740, 150, 380, 360, d, '答えを見る', '#AEC4EE', 'つづきはMiriで 👀');
+  drawCardLogo(ctx, 80, H - 46);
+}
+
 // ── プロフィールシェアモーダル ───────────────────────────────
 function ProfileShareModal({
   userId, avatar, avatarUrl, info, lang = 'ja', onClose,
@@ -3499,13 +3726,16 @@ function ProfileShareModal({
 }) {
   const name = info.name;
   const [tab, setTab] = useState<'qr' | 'image'>('qr');
+  const [cardType, setCardType] = useState<ShareCardType>('A');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [imageGenerated, setImageGenerated] = useState(false);
   const [snsHint, setSnsHint] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const qrIncludedRef = useRef(false);
   const pendingImageShareRef = useRef<SharePlatform | null>(null);
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://miri-delta.vercel.app';
+  // QR・共有リンクは「その人のプロフィールページ」を指す（アプリ入口ではなく本人のプロフへ）
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://miriapp.vercel.app';
+  const shareUrl = `${origin}/${userId.replace(/^@/, '')}`;
   const shareText = buildShareText(name, lang);
   const snsTargets = getShareTargets(lang);
 
@@ -3516,6 +3746,12 @@ function ProfileShareModal({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // カードタイプ（A〜D）を切り替えたら作り直す
+  useEffect(() => {
+    if (tab === 'image') handleGenerateImage();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardType]);
 
   // QRコード生成
   useEffect(() => {
@@ -3536,174 +3772,50 @@ function ProfileShareModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrDataUrl]);
 
+  // 埋まっているプロフ項目からカード用データを組み立てる
+  function buildCardData(imgEl?: HTMLImageElement, qrEl?: HTMLImageElement): ShareCardData {
+    const candidates: [string, string][] = [
+      ['field_nickname', info.nickname], ['field_birthday', info.birthday], ['field_mbti', info.mbti],
+      ['field_favoriteFood', info.favoriteFood], ['field_hobby', info.hobby],
+      ['field_favoriteMusic', info.favoriteMusic], ['field_favoriteCharacter', info.favoriteCharacter],
+      ['field_dream', info.dream],
+    ];
+    const fields = candidates.filter(([, v]) => v && v.trim()).map(([k, v]) => ({ label: t(k, lang), value: v }));
+    // B/D の設問に使う項目（好きな食べ物→趣味→夢…の優先。無ければ「好きな食べ物」）
+    const hookPick = [
+      info.favoriteFood ? 'field_favoriteFood' : '', info.hobby ? 'field_hobby' : '',
+      info.dream ? 'field_dream' : '', info.favoriteMusic ? 'field_favoriteMusic' : '',
+    ].find((k) => k) || 'field_favoriteFood';
+    return { name, id: userId, avatar, avatarImg: imgEl, qrEl, fields, hookLabel: t(hookPick, lang) };
+  }
+
   function drawCard(imgEl?: HTMLImageElement, qrEl?: HTMLImageElement) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    // 横型レイアウト：左上アイコン＋名前 / 左下プロフのチラ見せ / 右に大きなQR
     const W = 1200, H = 630;
     canvas.width = W;
     canvas.height = H;
-
-    // 背景グラデーション（Miri Blue 基調）
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#EAF1FF');
-    bg.addColorStop(1, '#F1EBFF');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    // ホワイトカード
-    ctx.fillStyle = 'rgba(255,255,255,0.94)';
-    canvasRoundRect(ctx, 28, 28, W - 56, H - 56, 44);
-    ctx.fill();
-
-    // ── 左上：アバター円 ──
-    const cx = 165, cy = 165, r = 85;
-    const avatarBg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 14);
-    avatarBg.addColorStop(0, '#DCE7FF');
-    avatarBg.addColorStop(1, '#EAE0FF');
-    ctx.fillStyle = avatarBg;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + 14, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (imgEl) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(imgEl, cx - r, cy - r, r * 2, r * 2);
-      ctx.restore();
-    } else {
-      ctx.font = '80px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(avatar, cx, cy);
-    }
-
-    // ── アイコンの右：名前＋ID＋口ぐせ ──
-    ctx.fillStyle = '#1F2C56';
-    ctx.font = 'bold 56px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(truncateStr(name, 10), 290, 155);
-    ctx.fillStyle = '#8A93AD';
-    ctx.font = '30px sans-serif';
-    ctx.fillText(userId, 290, 205);
-    if (info.catchphrase) {
-      ctx.fillStyle = '#4F73E8';
-      ctx.font = 'italic bold 32px serif';
-      ctx.fillText(truncateStr(info.catchphrase, 18), 290, 252);
-    }
-
-    // ── 左下：自己紹介シート風のプロフ抜粋（チラ見せ） ──
-    const boxX = 64, boxY = 285, boxW = 560, boxH = 250;
-    ctx.fillStyle = 'rgba(79,115,232,0.06)';
-    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(79,115,232,0.28)';
-    ctx.lineWidth = 3;
-    canvasRoundRect(ctx, boxX, boxY, boxW, boxH, 28);
-    ctx.stroke();
-
-    // 「PROFILE」タグシール
-    ctx.fillStyle = '#4F73E8';
-    canvasRoundRect(ctx, boxX + 26, boxY - 18, 168, 36, 18);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('♡ PROFILE', boxX + 26 + 84, boxY + 8);
-
-    // プロフィール帳の定番項目（空欄は飛ばして先頭4つ・ゆったり配置）
-    const sheetFields = ([
-      ['field_nickname', info.nickname],
-      ['field_birthday', info.birthday],
-      ['field_mbti', info.mbti],
-      ['field_favoriteFood', info.favoriteFood],
-      ['field_hobby', info.hobby],
-      ['field_favoriteMusic', info.favoriteMusic],
-      ['field_favoriteCharacter', info.favoriteCharacter],
-      ['field_dream', info.dream],
-    ] as [string, string][]).filter(([, v]) => v).slice(0, 4);
-
-    const cellW = 250, cellH = 90;
-    sheetFields.forEach(([key, val], i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const x = boxX + 40 + col * (cellW + 20);
-      const y = boxY + 66 + row * cellH;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#4F73E8';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText(truncateStr(t(key, lang), 9), x, y);
-      ctx.fillStyle = '#1F2C56';
-      ctx.font = 'bold 28px sans-serif';
-      ctx.fillText(truncateStr(val, 8), x, y + 38);
-      // 記入欄っぽい点線
-      ctx.strokeStyle = 'rgba(79,115,232,0.35)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 6]);
-      ctx.beginPath();
-      ctx.moveTo(x, y + 50);
-      ctx.lineTo(x + cellW - 20, y + 50);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    });
-
-    // 最終行をフェードアウトして「続きがある」チラ見せ感を出す
-    const fade = ctx.createLinearGradient(0, boxY + boxH - 120, 0, boxY + boxH);
-    fade.addColorStop(0, 'rgba(255,255,255,0)');
-    fade.addColorStop(1, 'rgba(255,255,255,0.97)');
-    ctx.fillStyle = fade;
-    canvasRoundRect(ctx, boxX + 2, boxY + 2, boxW - 4, boxH - 4, 26);
-    ctx.fill();
-    ctx.fillStyle = '#4F73E8';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(`… ${shareT('img_more', lang)} 👀`, boxX + boxW, H - 42);
-
-    // ── 右：大きなQRコード ──
-    const qrPanelX = 660, qrPanelY = 64, qrPanelW = 476, qrPanelH = 502;
-    ctx.fillStyle = '#ffffff';
-    canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(79,115,232,0.4)';
-    ctx.lineWidth = 4;
-    canvasRoundRect(ctx, qrPanelX, qrPanelY, qrPanelW, qrPanelH, 32);
-    ctx.stroke();
-
-    if (qrEl) {
-      const qrSize = 400;
-      ctx.drawImage(qrEl, qrPanelX + (qrPanelW - qrSize) / 2, qrPanelY + 30, qrSize, qrSize);
-    }
-    ctx.font = 'bold 30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#8A93AD';
-    ctx.fillText(shareT('img_scan', lang), qrPanelX + qrPanelW / 2, qrPanelY + qrPanelH - 30);
-
-    // ブランディング：Miri Blue のロゴチップ（白抜き Miri）でブランド準拠に
-    const logoW = 152, logoH = 60, logoX = 64, logoY = H - 92;
-    ctx.fillStyle = '#4F73E8';
-    canvasRoundRect(ctx, logoX, logoY, logoW, logoH, 18);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Miri', logoX + logoW / 2, logoY + logoH / 2 + 2);
-    ctx.textBaseline = 'alphabetic';
-
+    const data = buildCardData(imgEl, qrEl);
+    if (cardType === 'A') drawShareCardA(ctx, W, H, data);
+    else if (cardType === 'B') drawShareCardB(ctx, W, H, data);
+    else if (cardType === 'C') drawShareCardC(ctx, W, H, data);
+    else drawShareCardD(ctx, W, H, data);
     qrIncludedRef.current = !!qrEl;
     setImageGenerated(true);
   }
 
   function handleGenerateImage() {
     setImageGenerated(false);
-    const doDraw = (avatarImg?: HTMLImageElement, qrImg?: HTMLImageElement) =>
-      drawCard(avatarImg, qrImg);
+    const doDraw = (avatarImg?: HTMLImageElement, qrImg?: HTMLImageElement) => {
+      // 手書き風フォントが読み込まれてから描画（Canvasは未ロードだと標準フォントになる）
+      const fonts = (document as any).fonts;
+      const ready = fonts?.load
+        ? Promise.all([fonts.load(`600 60px "Klee One"`), fonts.load(`400 40px "Zen Kurenaido"`)]).catch(() => {})
+        : Promise.resolve();
+      ready.then(() => drawCard(avatarImg, qrImg));
+    };
 
     const loadQr = (avatarImg?: HTMLImageElement) => {
       if (qrDataUrl) {
@@ -3883,6 +3995,20 @@ function ProfileShareModal({
         {/* ── シェア画像タブ ── */}
         {tab === 'image' && (
           <div className="flex flex-col items-center gap-4 px-5">
+            {/* カードの種類を選ぶ */}
+            <div className="flex w-full flex-wrap gap-2">
+              {([
+                { key: 'A' as const, label: '📇 プロフ' },
+                { key: 'B' as const, label: '👀 意外と知らない' },
+                { key: 'C' as const, label: '💯 一致率診断' },
+                { key: 'D' as const, label: '✏️ 穴埋め' },
+              ]).map(({ key, label }) => (
+                <button key={key} onClick={() => setCardType(key)}
+                  className={`rounded-full px-3.5 py-2 text-xs font-black transition ${cardType === key ? 'bg-pink text-white shadow-card' : 'bg-base text-muted'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="relative w-full max-w-[400px]">
               <canvas
                 ref={canvasRef}
