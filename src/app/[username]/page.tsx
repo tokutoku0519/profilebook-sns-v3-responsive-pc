@@ -2152,24 +2152,28 @@ function ProfileBookContent({
       </section>
       )}
 
-      {/* ── すきなもの ── */}
+      {/* ── すきなもの（MY FAVORITE：バブル＋書き込み欄） ── */}
       {showLikes && (
       <section className="pt-1">
         <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
-        <div className="space-y-2">
-        <ProfileLine label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
-        <ProfileLine label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
-        <ProfileLine label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
+        {/* 定番のお気に入りは“丸バブルに手書き”で（プロフ帳の顔） */}
+        <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-4">
+          <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
+          <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
+          <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
+          <FavBubble label={t('field_favoriteMusic', lang)} value={translatedInfo.favoriteMusic ?? info.favoriteMusic} />
+          <FavBubble label={t('field_favoriteArtist', lang)} value={translatedInfo.favoriteArtist ?? info.favoriteArtist} />
+          <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
+        </div>
+        {/* 残りは書き込み欄で */}
+        <div className="space-y-1">
         {(lifeStageDef?.showSubjectFields ?? true) && (
           <>
             <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />
             <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />
           </>
         )}
-        <ProfileLine label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
-        <ProfileLine label={t('field_favoriteMusic', lang)} value={translatedInfo.favoriteMusic ?? info.favoriteMusic} />
         <ProfileLine label={t('field_favoriteTv', lang)} value={translatedInfo.favoriteTv ?? info.favoriteTv} />
-        <ProfileLine label={t('field_favoriteArtist', lang)} value={translatedInfo.favoriteArtist ?? info.favoriteArtist} />
         <ProfileLine label={t('field_favoriteManga', lang)} value={translatedInfo.favoriteManga ?? info.favoriteManga} />
         <ProfileLine label={t('field_favoriteGame', lang)} value={translatedInfo.favoriteGame ?? info.favoriteGame} />
         </div>
@@ -2276,11 +2280,12 @@ function ProfileBookContent({
             {translatedQA === null && lang !== 'ja' && (
               <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
             )}
-            <div className="space-y-0">
+            <div className="grid gap-4 pt-2">
               {visibleQA.map((item, i) => (
-                <div key={i} className={`py-3 ${i < visibleQA.length - 1 ? 'border-b border-dashed border-purple/15' : ''}`}>
-                  <p className={`text-[11px] font-black ${accent}`}>Q{i + 1}. {item.q}</p>
-                  <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">➜ {item.a}</p>
+                <div key={i} className="prof-qbox">
+                  <span className={`prof-qbox-head rounded-full bg-white px-2.5 py-0.5 text-[10px] font-black shadow-sm ring-1 ring-black/5 ${accent}`}>Q{i + 1}</span>
+                  <p className={`text-[12px] font-black leading-snug ${accent}`}>{item.q}</p>
+                  <p className="mt-1.5 text-[15px] text-ink leading-relaxed prof-hand">➜ {item.a || <span className="text-muted/40">…</span>}</p>
                 </div>
               ))}
             </div>
@@ -4820,17 +4825,33 @@ function ProfileLine({ label, value }: { label: string; value: string }) {
   // 他人のプロフ帳では未入力（空欄）の項目は表示しない
   if (hideEmpty && !(value ?? '').trim()) return null;
   const accent = THEME_ACCENT[theme] ?? THEME_ACCENT.pink;
-  const bar = THEME_BAR[theme] ?? THEME_BAR.pink;
-  // ラヴ上等風：白いピル1枚 = 1項目。左に小さなラベル → 縦の区切り線 → 手書き風の回答。
+  // 平成プロフ帳の“書き込み欄”風：ラベルチップ → 点線アンダーラインに手書き回答。
   return (
-    <div className="prof-pill flex items-center px-4 py-2.5">
-      <div className={`w-[5.5rem] shrink-0 text-[11px] font-black leading-tight ${accent}`}>
+    <div className="prof-field">
+      <span className={`shrink-0 rounded-full bg-black/[.04] px-2.5 py-0.5 text-[11px] font-black leading-tight ${accent}`}>
         {label}
-      </div>
-      <div className={`mx-3 h-7 w-[3px] shrink-0 rounded-full ${bar} opacity-70`} />
-      <div className="min-w-0 flex-1 break-words text-[17px] leading-snug text-ink prof-hand">
-        {value || <span className="text-muted/60 font-medium">…</span>}
-      </div>
+      </span>
+      <span className="prof-field-value text-[16px] leading-snug text-ink prof-hand">
+        {value || <span className="text-muted/40 font-medium">　　　　　</span>}
+      </span>
+    </div>
+  );
+}
+
+// MY FAVORITE バブル（ハート/丸に手書きで書き込むプロフ帳の定番パーツ）
+function FavBubble({ label, value }: { label: string; value: string }) {
+  const hideEmpty = useContext(HideEmptyProfileContext);
+  const theme = useContext(ProfThemeContext);
+  if (hideEmpty && !(value ?? '').trim()) return null;
+  const accent = THEME_ACCENT[theme] ?? THEME_ACCENT.pink;
+  return (
+    <div className="prof-fav">
+      <span className={`prof-fav-label rounded-full bg-white px-2.5 py-0.5 text-[10px] font-black shadow-sm ring-1 ring-black/5 ${accent}`}>
+        ♡ {label}
+      </span>
+      <span className="break-words text-[16px] leading-snug text-ink prof-hand">
+        {value || <span className="text-muted/40 font-medium">…</span>}
+      </span>
     </div>
   );
 }

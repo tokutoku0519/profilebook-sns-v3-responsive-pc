@@ -371,6 +371,39 @@ button, input, textarea { font: inherit; }
   letter-spacing: .01em;
 }
 
+/* 記入欄：ラベルチップ＋点線の下線に手書き回答（平成プロフ帳の“書き込み欄”風） */
+.prof-field { display: flex; align-items: flex-end; gap: 10px; padding: 7px 4px; }
+.prof-field-value {
+  flex: 1; min-width: 0; word-break: break-word;
+  border-bottom: 2px dotted rgba(120, 120, 160, .38);
+  padding-bottom: 3px;
+}
+
+/* MY FAVORITE バブル（丸＋点線＋上にラベルタブ）。プロフ帳の“ハート/丸に手書き”パーツ */
+.prof-fav {
+  position: relative; text-align: center;
+  border-radius: 26px 26px 24px 24px;
+  background: rgba(255, 255, 255, .96);
+  border: 2px dashed rgba(120, 120, 160, .30);
+  padding: 20px 10px 14px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .05), 0 6px 12px rgba(0, 0, 0, .06);
+  min-height: 76px; display: flex; flex-direction: column; justify-content: center;
+}
+.prof-fav-label {
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* 質問ボックス（点線枠＋上にヘッダータブ）。QUESTIONコーナー風 */
+.prof-qbox {
+  position: relative;
+  border-radius: 16px;
+  border: 2px dashed rgba(120, 120, 160, .30);
+  background: rgba(255, 255, 255, .92);
+  padding: 16px 14px 12px;
+}
+.prof-qbox-head { position: absolute; top: -11px; left: 14px; white-space: nowrap; }
+
 /* デコシール（ふわふわ揺れる） */
 @keyframes prof-deco-float {
   0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
