@@ -545,3 +545,28 @@ create policy "diary_entries delete"   on public.diary_entries for delete using 
   auth.uid() = user_id
   or exists (select 1 from public.diary_pages p where p.id = page_id and p.created_by = auth.uid())
 );
+
+-- ============================================================
+-- テスターからのフィードバック（意見・要望・不具合報告）＝直接投稿用の窓口。
+-- 本人は自分の投稿を作成・閲覧できる。全体の閲覧・集計は運営が
+-- Supabase の Table Editor（service role）で行う。
+-- create table if not exists なので再実行しても消えない。
+-- ============================================================
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.profiles(id) on delete set null,
+  username text,
+  kind text not null default 'bug',   -- bug / request / question
+  body text not null,
+  status text not null default 'new', -- new / triaged / fixed / done / wontfix
+  created_at timestamptz default now()
+);
+create index if not exists feedback_created_idx on public.feedback (created_at desc);
+
+alter table public.feedback enable row level security;
+
+-- 投稿は本人のみ／閲覧も本人の投稿だけ（全体の閲覧は運営が service role で行う）。
+drop policy if exists "feedback insert own" on public.feedback;
+drop policy if exists "feedback select own" on public.feedback;
+create policy "feedback insert own" on public.feedback for insert with check (auth.uid() = user_id);
+create policy "feedback select own" on public.feedback for select using (auth.uid() = user_id);

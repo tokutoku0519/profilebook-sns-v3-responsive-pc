@@ -80,6 +80,20 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+/** テスターのフィードバック（意見・要望・不具合）を feedback テーブルへ投稿。 */
+export async function submitFeedback(kind: 'bug' | 'request' | 'question', body: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  let username = '';
+  try {
+    const { data } = await supabase.from('profiles').select('username').eq('id', uid).maybeSingle();
+    username = (data as any)?.username ?? '';
+  } catch {}
+  const { error } = await supabase.from('feedback').insert({ user_id: uid, username, kind, body: body.trim() });
+  return !error;
+}
+
 /** 現在のアクセストークン（サーバーAPIへ Bearer で渡す用）。無ければ null。 */
 export async function getAccessToken(): Promise<string | null> {
   if (!supabase) return null;

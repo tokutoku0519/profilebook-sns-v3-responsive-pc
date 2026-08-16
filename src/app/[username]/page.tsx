@@ -35,7 +35,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
-import { getAccessToken } from '@/lib/db';
+import { getAccessToken, submitFeedback } from '@/lib/db';
 
 // 決済（Stripe）が有効かのフラグ。Vercel に NEXT_PUBLIC_STRIPE_ENABLED=1 を設定すると
 // 購入ボタンが実際の Checkout を開始する。未設定なら「準備中」表示で安全に無効化される。
@@ -2853,6 +2853,7 @@ function ProfileEditScreen({
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
   const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
   const [showShare, setShowShare] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -3443,6 +3444,16 @@ function ProfileEditScreen({
           保存してプロフィール帳に反映
         </button>
 
+        {/* ご意見・不具合を送る（テスター用の窓口） */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">💬 ご意見・不具合を送る</p>
+          <p className="mb-4 text-xs font-bold text-muted">テスト中の気づき・要望・バグを運営に直接送れます</p>
+          <button type="button" onClick={() => setShowFeedback(true)}
+            className="w-full rounded-2xl bg-blue-400 px-5 py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]">
+            フィードバックを送る
+          </button>
+        </section>
+
         <button
           type="button"
           onClick={onLogout}
@@ -3462,7 +3473,69 @@ function ProfileEditScreen({
           onClose={() => setShowShare(false)}
         />
       )}
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
     </>
+  );
+}
+
+// ── フィードバック投稿モーダル（テスター用の窓口） ───────────────
+function FeedbackModal({ onClose }: { onClose: () => void }) {
+  const [kind, setKind] = useState<'bug' | 'request' | 'question'>('bug');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState(false);
+  const KINDS: { key: 'bug' | 'request' | 'question'; label: string }[] = [
+    { key: 'bug', label: '🐛 不具合' },
+    { key: 'request', label: '✨ 要望' },
+    { key: 'question', label: '❓ 質問' },
+  ];
+  async function send() {
+    if (sending || !body.trim()) return;
+    setSending(true); setError(false);
+    const ok = await submitFeedback(kind, body);
+    setSending(false);
+    if (ok) { setDone(true); setTimeout(onClose, 1400); }
+    else setError(true);
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-h-[92vh] overflow-y-auto rounded-t-[32px] bg-white pb-10 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-pink/30" />
+        <div className="flex items-center justify-between px-5 py-4">
+          <p className="text-base font-black text-ink">💬 フィードバックを送る</p>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-base text-muted">✕</button>
+        </div>
+        {done ? (
+          <div className="px-6 py-10 text-center">
+            <p className="text-3xl">🙏</p>
+            <p className="mt-3 text-sm font-black text-ink">送信しました！ありがとうございます</p>
+          </div>
+        ) : (
+          <div className="space-y-4 px-5">
+            <div className="flex gap-2">
+              {KINDS.map((k) => (
+                <button key={k.key} type="button" onClick={() => setKind(k.key)}
+                  className={`flex-1 rounded-full py-2.5 text-xs font-black transition ${kind === k.key ? 'bg-pink text-white shadow-card' : 'bg-base text-muted'}`}>
+                  {k.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} rows={6}
+              placeholder="気づいたこと・要望・不具合を自由に書いてください（できれば「どの画面で」「何をしたら」も）"
+              className="w-full rounded-2xl border-2 border-purple/15 bg-white px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
+            />
+            {error && <p className="text-center text-xs font-black text-red-500">送信に失敗しました。ログインしているかご確認ください。</p>}
+            <button onClick={send} disabled={!body.trim() || sending}
+              className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-pink py-3.5 text-sm font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
+              {sending ? '送信中…' : '送信する'}
+            </button>
+            <p className="text-center text-[11px] font-bold text-muted">※ 内容は運営（開発者）に届きます</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 // ── Canvas roundRect ポリフィル ──────────────────────────────
