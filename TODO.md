@@ -1,5 +1,42 @@
 # Miri TODO
 
+---
+## 🔧 セットアップ待ち（あなたの作業＝コード外／キー・設定）
+コードは実装済み。以下は Vercel / Supabase / Cloudflare / Stripe 側の設定で有効化するもの。
+
+### ① テスト公開の基本（最優先）
+- [ ] Vercel: Deployment Protection → **Vercel Authentication を OFF**（一般公開）
+- [ ] Vercel: 短い本番エイリアス（例 `miriapp.vercel.app`）を Production に割当
+- [ ] Vercel env: `NEXT_PUBLIC_SITE_URL=https://miriapp.vercel.app` / `NEXT_PUBLIC_APP_ENV=production` / `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` → 再デプロイ
+- [ ] Supabase: Authentication → URL Configuration（Site URL ＋ Redirect URLs `https://miriapp.vercel.app/**`）
+- [ ] Supabase: `supabase/schema.sql` を実行（`feedback` テーブル・`profiles.titles`・`__choices` 保存に必要。再実行してもデータは消えない）
+
+### ② Google ログイン
+- [ ] Google Cloud: OAuth クライアント作成 → Client ID / Secret、承認済みリダイレクトURI `https://<Ref>.supabase.co/auth/v1/callback`、同意画面を Publish
+- [ ] Supabase: Authentication → Google を ON ＋ Client ID/Secret 貼付
+
+### ③ Cloudflare Turnstile（ボット対策・ドメイン不要）
+- [ ] Cloudflare → Turnstile でウィジェット作成（Hostname に `miriapp.vercel.app`）→ Site/Secret Key
+- [ ] Vercel env: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` → 再デプロイ
+
+### ④ 決済（Stripe）本格有効化
+- [ ] Stripe（テストモード）: `STRIPE_SECRET_KEY`、Webhook `https://<本番URL>/api/stripe/webhook`（`checkout.session.completed`）→ `STRIPE_WEBHOOK_SECRET`
+- [ ] Supabase `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] Vercel env: 上記＋ `NEXT_PUBLIC_STRIPE_ENABLED=1` → 再デプロイ
+- [ ] `/tokushoho`（特商法ページ）の【 】を実際の事業者情報に記入
+- [ ] テストカード `4242 4242 4242 4242` で疎通確認
+
+### ⑤ 独自ドメイン＋Cloudflare WAF/DDoS（ローンチ時）
+- [ ] 独自ドメイン取得（例 `heymiri.app`。`miri.app` は取得不可）
+- [ ] Cloudflare にサイト追加 → DNS を Vercel へ（`CNAME → cname.vercel-dns.com`、初回グレー雲で検証→発行後オレンジ雲）
+- [ ] Cloudflare: SSL/TLS を **Full (Strict)**、Bot Fight Mode / WAF / Rate limiting を設定
+- [ ] Vercel Firewall で **Cloudflare 以外の直接アクセスを制限**（オリジンバイパス対策）
+- [ ] `NEXT_PUBLIC_SITE_URL` と Supabase Auth URL を独自ドメインに更新
+
+### ⑥ Creator Kit（営業前）
+- [ ] `/creator-kit` の問い合わせ先メール・Figma/Canva テンプレのリンクを実値に差し替え
+
+---
 ## ソーシャルログイン
 - [x] Google ログイン（アプリ側実装済み。Supabase で Google プロバイダを有効化＋Client ID/Secret を設定、Google 側の承認済みリダイレクトURIに `https://<プロジェクトRef>.supabase.co/auth/v1/callback` を登録すれば有効）
 - [ ] X（旧Twitter）ログイン（後回し）
