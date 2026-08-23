@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { isDev } from '@/lib/env';
 import { TERMS_VERSION } from '@/lib/terms';
 import { getMyProfile } from '@/lib/db';
+import { Turnstile, TURNSTILE_ENABLED, resetTurnstile } from '@/components/Turnstile';
 
 function setAuthCookie() {
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
@@ -36,6 +37,8 @@ export default function Page() {
   const [error, setError] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const onToken = useCallback((t: string) => setCaptchaToken(t), []);
 
   useEffect(() => {
     // dev/test 環境はそのままアプリへ
@@ -72,7 +75,28 @@ export default function Page() {
       return;
     }
     if (!supabase) { setError('設定エラーです'); return; }
-    setLoading(true);
+
+    // Cloudflare Turnstile（ボット対策）：有効時はトークンをサーバー検証してから続行
+    if (TURNSTILE_ENABLED) {
+      if (!captchaToken) { setError('「私はロボットではありません」の確認を完了してください'); return; }
+      setLoading(true);
+      try {
+        const res = await fetch('/api/turnstile', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: captchaToken }),
+        });
+        const j = await res.json().catch(() => ({ success: false }));
+        if (!j.success) {
+          setError('ボット確認に失敗しました。もう一度お試しください');
+          setCaptchaToken(''); resetTurnstile(); setLoading(false); return;
+        }
+      } catch {
+        setError('確認に失敗しました。通信環境をご確認ください');
+        setLoading(false); return;
+      }
+    } else {
+      setLoading(true);
+    }
 
     if (mode === 'signup') {
       const { data, error: err } = await supabase.auth.signUp({
@@ -85,7 +109,7 @@ export default function Page() {
           },
         },
       });
-      if (err) { setError(err.message); setLoading(false); return; }
+      if (err) { setError(err.message); setLoading(false); setCaptchaToken(''); resetTurnstile(); return; }
       if (data.session) {
         // 初回は /setup でID・名前を設定してもらう
         const fallbackId = data.user?.id?.split('-')[0] || 'me';
@@ -100,7 +124,7 @@ export default function Page() {
       }
     } else {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+      if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); setCaptchaToken(''); resetTurnstile(); return; }
       // ログインユーザーのプロフィール（ID・表示名）を Supabase から取得。
       const prof = await getMyProfile();
       try {
@@ -188,6 +212,7 @@ export default function Page() {
               </p>
             </div>
           )}
+          {TURNSTILE_ENABLED && <Turnstile onToken={onToken} />}
           {error && <p className="text-center text-xs font-bold text-red-500">{error}</p>}
           <button
             type="submit"
