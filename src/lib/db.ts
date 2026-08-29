@@ -209,11 +209,14 @@ export async function saveProfileBook(book: Record<string, any>): Promise<boolea
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  const { error } = await supabase
+  // .select() で「実際に更新された行」を返させる。RLSの更新ポリシー不足や
+  // 行欠落だと UPDATE は 0 行（エラーなし）になり得るため、行数で成否を判定する。
+  const { data, error } = await supabase
     .from('profiles')
     .update({ book, updated_at: new Date().toISOString() })
-    .eq('id', uid);
-  return !error;
+    .eq('id', uid)
+    .select('id');
+  return !error && Array.isArray(data) && data.length > 0;
 }
 
 /**
@@ -260,14 +263,17 @@ export async function saveProfileIdentity(fields: {
   if (!supabase) return { ok: false, error: 'not_configured' };
   const uid = await getCurrentUserId();
   if (!uid) return { ok: false, error: 'not_authenticated' };
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq('id', uid);
+    .eq('id', uid)
+    .select('id');
   if (error) {
     // username の unique 衝突など
     return { ok: false, error: error.code === '23505' ? 'username_taken' : error.message };
   }
+  // 0行更新（RLSの更新ポリシー不足・行欠落）は「保存されていない」ので失敗扱い。
+  if (!Array.isArray(data) || data.length === 0) return { ok: false, error: 'not_updated' };
   return { ok: true };
 }
 
