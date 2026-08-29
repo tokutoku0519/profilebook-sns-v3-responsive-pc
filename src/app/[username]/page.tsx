@@ -310,30 +310,14 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
   'wantToGo', 'collection', 'motto', 'holiday',
 ];
 
-// 項目ごとの公開範囲。未設定は「公開」扱い。
+// 日次お題から除外するお題ID（プロフ帳の標準しつもんと同内容のもの）。
+// 例：q4/eq14=「いま一番ハマってること」＝ しつもん「最近ハマっていることは？」。
+// 今後かぶるお題が増えたらここにIDを足すだけで日次から出なくなる。
+const DAILY_EXCLUDE_QIDS = new Set<string>(['q4', 'eq14']);
+
+// 項目ごとの公開範囲。未設定は「公開」扱い。編集画面では各項目のインライン
+// チップ（VisChip）で 公開／フォロワー限定／非公開 を切り替える。
 type FieldVisibility = 'public' | 'followers' | 'private';
-// 公開設定を切り替えられる項目（個人情報系を上に）。編集画面の「公開設定」で使う。
-const PRIVACY_FIELDS: { key: string; label: string }[] = [
-  { key: 'name', label: 'なまえ（本名）' },
-  { key: 'birthday', label: 'たん生日' },
-  { key: 'bloodType', label: '血液型' },
-  { key: 'gender', label: '性別' },
-  { key: 'hometown', label: '出身地' },
-  { key: 'mbti', label: 'MBTI' },
-  { key: 'favoriteFood', label: '好きな食べ物' },
-  { key: 'dislikeFood', label: 'きらいな食べ物' },
-  { key: 'favoriteColor', label: '好きな色' },
-  { key: 'favoriteCharacter', label: '好きなキャラ' },
-  { key: 'favoriteSubject', label: '好きな教科' },
-  { key: 'dislikeSubject', label: '苦手な教科' },
-  { key: 'specialty', label: '特技' },
-  { key: 'holiday', label: '休日の過ごし方' },
-  { key: 'wantToGo', label: '行ってみたい場所' },
-  { key: 'collection', label: '集めているもの' },
-  { key: 'motto', label: '好きな言葉・座右の銘' },
-  { key: 'charmPoint', label: 'チャームポイント' },
-  { key: 'dream', label: '将来のゆめ' },
-];
 
 // ── プロフィール完成度＆節目ごほうび（ドーパミン設計） ──────────
 // 埋めるほど楽しくなるよう、①完成度メーター ②節目(25/50/75/100%)の
@@ -3179,6 +3163,11 @@ function ProfileEditScreen({
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
   const [visForm, setVisForm] = useState<Record<string, FieldVisibility>>(fieldVisibility);
+  // 各項目にインラインの公開範囲チップを付けるためのprops。
+  const vprops = (key: string) => ({
+    vis: visForm[key] ?? ('public' as FieldVisibility),
+    onVis: (v: FieldVisibility) => setVisForm((prev) => ({ ...prev, [key]: v })),
+  });
   const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
   const [showShare, setShowShare] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -3499,38 +3488,38 @@ function ProfileEditScreen({
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="text-xl font-black text-ink">基本プロフィールを編集</p>
           <p className="mt-1 text-xs font-bold text-muted">
-            保存するとプロフィール帳に上書き反映されます
+            保存するとプロフィール帳に上書き反映されます。各項目の右のチップ（🌐公開／👥フォロワー／🔒非公開）で見せる相手を選べます。
           </p>
         </section>
 
         <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} />
+          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
           <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
-          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} />
-          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} />
-          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} />
-          <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} />
-          <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} />
-          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
-          <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} />
-          <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} />
+          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
+          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} {...vprops('bloodType')} />
+          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} {...vprops('gender')} />
+          <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} {...vprops('mbti')} />
+          <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
+          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} {...vprops('favoriteFood')} />
+          <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} {...vprops('dislikeFood')} />
+          <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} {...vprops('favoriteColor')} />
           {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
             <>
-              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
-              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} />
+              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('favoriteSubject')} />
+              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('dislikeSubject')} />
             </>
           )}
-          <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} />
+          <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} {...vprops('favoriteCharacter')} />
           <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
             📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
           </p>
-          <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
-          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} />
-          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} />
-          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} />
-          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} />
-          <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} />
-          <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} />
+          <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} {...vprops('specialty')} />
+          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} {...vprops('holiday')} />
+          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} {...vprops('wantToGo')} />
+          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} {...vprops('collection')} />
+          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} {...vprops('motto')} />
+          <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} {...vprops('charmPoint')} />
+          <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} {...vprops('dream')} />
           <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
         </section>
 
@@ -3751,40 +3740,6 @@ function ProfileEditScreen({
         </section>
 
         {/* ── シェア ── */}
-        {/* ===== 公開設定（項目ごとに 公開/フォロワー限定/非公開） ===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-base font-black text-ink">🔒 公開設定</p>
-          <p className="mb-4 text-xs font-bold text-muted">項目ごとに見せる相手を選べます（未設定は「公開」）。名前や出身地などは「非公開」や「フォロワー限定」にできます。</p>
-          <div className="space-y-2.5">
-            {PRIVACY_FIELDS.map((f) => {
-              const cur: FieldVisibility = visForm[f.key] ?? 'public';
-              const opts: { v: FieldVisibility; label: string }[] = [
-                { v: 'public', label: '公開' },
-                { v: 'followers', label: 'フォロワー' },
-                { v: 'private', label: '非公開' },
-              ];
-              return (
-                <div key={f.key} className="flex items-center gap-2">
-                  <span className="flex-1 text-xs font-black text-ink">{f.label}</span>
-                  <div className="flex gap-1">
-                    {opts.map((o) => (
-                      <button
-                        key={o.v}
-                        type="button"
-                        onClick={() => setVisForm((prev) => ({ ...prev, [f.key]: o.v }))}
-                        className={`rounded-full px-2.5 py-1.5 text-[10px] font-black transition ${cur === o.v ? (o.v === 'private' ? 'bg-red-500 text-white' : o.v === 'followers' ? 'bg-purple text-white' : 'bg-pink text-white') : 'bg-base text-muted hover:bg-pink/10'}`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <p className="mt-3 text-[10px] font-bold text-muted">※ 現在は「表示上の出し分け」です。完全な秘匿は今後のアップデートで対応予定。</p>
-        </section>
-
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
           <p className="mb-4 text-xs font-bold text-muted">QRコードや画像でプロフィールを友達にシェアできます</p>
@@ -4754,18 +4709,54 @@ function OfficialQuestionCreateScreen({
     </>
   );
 }
+// 項目ごとの公開範囲チップ。タップで 公開→フォロワー→非公開 を巡回。
+function VisChip({ value = 'public', onChange }: { value?: FieldVisibility; onChange: (v: FieldVisibility) => void }) {
+  const order: FieldVisibility[] = ['public', 'followers', 'private'];
+  const meta: Record<FieldVisibility, { t: string; c: string }> = {
+    public: { t: '🌐 公開', c: 'bg-base text-muted' },
+    followers: { t: '👥 フォロワー', c: 'bg-purple/15 text-purple' },
+    private: { t: '🔒 非公開', c: 'bg-red-500/15 text-red-500' },
+  };
+  const m = meta[value] ?? meta.public;
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(order[(order.indexOf(value) + 1) % order.length])}
+      title="タップで公開範囲を切替（公開→フォロワー限定→非公開）"
+      className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black transition active:scale-95 ${m.c}`}
+    >
+      {m.t}
+    </button>
+  );
+}
+
+// フィールドのラベル行（右端に任意で公開範囲チップ）
+function FieldLabel({ label, vis, onVis }: { label: string; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  if (!onVis) return <span className="text-xs font-black text-muted">{label}</span>;
+  return (
+    <span className="flex items-center justify-between gap-2">
+      <span className="text-xs font-black text-muted">{label}</span>
+      <VisChip value={vis} onChange={onVis} />
+    </span>
+  );
+}
+
 function EditField({
   label,
   value,
   onChange,
+  vis,
+  onVis,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  vis?: FieldVisibility;
+  onVis?: (v: FieldVisibility) => void;
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-black text-muted">{label}</span>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -4776,7 +4767,7 @@ function EditField({
 }
 
 // 誕生日：月・日のプルダウン（値は "M月D日" 形式で保存し既存表示と互換）
-function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
   // 月・日を独立して読み取る（「3月」だけ／「15日」だけの途中状態も保持・表示できる）。
   const month = ((value ?? '').match(/(\d{1,2})月/) || [])[1] || '';
   const day = ((value ?? '').match(/(\d{1,2})日/) || [])[1] || '';
@@ -4789,7 +4780,7 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
     }`;
   return (
     <div>
-      <span className="text-xs font-black text-muted">{label}</span>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className="mt-1 grid grid-cols-2 gap-2">
         <select value={month} onChange={(e) => set(e.target.value, day)} className={sel(!!month)}>
           <option value="">月を選ぶ</option>
@@ -4810,7 +4801,7 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
 }
 
 // なまえ：姓・名を分けて入力（値は "姓 名" のスペース区切りで保存）
-function NameField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function NameField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
   const parts = (value ?? '').split(/\s+/);
   const last = parts[0] ?? '';
   const first = parts.slice(1).join(' ');
@@ -4818,7 +4809,7 @@ function NameField({ label, value, onChange }: { label: string; value: string; o
   const inp = 'mt-1 w-full rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink';
   return (
     <div>
-      <span className="text-xs font-black text-muted">{label}</span>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className="mt-1 flex gap-2">
         <input value={last} onChange={(e) => set(e.target.value, first)} placeholder="姓" className={inp} />
         <input value={first} onChange={(e) => set(last, e.target.value)} placeholder="名" className={inp} />
@@ -4833,16 +4824,20 @@ function SelectField({
   onChange,
   options,
   columns = 4,
+  vis,
+  onVis,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   columns?: number;
+  vis?: FieldVisibility;
+  onVis?: (v: FieldVisibility) => void;
 }) {
   return (
     <div>
-      <span className="text-xs font-black text-muted">{label}</span>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className={`mt-2 grid gap-2`} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
         {options.map((opt) => (
           <button
@@ -8746,13 +8741,20 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   useEffect(() => { if (dbReady()) { void getCurrentUserId().then((id) => setMyUid(id)); } }, []);
   const selectedAnswer = answers.find((a) => a.id === selectedAnswerId) || answers[0];
 
+  // 日次お題は「プロフ帳の標準しつもん」と同内容のものを出さない（二度手間を避ける）。
+  // 重複するお題IDをここに追加する（例：q4/eq14＝「いま一番ハマってること」＝しつもん「最近ハマっていることは？」）。
+  const dailyPool = useMemo(() => {
+    const pool = localizedQuestions.filter((q) => !DAILY_EXCLUDE_QIDS.has(q.id));
+    return pool.length ? pool : localizedQuestions;
+  }, [localizedQuestions]);
+
   // ── 今日のお題（言語に応じて切り替わる）────────────────────────
   const dailyQuestion = useMemo(() => {
     const today = new Date().toDateString();
     let h = 0;
     for (let i = 0; i < today.length; i++) h = Math.imul(31, h) + today.charCodeAt(i) | 0;
-    return localizedQuestions[Math.abs(h) % localizedQuestions.length];
-  }, [localizedQuestions]);
+    return dailyPool[Math.abs(h) % dailyPool.length];
+  }, [dailyPool]);
 
   // 自分が既に回答したお題のID集合（＝もう「新規回答」できないお題）
   const myAnsweredQids = useMemo(
