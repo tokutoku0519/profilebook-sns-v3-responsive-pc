@@ -225,7 +225,6 @@ const defaultProfileBookInfo = isDev ? demoProfileBookInfo : emptyProfileBookInf
 
 // すきなもの BEST3 のカテゴリ定義（表示・編集はこの配列で共通化する）
 const BEST3_CATEGORIES = [
-  { key: 'food',   emoji: '🍚', label: '食べ物' },
   { key: 'drink',  emoji: '🥤', label: '飲み物' },
   { key: 'tv',     emoji: '📺', label: 'テレビ・YouTube' },
   { key: 'artist', emoji: '🎵', label: 'アーティスト' },
@@ -2329,9 +2328,10 @@ function ProfileBookContent({
         {/* 定番のお気に入りは“丸バブルに手書き”で（プロフ帳の顔） */}
         {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
         <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-4">
+          <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
+          <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
           <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
           <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
-          <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
         </div>
         {/* 残りは書き込み欄で */}
         {(lifeStageDef?.showSubjectFields ?? true) && (
@@ -3469,6 +3469,7 @@ function ProfileEditScreen({
           <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} />
           <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} />
           <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} />
+          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
           <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} />
           <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} />
           {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
@@ -3479,7 +3480,7 @@ function ProfileEditScreen({
           )}
           <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} />
           <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
-            🍚 食べ物・📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
+            📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
           </p>
           <SelectField label="好きな季節" value={form.favoriteSeason} onChange={(v) => update('favoriteSeason', v)} options={SEASON_OPTIONS} columns={4} />
           <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
