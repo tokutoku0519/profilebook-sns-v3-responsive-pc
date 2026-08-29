@@ -3460,9 +3460,6 @@ function ProfileEditScreen({
             🍚 食べ物・📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
           </p>
           <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
-          <p className="rounded-2xl bg-purple/5 px-4 py-2.5 text-[11px] font-bold text-muted">
-            💭 「性格」「口ぐせ」は自分で書かなくてOK。友だちがあなたのプロフィールで投票・投稿して決まります（他己紹介）
-          </p>
           <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} />
           <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} />
           <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
