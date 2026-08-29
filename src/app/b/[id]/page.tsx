@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 type Row = {
   id: string; title: string | null; body: string; text_color: string | null;
   mood: string | null; weather: string | null; visibility: string | null;
+  photo_url: string | null;
   created_at: string; user_id: string;
   profiles?: { username: string | null; display_name: string | null; avatar_url: string | null } | null;
 };
@@ -19,7 +20,7 @@ async function getPost(id: string): Promise<Row | null> {
   // 埋め込みJOINは環境によって失敗しうるため、記事と著者を別々に取得
   const { data } = await supabase
     .from('blog_posts')
-    .select('id,title,body,text_color,mood,weather,visibility,created_at,user_id')
+    .select('id,title,body,text_color,mood,weather,visibility,photo_url,created_at,user_id')
     .eq('id', id)
     .maybeSingle();
   const row = data as Row | null;
@@ -41,7 +42,7 @@ function plain(body: string): string {
   t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
-  t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]/g, '');
+  t = t.replace(/\[\[\/?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/g, '');
   return t.replace(/\s+/g, ' ').trim();
 }
 
@@ -57,25 +58,46 @@ const BLOG_BG: Record<string, React.CSSProperties> = {
   grid: { backgroundColor: '#ffffff', backgroundImage: 'linear-gradient(rgba(120,120,160,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(120,120,160,.10) 1px,transparent 1px)', backgroundSize: '20px 20px' },
 };
 
-const INLINE_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small)\]\]([\s\S]*?)\[\[\/(?:c|hl|big|small)\]\]/g;
-function renderInline(text: string, kp: string): React.ReactNode[] {
+// インライン装飾（色・ハイライト・大小・太字・下線）。アプリ内レンダラと同一の
+// 入れ子対応パーサに合わせる（以前は b/u 未対応で、太字・下線が [[b]] 等の生コード
+// として表示されるバグがあった）。
+const BLOG_OPEN_RE = /\[\[(c:#[0-9a-fA-F]{3,8}|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/;
+const BLOG_TOKEN_RE = /\[\[(\/)?(?:c(?::#[0-9a-fA-F]{3,8})?|hl(?::#[0-9a-fA-F]{3,8})?|big|small|b|u)\]\]/g;
+function inlineStyle(tag: string): React.CSSProperties {
+  const style: React.CSSProperties = {};
+  if (tag.startsWith('c:#')) style.color = tag.slice(2);
+  else if (tag.startsWith('hl')) { style.backgroundColor = tag.includes(':#') ? tag.split(':')[1] : '#fff59d'; style.padding = '0 .14em'; style.borderRadius = '.25em'; }
+  else if (tag === 'big') style.fontSize = '1.35em';
+  else if (tag === 'small') style.fontSize = '0.82em';
+  else if (tag === 'b') style.fontWeight = 900;
+  else if (tag === 'u') style.textDecoration = 'underline';
+  return style;
+}
+let __k = 0;
+function renderSeg(text: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  let last = 0; let k = 0; let m: RegExpExecArray | null;
-  INLINE_RE.lastIndex = 0;
-  while ((m = INLINE_RE.exec(text))) {
-    if (m.index > last) out.push(<span key={`${kp}-${k++}`}>{text.slice(last, m.index)}</span>);
-    const tag = m[1]; const inner = m[2];
-    const style: React.CSSProperties = {};
-    if (tag.startsWith('c:#')) style.color = tag.slice(2);
-    else if (tag.startsWith('hl')) { style.backgroundColor = tag.includes(':#') ? tag.split(':')[1] : '#fff59d'; style.padding = '0 .14em'; style.borderRadius = '.25em'; }
-    else if (tag === 'big') style.fontSize = '1.35em';
-    else if (tag === 'small') style.fontSize = '0.82em';
-    out.push(<span key={`${kp}-${k++}`} style={style}>{inner}</span>);
-    last = INLINE_RE.lastIndex;
+  let i = 0;
+  while (i < text.length) {
+    const rest = text.slice(i);
+    const om = rest.match(BLOG_OPEN_RE);
+    if (!om || om.index === undefined) { out.push(<span key={__k++}>{rest}</span>); break; }
+    if (om.index > 0) out.push(<span key={__k++}>{rest.slice(0, om.index)}</span>);
+    const tag = om[1];
+    const contentStart = i + om.index + om[0].length;
+    BLOG_TOKEN_RE.lastIndex = contentStart;
+    let depth = 1; let mm: RegExpExecArray | null; let closeStart = -1; let closeEnd = -1;
+    while ((mm = BLOG_TOKEN_RE.exec(text))) {
+      if (mm[1] === '/') depth--; else depth++;
+      if (depth === 0) { closeStart = mm.index; closeEnd = BLOG_TOKEN_RE.lastIndex; break; }
+    }
+    if (closeStart === -1) { out.push(<span key={__k++}>{rest}</span>); break; }
+    const inner = text.slice(contentStart, closeStart);
+    out.push(<span key={__k++} style={inlineStyle(tag)}>{renderSeg(inner)}</span>);
+    i = closeEnd;
   }
-  if (last < text.length) out.push(<span key={`${kp}-${k++}`}>{text.slice(last)}</span>);
   return out;
 }
+function renderInline(text: string, _kp: string): React.ReactNode[] { __k = 0; return renderSeg(text); }
 
 const DIVIDER_TEXT: Record<string, string> = {
   line: '', hearts: '♡ ⋆ ｡ ⋆ ♡ ⋆ ｡ ⋆ ♡', stars: '⋆ ✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆',
@@ -146,6 +168,11 @@ export default async function BlogArticlePage({ params }: { params: { id: string
         </div>
         <div style={{ padding: 20, ...bg }}>
           <h1 style={{ margin: '0 0 10px', fontSize: 24, fontWeight: 900, lineHeight: 1.3, color: post.text_color || '#EC4899' }}>✿ {post.title?.trim() || '無題のブログ'}</h1>
+          {post.photo_url && (
+            <div style={{ margin: '0 0 14px', borderRadius: 16, overflow: 'hidden' }}>
+              <img src={post.photo_url} alt="" style={{ width: '100%', display: 'block' }} />
+            </div>
+          )}
           <ArticleBody body={post.body} titleColor={post.text_color ?? undefined} />
           <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 8, color: '#1F2C56' }}>
             <span style={{ display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: '50%', background: 'rgba(236,72,153,.1)', fontSize: 18 }}>{author?.avatar_url && !author.avatar_url.startsWith('http') ? author.avatar_url : '📷'}</span>
