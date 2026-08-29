@@ -307,10 +307,8 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
   'hobby', 'charmPoint', 'dream', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv',
   'favoriteArtist', 'favoriteManga', 'favoriteGame', 'specialty', 'personality',
   'catchphrase', 'message',
-  'favoriteSeason', 'myBoom', 'wantToGo', 'collection', 'motto', 'holiday',
+  'wantToGo', 'collection', 'motto', 'holiday',
 ];
-
-const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
 
 // 項目ごとの公開範囲。未設定は「公開」扱い。
 type FieldVisibility = 'public' | 'followers' | 'private';
@@ -328,9 +326,7 @@ const PRIVACY_FIELDS: { key: string; label: string }[] = [
   { key: 'favoriteCharacter', label: '好きなキャラ' },
   { key: 'favoriteSubject', label: '好きな教科' },
   { key: 'dislikeSubject', label: '苦手な教科' },
-  { key: 'favoriteSeason', label: '好きな季節' },
   { key: 'specialty', label: '特技' },
-  { key: 'myBoom', label: 'マイブーム' },
   { key: 'holiday', label: '休日の過ごし方' },
   { key: 'wantToGo', label: '行ってみたい場所' },
   { key: 'collection', label: '集めているもの' },
@@ -2258,7 +2254,7 @@ function ProfileBookContent({
     'favoriteFood','dislikeFood','favoriteColor','favoriteSubject','dislikeSubject',
     'favoriteCharacter','favoriteMusic','favoriteTv','favoriteArtist','favoriteManga',
     'favoriteGame','hobby','specialty','personality','catchphrase','charmPoint','dream',
-    'message','hometown','myBoom','wantToGo','collection','motto','holiday',
+    'message','hometown','wantToGo','collection','motto','holiday',
   ] as const;
   const [translatedInfo, setTranslatedInfo] = useState<Partial<typeof info>>({});
   useEffect(() => {
@@ -2284,7 +2280,7 @@ function ProfileBookContent({
   const has = (...keys: (keyof typeof info)[]) => keys.some((k) => ((info[k] as string) ?? '').trim());
   const showBasic = isSelf || has('name', 'nickname', 'birthday', 'bloodType', 'gender', 'mbti', 'hometown');
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
-  const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream', 'favoriteSeason', 'myBoom', 'wantToGo', 'collection', 'motto', 'holiday');
+  const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream', 'wantToGo', 'collection', 'motto', 'holiday');
 
   // 見出しのバブル色（テーマ連動）。海っぽさは背景テーマ側で表現し、ここでは強制しない。
   const bubbleClass = themeColor === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
@@ -2389,9 +2385,7 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
         <div className="space-y-2">
-        {canShow('favoriteSeason') && <ProfileLine label={t('field_favoriteSeason', lang)} value={info.favoriteSeason} />}
         {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />}
-        {canShow('myBoom') && <ProfileLine label={t('field_myBoom', lang)} value={translatedInfo.myBoom ?? info.myBoom} />}
         {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />}
         {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />}
         {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />}
@@ -3530,9 +3524,7 @@ function ProfileEditScreen({
           <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
             📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
           </p>
-          <SelectField label="好きな季節" value={form.favoriteSeason} onChange={(v) => update('favoriteSeason', v)} options={SEASON_OPTIONS} columns={4} />
           <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
-          <EditField label="マイブーム（最近ハマってること）" value={form.myBoom} onChange={(v) => update('myBoom', v)} />
           <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} />
           <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} />
           <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} />
