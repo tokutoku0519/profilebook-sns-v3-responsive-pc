@@ -80,6 +80,63 @@ export async function getCurrentUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+// ── 他己紹介アンケート（性格などを他人が投票） ────────────────
+export type PerceptionSummary = { value: string; count: number }[];
+
+/** 対象ユーザーの投票集計（多い順）と、自分が入れている票を取得。 */
+export async function getPerceptionSummary(
+  targetUid: string,
+  category = 'personality',
+): Promise<{ summary: PerceptionSummary; myVote: string | null; total: number }> {
+  if (!supabase || !targetUid) return { summary: [], myVote: null, total: 0 };
+  const { data } = await supabase
+    .from('perception_votes')
+    .select('voter_id,value')
+    .eq('target_id', targetUid)
+    .eq('category', category);
+  const rows = (data ?? []) as { voter_id: string; value: string }[];
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.value, (counts.get(r.value) ?? 0) + 1);
+  const summary = [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count);
+  const uid = await getCurrentUserId();
+  const myVote = uid ? (rows.find((r) => r.voter_id === uid)?.value ?? null) : null;
+  return { summary, myVote, total: rows.length };
+}
+
+/** 対象ユーザーへ1票入れる（付け替え）。自分自身へは不可。 */
+export async function castPerceptionVote(
+  targetUid: string,
+  value: string,
+  category = 'personality',
+): Promise<boolean> {
+  if (!supabase || !targetUid) return false;
+  const uid = await getCurrentUserId();
+  if (!uid || uid === targetUid) return false;
+  const { error } = await supabase
+    .from('perception_votes')
+    .upsert(
+      { target_id: targetUid, voter_id: uid, category, value },
+      { onConflict: 'target_id,voter_id,category' },
+    );
+  return !error;
+}
+
+/** 自分の票を取り消す。 */
+export async function clearPerceptionVote(targetUid: string, category = 'personality'): Promise<boolean> {
+  if (!supabase || !targetUid) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase
+    .from('perception_votes')
+    .delete()
+    .eq('target_id', targetUid)
+    .eq('voter_id', uid)
+    .eq('category', category);
+  return !error;
+}
+
 // ── 一致率しんだん（相性診断）の回答 book.__choices ────────────
 /** 自分の二択回答を book.__choices に保存（他項目は消さない read-merge-write）。 */
 export async function saveMyChoices(choices: Record<string, string>): Promise<boolean> {

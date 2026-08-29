@@ -570,3 +570,32 @@ drop policy if exists "feedback insert own" on public.feedback;
 drop policy if exists "feedback select own" on public.feedback;
 create policy "feedback insert own" on public.feedback for insert with check (auth.uid() = user_id);
 create policy "feedback select own" on public.feedback for select using (auth.uid() = user_id);
+
+-- ============================================================
+-- 他己紹介アンケート（性格などを“他人が投票”して埋める）。
+-- 1人の対象(target)に対し、投票者(voter)はカテゴリごとに1票（付け替え可）。
+-- 全員が集計を閲覧でき、各自は自分の票のみ作成・変更・削除できる。
+-- create table if not exists なので再実行しても消えない。
+-- ============================================================
+create table if not exists public.perception_votes (
+  id uuid primary key default gen_random_uuid(),
+  target_id uuid not null references public.profiles(id) on delete cascade,
+  voter_id  uuid not null references public.profiles(id) on delete cascade,
+  category  text not null default 'personality',
+  value     text not null,
+  created_at timestamptz default now(),
+  unique (target_id, voter_id, category)
+);
+create index if not exists perception_target_idx on public.perception_votes (target_id, category);
+
+alter table public.perception_votes enable row level security;
+
+drop policy if exists "perception readable"    on public.perception_votes;
+drop policy if exists "perception insert own"   on public.perception_votes;
+drop policy if exists "perception update own"   on public.perception_votes;
+drop policy if exists "perception delete own"   on public.perception_votes;
+-- 集計は全員が閲覧可。ただし自分自身への投票は不可（with check で voter<>target）。
+create policy "perception readable"  on public.perception_votes for select using (true);
+create policy "perception insert own" on public.perception_votes for insert with check (auth.uid() = voter_id and voter_id <> target_id);
+create policy "perception update own" on public.perception_votes for update using (auth.uid() = voter_id);
+create policy "perception delete own" on public.perception_votes for delete using (auth.uid() = voter_id);
