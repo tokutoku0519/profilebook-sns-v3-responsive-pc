@@ -8662,15 +8662,27 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       // ユーザーがこのセッションで編集済みなら、遅れて届いたサーバー値で上書きしない
       // （＝編集を守る。写真・名前・プロフ帳すべてに適用）。
       const overwriteFromServer = !profileDirtyRef.current;
-      if (overwriteFromServer) me.name = p.display_name;
+      // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
+      const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
+      const { __best3, __monthly, __questions, ...info } = book;
+      // 公開表示名はニックネーム優先。DBの display_name が本名など古い値でも、
+      // 読み込み時にニックネームへ揃える（サイドバー・新規回答へ即反映）。
+      const preferredName =
+        ((info.nickname || info.name || p.display_name || p.username) || '').trim() || p.username;
+      if (overwriteFromServer) me.name = preferredName;
+      // DBの display_name がニックネームと違うなら、一度だけ更新して既存回答の著者名も直す。
+      if (overwriteFromServer && preferredName && preferredName !== p.display_name) {
+        void saveProfileIdentity({ display_name: preferredName });
+        // すでに読み込み済みの自分の回答も、その場で新しい表示名へ更新（リロード不要）。
+        setAnswers((prev) =>
+          prev.map((a) => (a.user.id === '@' + p.username ? { ...a, user: { ...a.user, name: preferredName } } : a)),
+        );
+      }
       // 写真アイコンを Supabase から復元（端末を変えても引き継ぐ）
       if (overwriteFromServer && p.avatar_url && (p.avatar_url.startsWith('http') || p.avatar_url.startsWith('data:'))) {
         setAvatarUrl(p.avatar_url);
         try { localStorage.setItem('avatarUrl', p.avatar_url); } catch {}
       }
-      // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
-      const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
-      const { __best3, __monthly, __questions, ...info } = book;
       if (overwriteFromServer && Object.keys(book).length > 0) {
         // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
         if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
