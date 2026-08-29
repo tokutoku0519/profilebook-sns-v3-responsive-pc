@@ -4594,10 +4594,10 @@ function EditField({
 
 // 誕生日：月・日のプルダウン（値は "M月D日" 形式で保存し既存表示と互換）
 function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const m = (value ?? '').match(/(\d{1,2})月(\d{1,2})日/);
-  const month = m ? m[1] : '';
-  const day = m ? m[2] : '';
-  const set = (mo: string, da: string) => onChange(mo && da ? `${mo}月${da}日` : (mo ? `${mo}月` : ''));
+  // 月・日を独立して読み取る（「3月」だけ／「15日」だけの途中状態も保持・表示できる）。
+  const month = ((value ?? '').match(/(\d{1,2})月/) || [])[1] || '';
+  const day = ((value ?? '').match(/(\d{1,2})日/) || [])[1] || '';
+  const set = (mo: string, da: string) => onChange(`${mo ? `${mo}月` : ''}${da ? `${da}日` : ''}`);
   // 選択肢そのものに「月／日」を含めて自己完結させ、選んだ値がひと目で分かるように。
   // 未選択はグレー、選択後はピンク枠＋濃い文字で区別する（固定ラベルは廃止）。
   const sel = (filled: boolean) =>
