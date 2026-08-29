@@ -35,7 +35,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
-import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices } from '@/lib/db';
+import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity } from '@/lib/db';
 import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
 import { CHOICE_QUESTIONS, matchPercent } from '@/lib/choiceQuiz';
 
@@ -329,7 +329,8 @@ function rowToMiniProfile(p: ProfileRow): Profile {
   return {
     name: p.display_name || p.username,
     id: '@' + p.username,
-    avatar: p.avatar_url || '📷',
+    // 一覧・検索はアバターをテキスト描画するため、写真URL（http/data）は 📷 に落として崩れを防ぐ
+    avatar: p.avatar_url && !p.avatar_url.startsWith('http') && !p.avatar_url.startsWith('data:') ? p.avatar_url : '📷',
     bio: book.message || book.personality || book.hobby || '',
     common: book.hobby || book.favoriteFood || '',
   } as Profile;
@@ -5735,7 +5736,7 @@ function DiaryCreateScreen({
       setInviteList(rows.map((r) => ({
         id: '@' + r.username,
         name: r.display_name || r.username,
-        avatar: r.avatar_url && !r.avatar_url.startsWith('http') ? r.avatar_url : '📷',
+        avatar: r.avatar_url && !r.avatar_url.startsWith('http') && !r.avatar_url.startsWith('data:') ? r.avatar_url : '📷',
       })));
     });
     return () => { cancelled = true; };
@@ -5759,7 +5760,7 @@ function DiaryCreateScreen({
       const followerIds = new Set(inviteList.map((f) => f.id));
       setSearchedUsers(
         rows
-          .map((r) => ({ id: '@' + r.username, name: r.display_name || r.username, avatar: r.avatar_url && !r.avatar_url.startsWith('http') ? r.avatar_url : '📷' }))
+          .map((r) => ({ id: '@' + r.username, name: r.display_name || r.username, avatar: r.avatar_url && !r.avatar_url.startsWith('http') && !r.avatar_url.startsWith('data:') ? r.avatar_url : '📷' }))
           .filter((u) => u.id !== me.id && !followerIds.has(u.id)),
       );
     }, 300);
@@ -8249,7 +8250,11 @@ function DailyQuestionScreen({
                       tabIndex={0}
                       onClick={(e) => { e.stopPropagation(); go('profile', { name: answer.user.name, id: answer.user.id, avatar: answer.user.avatar, bio: '', common: '' }); }}
                     >
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-pink/10 text-lg">{answer.user.avatar}</span>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/10 text-lg">
+                        {answer.user.avatar && (answer.user.avatar.startsWith('http') || answer.user.avatar.startsWith('data:'))
+                          ? <img src={answer.user.avatar} alt="" className="h-full w-full object-cover" />
+                          : answer.user.avatar}
+                      </span>
                       <div>
                         <p className="text-sm font-black text-ink">{answer.user.name}</p>
                         <p className="text-[10px] font-bold text-muted">{answer.user.id}</p>
@@ -8475,6 +8480,11 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       me.id = '@' + p.username;
       me.name = p.display_name;
       me.isOfficial = !!p.is_official;
+      // 写真アイコンを Supabase から復元（端末を変えても引き継ぐ）
+      if (p.avatar_url && (p.avatar_url.startsWith('http') || p.avatar_url.startsWith('data:'))) {
+        setAvatarUrl(p.avatar_url);
+        try { localStorage.setItem('avatarUrl', p.avatar_url); } catch {}
+      }
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
       const { __best3, __monthly, __questions, ...info } = book;
@@ -8531,6 +8541,30 @@ function updateAvatarUrl(url: string) {
   setAvatarUrl(url);
   if (url) localStorage.setItem('avatarUrl', url);
   else localStorage.removeItem('avatarUrl');
+  syncIdentityToProfiles({ avatarUrl: url });
+}
+
+// プロフィール帳の「なまえ／ニックネーム」と写真アイコンを、アカウントの公開情報
+// （profiles.display_name / avatar_url）へ同期する。
+// これをしないと、過去にした回答に表示される著者名・アイコンが古いまま残る
+// （回答フィードは answers に profiles を結合して著者情報を表示しているため）。
+function syncIdentityToProfiles(override?: { info?: typeof defaultProfileBookInfo; avatarUrl?: string }) {
+  const info = override?.info ?? profileBookInfo;
+  const photo = override?.avatarUrl !== undefined ? override.avatarUrl : avatarUrl;
+  const username = me.id.replace(/^@/, '');
+  const displayName = ((info.name || info.nickname || me.name || username) || '').trim() || username;
+  const avatar = photo || me.avatar;
+
+  // 画面内の自分の情報を即時更新（リロードを待たずに、既存の回答へも反映する）
+  me.name = displayName;
+  setAnswers((prev) =>
+    prev.map((a) => (a.user.id === me.id ? { ...a, user: { ...a.user, name: displayName, avatar } } : a)),
+  );
+  setMeVersion((v) => v + 1);
+
+  // Supabase の公開プロフィールへ保存（未設定・未認証なら best-effort でスキップ）
+  if (!dbReady()) return;
+  try { void saveProfileIdentity({ display_name: displayName, avatar_url: avatar }); } catch {}
 }
 
 const [appTheme, setAppTheme] = useState<AppThemeId>(() => {
@@ -9204,6 +9238,7 @@ function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   setProfileBookInfo(next);
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
   persistBook(); // Supabase にも保存（永続化・端末間で引き継ぎ）
+  syncIdentityToProfiles({ info: next }); // なまえ／ニックネーム変更を回答の著者名にも反映
 }
 
 // プロフィール帳の項目を「初めて」埋めたぶんだけコインを付与（重複取得なし）
@@ -9550,7 +9585,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     id,
     question: q,
     body: `${draft.sticker} ${draft.body}`,
-    user: { name: me.name, id: me.id, avatar: me.avatar },
+    user: { name: me.name, id: me.id, avatar: avatarUrl || me.avatar },
     reactions: { like: 0, same: 0, wakaru: 0, natsukashii: 0 },
   };
 

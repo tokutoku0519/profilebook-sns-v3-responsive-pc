@@ -9,6 +9,18 @@ type Question = (typeof questions)[number];
 type Answer = (typeof answers)[number];
 type Profile = (typeof profiles)[number];
 
+// アバターは絵文字（例 "📷"）と画像URL（http... / data:...）の両方を取りうる。
+// URLなら <img> で、絵文字ならそのまま文字として表示する。
+function isImageAvatar(v?: string): boolean {
+  return !!v && (v.startsWith('http') || v.startsWith('data:'));
+}
+function AvatarInline({ value, alt = '' }: { value?: string; alt?: string }) {
+  if (isImageAvatar(value)) {
+    return <img src={value} alt={alt} className="h-full w-full rounded-full object-cover" />;
+  }
+  return <>{value || '📷'}</>;
+}
+
 export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
     <div className="mb-3 flex items-end justify-between">
@@ -94,7 +106,7 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
       )}
       <div className="mt-4 flex items-center justify-between">
         <span {...userClickProps}>
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-pink/15 text-xl">{answer.user.avatar}</span>
+          <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/15 text-xl"><AvatarInline value={answer.user.avatar} alt={answer.user.name} /></span>
           <span>
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-bold">{answer.user.name}</span>
@@ -141,7 +153,7 @@ export function ProfileCard({ profile }: { profile: Profile }) {
   const titles = getUserTitles(profile.id);
   return (
     <article className="min-w-[150px] rounded-[26px] border border-purple-100 bg-white p-4 text-center shadow-card">
-      <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-pink/20 to-purple/20 text-3xl">{profile.avatar}</div>
+      <div className="mx-auto mb-3 grid h-16 w-16 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-pink/20 to-purple/20 text-3xl"><AvatarInline value={profile.avatar} alt={profile.name} /></div>
       <h3 className="font-bold text-ink">{profile.name}</h3>
       {titles.length > 0 && (
         <div className="mt-1 flex flex-wrap justify-center gap-1">
