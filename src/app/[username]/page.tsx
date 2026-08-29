@@ -2355,7 +2355,6 @@ function ProfileBookContent({
         <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />
         <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />
         <ProfileLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} />
-        <ProfileLine label={t('field_catchphrase', lang)} value={translatedInfo.catchphrase ?? info.catchphrase} />
         <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
         <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
         </div>
