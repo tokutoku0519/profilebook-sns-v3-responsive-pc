@@ -8602,6 +8602,10 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // ── ログインユーザーのSupabaseプロフィールを読み込み、me・プロフィール帳へ反映 ──
   // （production で Supabase が設定されているときのみ。dev/未設定では従来どおり）
   const [, setMeVersion] = useState(0);
+  // 初回のサーバー読込は非同期で遅れて解決する。その間にユーザーが編集・保存すると、
+  // 遅れて届いたサーバーの“古いプロフィール”がローカルの編集を上書きしてしまう。
+  // ユーザーが編集したら true にして、初回読込の上書きをスキップする（編集を守る）。
+  const profileDirtyRef = useRef(false);
   useEffect(() => {
     // ① まずローカル（/setup で保存したID・表示名）から me を即時更新（確実・同期）
     try {
@@ -8646,17 +8650,20 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       const p = await getMyProfile();
       if (cancelled || !p) return;
       me.id = '@' + p.username;
-      me.name = p.display_name;
       me.isOfficial = !!p.is_official;
+      // ユーザーがこのセッションで編集済みなら、遅れて届いたサーバー値で上書きしない
+      // （＝編集を守る。写真・名前・プロフ帳すべてに適用）。
+      const overwriteFromServer = !profileDirtyRef.current;
+      if (overwriteFromServer) me.name = p.display_name;
       // 写真アイコンを Supabase から復元（端末を変えても引き継ぐ）
-      if (p.avatar_url && (p.avatar_url.startsWith('http') || p.avatar_url.startsWith('data:'))) {
+      if (overwriteFromServer && p.avatar_url && (p.avatar_url.startsWith('http') || p.avatar_url.startsWith('data:'))) {
         setAvatarUrl(p.avatar_url);
         try { localStorage.setItem('avatarUrl', p.avatar_url); } catch {}
       }
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
       const { __best3, __monthly, __questions, ...info } = book;
-      if (Object.keys(book).length > 0) {
+      if (overwriteFromServer && Object.keys(book).length > 0) {
         // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
         if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
         // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
@@ -8706,6 +8713,7 @@ const [avatarUrl, setAvatarUrl] = useState<string>(() => {
 });
 
 function updateAvatarUrl(url: string) {
+  profileDirtyRef.current = true; // 初回サーバー読込による上書きから編集を守る
   setAvatarUrl(url);
   if (url) localStorage.setItem('avatarUrl', url);
   else localStorage.removeItem('avatarUrl');
@@ -9422,6 +9430,7 @@ function onProfileSyncFailed() {
 }
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
+  profileDirtyRef.current = true;  // 初回サーバー読込による上書きから編集を守る
   rewardNewlyFilledFields(next);   // 新しく埋めた項目にコイン付与
   checkProfileMilestones(next);    // 完成度の節目(25/50/75/100%)でジャックポット
   setProfileBookInfo(next);
