@@ -2267,8 +2267,8 @@ function ProfileBookContent({
               : avatarEmoji}
           </div>
           <div className="min-w-0">
-            <p className="text-2xl font-black text-ink leading-tight prof-hand">{info.name || info.nickname || userId}</p>
-            <p className="text-xs font-bold text-muted">{info.name && info.nickname ? `${info.nickname} / ${userId}` : userId}</p>
+            <p className="text-2xl font-black text-ink leading-tight prof-hand">{info.nickname || info.name || userId}</p>
+            <p className="text-xs font-bold text-muted">{userId}</p>
             {info.catchphrase && (
               <p className={`mt-2 inline-block rounded-full bg-pink/10 px-3 py-1 text-xs font-black ${accent}`}>
                 {info.catchphrase}
@@ -4598,22 +4598,30 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
   const month = m ? m[1] : '';
   const day = m ? m[2] : '';
   const set = (mo: string, da: string) => onChange(mo && da ? `${mo}月${da}日` : (mo ? `${mo}月` : ''));
-  const sel = 'mt-1 rounded-2xl border border-purple/15 bg-cream/20 px-3 py-3 text-sm font-bold text-ink outline-none focus:border-pink';
+  // 選択肢そのものに「月／日」を含めて自己完結させ、選んだ値がひと目で分かるように。
+  // 未選択はグレー、選択後はピンク枠＋濃い文字で区別する（固定ラベルは廃止）。
+  const sel = (filled: boolean) =>
+    `mt-1 w-full appearance-none rounded-2xl border bg-cream/20 px-3 py-3 text-sm font-black outline-none focus:border-pink ${
+      filled ? 'border-pink/40 text-ink' : 'border-purple/15 text-muted'
+    }`;
   return (
     <div>
       <span className="text-xs font-black text-muted">{label}</span>
-      <div className="mt-1 flex items-center gap-2">
-        <select value={month} onChange={(e) => set(e.target.value, day)} className={sel}>
-          <option value="">月</option>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
+      <div className="mt-1 grid grid-cols-2 gap-2">
+        <select value={month} onChange={(e) => set(e.target.value, day)} className={sel(!!month)}>
+          <option value="">月を選ぶ</option>
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => <option key={mo} value={mo}>{mo}月</option>)}
         </select>
-        <span className="text-sm font-bold text-muted">月</span>
-        <select value={day} onChange={(e) => set(month, e.target.value)} className={sel}>
-          <option value="">日</option>
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((da) => <option key={da} value={da}>{da}</option>)}
+        <select value={day} onChange={(e) => set(month, e.target.value)} className={sel(!!day)}>
+          <option value="">日を選ぶ</option>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((da) => <option key={da} value={da}>{da}日</option>)}
         </select>
-        <span className="text-sm font-bold text-muted">日</span>
       </div>
+      {(month || day) && (
+        <p className="mt-1.5 text-[11px] font-black text-pink">
+          選択中：{month ? `${month}月` : '—'}{day ? `${day}日` : ''}
+        </p>
+      )}
     </div>
   );
 }
@@ -8728,7 +8736,8 @@ function syncIdentityToProfiles(override?: { info?: typeof defaultProfileBookInf
   const info = override?.info ?? profileBookInfo;
   const photo = override?.avatarUrl !== undefined ? override.avatarUrl : avatarUrl;
   const username = me.id.replace(/^@/, '');
-  const displayName = ((info.name || info.nickname || me.name || username) || '').trim() || username;
+  // 公開する表示名は「ニックネーム」を優先（本名＝なまえ より先）。
+  const displayName = ((info.nickname || info.name || me.name || username) || '').trim() || username;
   const avatar = photo || me.avatar;
 
   // 画面内の自分の情報を即時更新（リロードを待たずに、既存の回答へも反映する）
