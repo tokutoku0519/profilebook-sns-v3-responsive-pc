@@ -612,7 +612,7 @@ function applyTheme(id: AppThemeId) {
   }
 }
 
-const BLOOD_TYPE_OPTIONS = ['A型', 'B型', 'O型', 'AB型'];
+const BLOOD_TYPE_OPTIONS = ['A型', 'B型', 'O型', 'AB型', '不明'];
 const MBTI_OPTIONS = ['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'];
 const SUBJECT_OPTIONS = ['国語','数学','英語','理科','社会','体育','音楽','美術','家庭科','技術','現代文','古文','漢文','化学','物理','生物','地理','歴史','倫理','情報'];
 const PERSONALITY_OPTIONS = ['おっとり系','元気・明るい','クール・落ち着き','ちょっと不思議','真面目','天然','ふわふわ','ツンデレ','好奇心旺盛','マイペース','リーダー気質','聞き上手'];
@@ -3195,10 +3195,10 @@ function ProfileEditScreen({
         </section>
 
         <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-          <EditField label="なまえ" value={form.name} onChange={(v) => update('name', v)} />
+          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} />
           <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
-          <EditField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} />
-          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={4} />
+          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} />
+          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} />
           <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} />
           <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} />
           <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} />
@@ -4429,6 +4429,50 @@ function EditField({
         className="mt-1 w-full rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
       />
     </label>
+  );
+}
+
+// 誕生日：月・日のプルダウン（値は "M月D日" 形式で保存し既存表示と互換）
+function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const m = (value ?? '').match(/(\d{1,2})月(\d{1,2})日/);
+  const month = m ? m[1] : '';
+  const day = m ? m[2] : '';
+  const set = (mo: string, da: string) => onChange(mo && da ? `${mo}月${da}日` : (mo ? `${mo}月` : ''));
+  const sel = 'mt-1 rounded-2xl border border-purple/15 bg-cream/20 px-3 py-3 text-sm font-bold text-ink outline-none focus:border-pink';
+  return (
+    <div>
+      <span className="text-xs font-black text-muted">{label}</span>
+      <div className="mt-1 flex items-center gap-2">
+        <select value={month} onChange={(e) => set(e.target.value, day)} className={sel}>
+          <option value="">月</option>
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => <option key={mo} value={mo}>{mo}</option>)}
+        </select>
+        <span className="text-sm font-bold text-muted">月</span>
+        <select value={day} onChange={(e) => set(month, e.target.value)} className={sel}>
+          <option value="">日</option>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((da) => <option key={da} value={da}>{da}</option>)}
+        </select>
+        <span className="text-sm font-bold text-muted">日</span>
+      </div>
+    </div>
+  );
+}
+
+// なまえ：姓・名を分けて入力（値は "姓 名" のスペース区切りで保存）
+function NameField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const parts = (value ?? '').split(/\s+/);
+  const last = parts[0] ?? '';
+  const first = parts.slice(1).join(' ');
+  const set = (l: string, f: string) => onChange(`${l} ${f}`.trim());
+  const inp = 'mt-1 w-full rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink';
+  return (
+    <div>
+      <span className="text-xs font-black text-muted">{label}</span>
+      <div className="mt-1 flex gap-2">
+        <input value={last} onChange={(e) => set(e.target.value, first)} placeholder="姓" className={inp} />
+        <input value={first} onChange={(e) => set(last, e.target.value)} placeholder="名" className={inp} />
+      </div>
+    </div>
   );
 }
 
