@@ -202,6 +202,12 @@ const demoProfileBookInfo = {
   personality: '好奇心旺盛でちょっと飽き性',
   catchphrase: '「それ、やってみよ」',
   message: 'このアプリを一緒に育ててくれると嬉しい♡',
+  favoriteSeason: '春',
+  myBoom: 'サウナと朝の散歩',
+  wantToGo: '台湾・北欧',
+  collection: 'レトロなガチャガチャ',
+  motto: '思い立ったが吉日',
+  holiday: 'カフェでのんびり企画を練る',
   attribute: 'highschool',
   activity: '',
 };
@@ -211,7 +217,9 @@ const emptyProfileBookInfo: typeof demoProfileBookInfo = {
   favoriteFood: '', dislikeFood: '', favoriteColor: '', favoriteSubject: '', dislikeSubject: '',
   hobby: '', charmPoint: '', dream: '', favoriteCharacter: '', favoriteMusic: '', favoriteTv: '',
   favoriteArtist: '', favoriteManga: '', favoriteGame: '', specialty: '', personality: '',
-  catchphrase: '', message: '', attribute: 'highschool', activity: '',
+  catchphrase: '', message: '',
+  favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
+  attribute: 'highschool', activity: '',
 };
 const defaultProfileBookInfo = isDev ? demoProfileBookInfo : emptyProfileBookInfo;
 
@@ -300,7 +308,10 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
   'hobby', 'charmPoint', 'dream', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv',
   'favoriteArtist', 'favoriteManga', 'favoriteGame', 'specialty', 'personality',
   'catchphrase', 'message',
+  'favoriteSeason', 'myBoom', 'wantToGo', 'collection', 'motto', 'holiday',
 ];
+
+const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
 
 // ── プロフィール完成度＆節目ごほうび（ドーパミン設計） ──────────
 // 埋めるほど楽しくなるよう、①完成度メーター ②節目(25/50/75/100%)の
@@ -519,6 +530,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: 'おっとり系だけど芯がある', catchphrase: '「え、それかわいくない？」',
       charmPoint: 'えくぼとふわふわした雰囲気', dream: 'かわいいカフェを開きたい',
       message: 'みんなと仲良くしたいな！よろしく♡',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['学校へ行こう！', 'めちゃイケ', 'はなまるマーケット'],
@@ -562,6 +574,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: '内向的だけど好奇心強め', catchphrase: '「なんか、いいな」',
       charmPoint: 'あいまいな笑顔', dream: '旅する写真家になりたい',
       message: 'ゆっくりつながりましょ',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['深夜ドラマ全般', 'NHKドキュメンタリー', '世にも奇妙な物語'],
@@ -605,6 +618,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: 'にぎやかで人見知りゼロ', catchphrase: '「それ絶対楽しいやつ！」',
       charmPoint: '笑顔と元気の押しつけ', dream: 'みんなが笑ってる場所を作りたい',
       message: 'よろしゅうな〜！一緒に楽しもう！',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['SMAP×SMAP', '笑っていいとも！', 'ごきげんよう'],
@@ -637,6 +651,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: 'おだやかでマイペース', catchphrase: '「ゆっくりでいい」',
       charmPoint: '話をちゃんと聞いてくれるところ', dream: 'のんびりできる純喫茶を開きたい',
       message: 'ゆっくりこのアプリ楽しみましょ♪',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['ドキュメント72時間', 'のんのんびより', 'タモリ倶楽部'],
@@ -669,6 +684,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: 'クールに見えて実は熱い', catchphrase: '「ちゃんとやればできる」',
       charmPoint: '考えすぎて面白いことを言う', dream: '好きな本に囲まれて暮らしたい',
       message: 'よろしくお願いします（文章力に自信あり）',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['開運！なんでも鑑定団', '歴史秘話ヒストリア', 'NHKスペシャル'],
@@ -701,6 +717,7 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
       personality: '世話好きで感情豊か', catchphrase: '「かわいい〜！！」',
       charmPoint: '声が大きくて元気なところ', dream: 'アイドルプロデューサーになりたい',
       message: 'みんな大好き！一緒にかわいい世界作ろ♡',
+      favoriteSeason: '', myBoom: '', wantToGo: '', collection: '', motto: '', holiday: '',
     },
     best3: {
       tv: ['めちゃイケ', 'テラスハウス', 'アメトーーク'],
@@ -2201,7 +2218,7 @@ function ProfileBookContent({
     'favoriteFood','dislikeFood','favoriteColor','favoriteSubject','dislikeSubject',
     'favoriteCharacter','favoriteMusic','favoriteTv','favoriteArtist','favoriteManga',
     'favoriteGame','hobby','specialty','personality','catchphrase','charmPoint','dream',
-    'message','hometown',
+    'message','hometown','myBoom','wantToGo','collection','motto','holiday',
   ] as const;
   const [translatedInfo, setTranslatedInfo] = useState<Partial<typeof info>>({});
   useEffect(() => {
@@ -2227,7 +2244,7 @@ function ProfileBookContent({
   const has = (...keys: (keyof typeof info)[]) => keys.some((k) => ((info[k] as string) ?? '').trim());
   const showBasic = isSelf || has('name', 'nickname', 'birthday', 'bloodType', 'gender', 'mbti', 'hometown');
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
-  const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream');
+  const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream', 'favoriteSeason', 'myBoom', 'wantToGo', 'collection', 'motto', 'holiday');
 
   // 見出しのバブル色（テーマ連動）。海っぽさは背景テーマ側で表現し、ここでは強制しない。
   const bubbleClass = themeColor === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
@@ -2331,7 +2348,13 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
         <div className="space-y-2">
+        <ProfileLine label={t('field_favoriteSeason', lang)} value={info.favoriteSeason} />
         <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />
+        <ProfileLine label={t('field_myBoom', lang)} value={translatedInfo.myBoom ?? info.myBoom} />
+        <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />
+        <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />
+        <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />
+        <ProfileLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} />
         <ProfileLine label={t('field_catchphrase', lang)} value={translatedInfo.catchphrase ?? info.catchphrase} />
         <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
         <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
@@ -3459,7 +3482,13 @@ function ProfileEditScreen({
           <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
             🍚 食べ物・📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
           </p>
+          <SelectField label="好きな季節" value={form.favoriteSeason} onChange={(v) => update('favoriteSeason', v)} options={SEASON_OPTIONS} columns={4} />
           <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
+          <EditField label="マイブーム（最近ハマってること）" value={form.myBoom} onChange={(v) => update('myBoom', v)} />
+          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} />
+          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} />
+          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} />
+          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} />
           <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} />
           <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} />
           <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />

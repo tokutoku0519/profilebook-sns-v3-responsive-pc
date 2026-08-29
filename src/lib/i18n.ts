@@ -41,6 +41,8 @@ const dict: Record<Lang, Dict> = {
     field_favoriteManga: '好きな漫画', field_favoriteGame: '好きなゲーム',
     field_hobby: '趣味', field_specialty: '特技', field_personality: '性格',
     field_catchphrase: '口ぐせ', field_charmPoint: 'チャームポイント', field_dream: '将来のゆめ',
+    field_favoriteSeason: '好きな季節', field_myBoom: 'マイブーム', field_holiday: '休日の過ごし方',
+    field_wantToGo: '行ってみたい場所', field_collection: '集めているもの', field_motto: '好きな言葉・座右の銘',
     coins_wallet: 'コインウォレット', coins_earn: 'コインを稼ぐ', show_bloodType: 'true',
     nav_shop: 'ショップ', nav_circles: 'サークル', nav_following: 'フォロー中', nav_settings: '設定・プロフ編集',
     sec_qa: 'ひとことしつもん', feed_popular: '人気の回答', feed_suggested: 'おすすめユーザー',
