@@ -2310,26 +2310,19 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
         {/* 定番のお気に入りは“丸バブルに手書き”で（プロフ帳の顔） */}
+        {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
         <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-4">
-          <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
           <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
           <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
-          <FavBubble label={t('field_favoriteMusic', lang)} value={translatedInfo.favoriteMusic ?? info.favoriteMusic} />
-          <FavBubble label={t('field_favoriteArtist', lang)} value={translatedInfo.favoriteArtist ?? info.favoriteArtist} />
           <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
         </div>
         {/* 残りは書き込み欄で */}
-        <div className="space-y-1">
         {(lifeStageDef?.showSubjectFields ?? true) && (
-          <>
+          <div className="space-y-1">
             <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />
             <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />
-          </>
+          </div>
         )}
-        <ProfileLine label={t('field_favoriteTv', lang)} value={translatedInfo.favoriteTv ?? info.favoriteTv} />
-        <ProfileLine label={t('field_favoriteManga', lang)} value={translatedInfo.favoriteManga ?? info.favoriteManga} />
-        <ProfileLine label={t('field_favoriteGame', lang)} value={translatedInfo.favoriteGame ?? info.favoriteGame} />
-        </div>
       </section>
       )}
 
@@ -2338,7 +2331,6 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
         <div className="space-y-2">
-        <ProfileLine label={t('field_hobby', lang)} value={translatedInfo.hobby ?? info.hobby} />
         <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />
         <ProfileLine label={t('field_personality', lang)} value={translatedInfo.personality ?? info.personality} />
         <ProfileLine label={t('field_catchphrase', lang)} value={translatedInfo.catchphrase ?? info.catchphrase} />
@@ -3362,7 +3354,6 @@ function ProfileEditScreen({
           <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} />
           <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} />
           <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} />
-          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} />
           <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} />
           <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} />
           {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
@@ -3372,12 +3363,9 @@ function ProfileEditScreen({
             </>
           )}
           <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} />
-          <EditField label="好きな音楽" value={form.favoriteMusic} onChange={(v) => update('favoriteMusic', v)} />
-          <EditField label="好きなテレビ" value={form.favoriteTv} onChange={(v) => update('favoriteTv', v)} />
-          <EditField label="好きな芸能人" value={form.favoriteArtist} onChange={(v) => update('favoriteArtist', v)} />
-          <EditField label="好きな漫画" value={form.favoriteManga} onChange={(v) => update('favoriteManga', v)} />
-          <EditField label="好きなゲーム" value={form.favoriteGame} onChange={(v) => update('favoriteGame', v)} />
-          <EditField label="趣味" value={form.hobby} onChange={(v) => update('hobby', v)} />
+          <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
+            🍚 食べ物・📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
+          </p>
           <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} />
           <SelectField label="性格" value={form.personality} onChange={(v) => update('personality', v)} options={PERSONALITY_OPTIONS} columns={3} />
           <EditField label="口ぐせ" value={form.catchphrase} onChange={(v) => update('catchphrase', v)} />
