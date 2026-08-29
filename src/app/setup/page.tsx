@@ -128,7 +128,11 @@ export default function SetupPage() {
       if (full) localStorage.setItem('miri_realname', full);
       localStorage.setItem('miri_lang', lang);
     } catch {}
-    router.push('/welcome');
+    // 初回設定はオンボーディング（/welcome）へ。既にオンボード済み＝ID/名前の“編集”なら
+    // アプリ（自分のプロフィール）に戻す（ようこそ画面に戻さない）。
+    const onboarded = readLS('miri_onboarded') === '1';
+    if (onboarded) router.push(`/${miriId}`);
+    else router.push('/welcome');
   }
 
   // ID欄の下に出すステータス表示
