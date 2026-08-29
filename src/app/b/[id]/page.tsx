@@ -39,6 +39,7 @@ function plain(body: string): string {
   let t = body ?? '';
   t = t.replace(/^\[\[bg:[^\]]+\]\]\n?/i, '');
   t = t.replace(/^\[\[img:[^\]]+\]\]$/gim, '');
+  t = t.replace(/^data:image\/[a-z0-9.+-]+;base64,\S*/gim, '');
   t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
@@ -123,12 +124,13 @@ function ArticleBody({ body, titleColor }: { body: string; titleColor?: string }
         }
         const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
         if (img) return <div key={i} style={{ margin: '14px 0', borderRadius: 16, overflow: 'hidden' }}><img src={img[1]} alt="" style={{ width: '100%', display: 'block' }} /></div>;
+        if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(line)) return <div key={i} style={{ margin: '14px 0', borderRadius: 16, overflow: 'hidden' }}><img src={line} alt="" style={{ width: '100%', display: 'block' }} /></div>;
         const h3 = line.match(/^##\s+(.*)$/);
         if (h3) return <h3 key={i} style={{ margin: '16px 0 4px', fontSize: 17, fontWeight: 900, color: titleColor || '#EC4899' }}>{renderInline(h3[1], `l${i}`)}</h3>;
         const h2 = line.match(/^#\s+(.*)$/);
         if (h2) return <h2 key={i} style={{ margin: '20px 0 6px', fontSize: 20, fontWeight: 900, color: titleColor || '#EC4899', borderLeft: '4px solid rgba(236,72,153,.4)', paddingLeft: 8 }}>{renderInline(h2[1], `l${i}`)}</h2>;
         if (line.trim() === '') return <div key={i} style={{ height: 10 }} />;
-        return <p key={i} style={{ margin: '6px 0', fontSize: 16, fontWeight: 600, lineHeight: 1.9, color: '#1F2C56' }}>{renderInline(line, `l${i}`)}</p>;
+        return <p key={i} style={{ margin: '6px 0', fontSize: 16, fontWeight: 500, lineHeight: 1.9, color: '#1F2C56' }}>{renderInline(line, `l${i}`)}</p>;
       })}
     </>
   );

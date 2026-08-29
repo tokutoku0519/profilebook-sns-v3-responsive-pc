@@ -1167,7 +1167,13 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
         <SectionHeader title={t('feed_popular', lang)} />
-        <div className="space-y-3">{answers.slice(0,3).map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left text-xs font-bold leading-5 hover:bg-pink/10"><span className="text-pinkStrong">{answer.question?.category}</span><br />{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,42)}...</button>)}</div>
+        <div className="space-y-3">{answers.slice(0,3).map((answer) => (
+          <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left hover:bg-pink/10">
+            <span className="inline-block rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pinkStrong">{answer.question?.category}</span>
+            <span className="mt-1 block text-xs font-black leading-5 text-ink line-clamp-2">Q. {answer.question?.title}</span>
+            <span className="mt-0.5 block text-xs font-bold leading-5 text-muted line-clamp-2">{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,50)}</span>
+          </button>
+        ))}</div>
       </section>
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
         <SectionHeader title={t('feed_suggested', lang)} />
@@ -1423,7 +1429,10 @@ function HomeScreen({
                   <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                   <div className="mt-2.5 flex items-center gap-1.5">
                     <AvatarBubble value={p.authorAvatar} className="h-6 w-6 text-xs" />
-                    <span className="truncate text-[11px] font-black text-ink">{p.authorName}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[11px] font-black text-ink leading-tight">{p.authorName}</span>
+                      <span className="block truncate text-[10px] font-bold text-muted leading-tight">{p.authorId}</span>
+                    </span>
                   </div>
                   <p className="mt-2 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
                 </div>
@@ -6342,6 +6351,8 @@ function parseBlogDoc(body: string): { bgId: string; blocks: BlogBlock[] } {
     if (hrv) { blocks.push({ type: 'hr', variant: hrv[1], color: hrv[2] || undefined }); continue; }
     const img = line.match(/^\[\[img:([\s\S]+)\]\]$/);
     if (img) { blocks.push({ type: 'img', url: img[1] }); continue; }
+    // 素の data:image 行（テキストとして混入した画像）も画像として扱う＝救済。
+    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(line)) { blocks.push({ type: 'img', url: line }); continue; }
     const h3 = line.match(/^##\s+(.*)$/);
     if (h3) { blocks.push({ type: 'h', level: 3, text: h3[1] }); continue; }
     const h2 = line.match(/^#\s+(.*)$/);
@@ -6357,6 +6368,7 @@ function blogPlain(body: string): string {
   let t = body ?? '';
   t = t.replace(/^\[\[bg:[^\]]+\]\]\n?/i, '');
   t = t.replace(/^\[\[img:[^\]]+\]\]$/gim, '');
+  t = t.replace(/^data:image\/[a-z0-9.+-]+;base64,\S*/gim, '');
   t = t.replace(/^\[\[hr:[^\]]+\]\]$/gim, '');
   t = t.replace(/^\s*---\s*$/gim, '');
   t = t.replace(/^#{1,2}\s+/gim, '');
@@ -6430,7 +6442,7 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
         if (b.type === 'h') return b.level === 3
           ? <h4 key={i} className="mt-3 mb-0.5 text-base font-black" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h4>
           : <h3 key={i} className="mt-4 mb-1 border-l-4 border-pink/40 pl-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h3>;
-        return <p key={i} className="text-base font-bold leading-8 text-ink">{renderBlogInline(b.text)}</p>;
+        return <p key={i} className="text-base font-medium leading-8 text-ink">{renderBlogInline(b.text)}</p>;
       })}
     </div>
   );
@@ -6603,7 +6615,23 @@ function BlogWysiwygEditor({
   }
   function onPaste(e: React.ClipboardEvent) {
     e.preventDefault();
+    // 画像を貼り付けたときは <img> として挿入（テキストの data URI 混入を防ぐ）。
+    const imgItem = Array.from(e.clipboardData.items || []).find((it) => it.kind === 'file' && it.type.startsWith('image/'));
+    if (imgItem) {
+      const file = imgItem.getAsFile();
+      if (file) {
+        const r = new FileReader();
+        r.onload = (ev) => insertHtml(`<img src="${String(ev.target?.result || '')}" alt=""><br>`);
+        r.readAsDataURL(file);
+        return;
+      }
+    }
     const t = e.clipboardData.getData('text/plain');
+    // テキストとして貼られた data:image URI も画像として挿入（生URIの混入を防ぐ）。
+    if (/^\s*data:image\/[a-z0-9.+-]+;base64,/i.test(t)) {
+      insertHtml(`<img src="${t.trim()}" alt=""><br>`);
+      return;
+    }
     document.execCommand('insertText', false, t);
     notify();
   }
@@ -6705,7 +6733,7 @@ function BlogWysiwygEditor({
         onInput={notify}
         onPaste={onPaste}
         data-placeholder="ここに本文を書こう…"
-        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-bold leading-8 text-ink outline-none focus:border-pink"
+        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-medium leading-8 text-ink outline-none focus:border-pink"
         style={{ ...(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style, ['--title-color' as any]: titleColor }}
       />
       {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}
