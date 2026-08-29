@@ -302,6 +302,128 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
   'catchphrase', 'message',
 ];
 
+// ── プロフィール完成度＆節目ごほうび（ドーパミン設計） ──────────
+// 埋めるほど楽しくなるよう、①完成度メーター ②節目(25/50/75/100%)の
+// ジャックポット ③次のごほうび予告 ④達成演出 を用意する。
+type ProfileMilestone = { pct: number; coins: number; label: string; emoji: string };
+const PROFILE_MILESTONES: ProfileMilestone[] = [
+  { pct: 25,  coins: 50,  label: 'スタートダッシュ', emoji: '🌱' },
+  { pct: 50,  coins: 120, label: 'ハーフ達成',       emoji: '⭐' },
+  { pct: 75,  coins: 250, label: 'あと少し！',        emoji: '🔥' },
+  { pct: 100, coins: 500, label: 'コンプリート',      emoji: '🏆' },
+];
+
+function countFilledProfileFields(info: typeof defaultProfileBookInfo): number {
+  return REWARDABLE_FIELDS.filter((k) => {
+    const v = (info as any)[k];
+    return typeof v === 'string' && v.trim().length > 0;
+  }).length;
+}
+function profileCompletion(info: typeof defaultProfileBookInfo): { filled: number; total: number; pct: number } {
+  const total = REWARDABLE_FIELDS.length;
+  const filled = countFilledProfileFields(info);
+  return { filled, total, pct: Math.round((filled / total) * 100) };
+}
+
+// 編集画面の上部に出す完成度メーター（バーが伸び、節目のごほうびを予告する）
+function ProfileProgress({ info }: { info: typeof defaultProfileBookInfo }) {
+  const { filled, total, pct } = profileCompletion(info);
+  const next = PROFILE_MILESTONES.find((m) => pct < m.pct);
+  const fieldsToNext = next ? Math.max(1, Math.ceil((next.pct / 100) * total) - filled) : 0;
+  return (
+    <section className="rounded-[32px] bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card ring-1 ring-pink/15">
+      <div className="mb-2 flex items-end justify-between">
+        <p className="text-base font-black text-ink">📔 プロフィール完成度</p>
+        <p className="text-2xl font-black text-pink leading-none">{pct}<span className="text-sm">%</span></p>
+      </div>
+      {/* バー本体＋節目ピン */}
+      <div className="relative mt-3 h-4 w-full rounded-full bg-pink/10">
+        <div
+          className="prof-progress-fill relative h-full overflow-hidden rounded-full bg-gradient-to-r from-pink to-purple"
+          style={{ width: `${Math.max(pct, 2)}%` }}
+        />
+        {PROFILE_MILESTONES.map((m) => {
+          const reached = pct >= m.pct;
+          return (
+            <span
+              key={m.pct}
+              className={`absolute top-1/2 grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-[11px] shadow-sm ring-2 transition ${reached ? 'bg-white ring-pink' : 'bg-white/80 ring-pink/20 grayscale'}`}
+              style={{ left: `${m.pct}%` }}
+              title={`${m.pct}%: ${m.label}`}
+            >
+              {m.emoji}
+            </span>
+          );
+        })}
+      </div>
+      {/* 次のごほうび予告 or コンプリート */}
+      <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3">
+        {next ? (
+          <p className="text-xs font-black text-ink">
+            あと<span className="mx-1 text-base text-pink">{fieldsToNext}</span>項目で
+            <span className="mx-1">{next.emoji}</span>{next.pct}%達成！
+            <span className="ml-1 rounded-full bg-pink/15 px-2 py-0.5 text-[11px] text-pink">🎁 +{next.coins}コイン</span>
+          </p>
+        ) : (
+          <p className="text-xs font-black text-pink">🏆 コンプリート！プロフィールマスター達成 🎉</p>
+        )}
+        <p className="mt-1 text-[10px] font-bold text-muted">1項目うめるごとに +{REWARD_PER_FIELD}コイン。節目でボーナスがドカンと届くよ！</p>
+      </div>
+    </section>
+  );
+}
+
+// 節目達成のお祝いオーバーレイ（紙吹雪＋ジャックポット表示。タップで閉じる）
+type Celebration = { pct: number; coins: number; label: string; emoji: string; isComplete: boolean };
+function ProfileCelebration({ data, onClose }: { data: Celebration; onClose: () => void }) {
+  const colors = ['#EC4899', '#A855F7', '#38BDF8', '#FBBF24', '#34D399', '#FB7185'];
+  const pieces = Array.from({ length: 28 }, (_, i) => ({
+    left: (i * 37) % 100,
+    delay: (i % 10) * 0.12,
+    dur: 1.8 + ((i * 13) % 12) / 10,
+    color: colors[i % colors.length],
+  }));
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-6"
+      onClick={onClose}
+      role="button"
+      tabIndex={0}
+    >
+      {/* 紙吹雪 */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {pieces.map((p, i) => (
+          <span
+            key={i}
+            className="confetti-piece"
+            style={{ left: `${p.left}%`, background: p.color, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s` }}
+          />
+        ))}
+      </div>
+      <div className="gacha-pop relative w-full max-w-xs rounded-[32px] bg-white p-8 text-center shadow-floating">
+        <div className="mb-2 text-6xl">{data.emoji}</div>
+        <p className="text-lg font-black text-ink">{data.isComplete ? 'プロフィール100%達成！' : `${data.pct}% 達成！`}</p>
+        <p className="mt-1 text-sm font-bold text-muted">{data.label}</p>
+        <div className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full bg-pink/15 px-5 py-2 text-lg font-black text-pink">
+          🎁 ＋{data.coins} コイン
+        </div>
+        {data.isComplete && (
+          <p className="mt-4 rounded-2xl bg-gradient-to-r from-pink/15 to-purple/15 px-3 py-2 text-xs font-black text-purple">
+            🏆 称号気分で自慢しちゃおう！シェアでみんなに見せよう
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 w-full rounded-full bg-pink py-3 text-sm font-black text-white shadow-floating active:scale-[0.98]"
+        >
+          やったー！ 🎉
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Supabase の回答行(AnswerRow)を、アプリ内の Answer 形に変換する
 function feedRowToAnswer(row: AnswerRow): Answer {
   const reactions = { like: 0, same: 0, wakaru: 0, natsukashii: 0 };
@@ -2929,6 +3051,9 @@ function ProfileEditScreen({
       <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
       <div className="space-y-4 px-4 pt-3 pb-32">
+
+        {/* ===== プロフィール完成度メーター（うめるほど楽しく） ===== */}
+        <ProfileProgress info={form} />
 
         {/* ===== ID・表示名（アカウント） ===== */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
@@ -8801,6 +8926,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
           localStorage.setItem(key, JSON.stringify([...new Set([...server, ...local])]));
         };
         mergeArr('miri_earned_fields', g.earnedFields);   // プロフィール入力報酬
+        mergeArr('miri_profile_milestones', g.profileMilestones); // プロフィール完成度ボーナス
         mergeArr('miri_rewarded_qids', g.rewardedQids);   // お題回答報酬
         if (g.setupBonus) localStorage.setItem('miri_setup_bonus', g.setupBonus); // 初期設定ボーナス（1回のみ）
         if (g.prAnswered) localStorage.setItem('miri_pr_answered', g.prAnswered); // PR案件（日次）
@@ -9202,6 +9328,7 @@ function composeGameData(): Record<string, any> {
     freeGacha: localStorage.getItem('miri_free_gacha_used') || null,
     // ── 報酬の重複防止ガード（端末クリア/再ログインでリセットさせない＝コイン無限増殖対策）──
     earnedFields: arr('miri_earned_fields'),
+    profileMilestones: arr('miri_profile_milestones'),
     rewardedQids: arr('miri_rewarded_qids'),
     setupBonus: localStorage.getItem('miri_setup_bonus') || null,
     dailyLogin: localStorage.getItem('miri_daily_login') || null,
@@ -9234,11 +9361,31 @@ function persistBook() {
 }
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
-  rewardNewlyFilledFields(next); // 新しく埋めた項目にコイン付与
+  rewardNewlyFilledFields(next);   // 新しく埋めた項目にコイン付与
+  checkProfileMilestones(next);    // 完成度の節目(25/50/75/100%)でジャックポット
   setProfileBookInfo(next);
   localStorage.setItem('profileBookInfo', JSON.stringify(next));
   persistBook(); // Supabase にも保存（永続化・端末間で引き継ぎ）
   syncIdentityToProfiles({ info: next }); // なまえ／ニックネーム変更を回答の著者名にも反映
+}
+
+// 完成度が節目(25/50/75/100%)に到達したら、まだ受け取っていないぶんだけ
+// ボーナスコインを付与してお祝い演出を出す（重複取得なし＝ガードで保護）。
+function checkProfileMilestones(next: typeof defaultProfileBookInfo) {
+  try {
+    const { pct } = profileCompletion(next);
+    const reached: number[] = JSON.parse(localStorage.getItem('miri_profile_milestones') || '[]');
+    const set = new Set<number>(reached);
+    const newly = PROFILE_MILESTONES.filter((m) => pct >= m.pct && !set.has(m.pct));
+    if (newly.length === 0) return;
+    let bonus = 0;
+    for (const m of newly) { set.add(m.pct); bonus += m.coins; addCoins(m.coins, `プロフィール${m.pct}%達成ボーナス`); }
+    // 節目ガードはローカルに即時保存。サーバーへは coins 変化を検知する
+    // デバウンス永続化(useEffect)が、確定後の残高とともに __game に保存する。
+    localStorage.setItem('miri_profile_milestones', JSON.stringify([...set]));
+    const top = newly[newly.length - 1];
+    setCelebration({ pct: top.pct, coins: bonus, label: top.label, emoji: top.emoji, isComplete: top.pct >= 100 });
+  } catch {}
 }
 
 // プロフィール帳の項目を「初めて」埋めたぶんだけコインを付与（重複取得なし）
@@ -9258,7 +9405,8 @@ function rewardNewlyFilledFields(next: typeof defaultProfileBookInfo) {
     if (count > 0) {
       localStorage.setItem('miri_earned_fields', JSON.stringify([...earnedSet]));
       addCoins(count * REWARD_PER_FIELD, 'プロフィール入力');
-      showToast(`＋${count * REWARD_PER_FIELD} コイン（プロフィール入力）`);
+      const { pct } = profileCompletion(next);
+      showToast(`✨ ＋${count * REWARD_PER_FIELD}コイン ／ 完成度 ${pct}%`);
     }
   } catch {}
 }
@@ -9399,6 +9547,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   // ── トースト ──────────────────────────────────────────────────
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  // プロフィール完成度の節目お祝いオーバーレイ
+  const [celebration, setCelebration] = useState<Celebration | null>(null);
   function showToast(message: string, type: ToastItem['type'] = 'success') {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -10176,6 +10326,7 @@ return <ProfileScreen
     <>
       <DesktopShell active={active} currentScreen={screen} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies} unread={unreadCount}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {celebration && <ProfileCelebration data={celebration} onClose={() => setCelebration(null)} />}
     </>
   );
 }
