@@ -136,6 +136,16 @@ type DiaryPage = {
   mentionedUserIds: string[];
 };
 
+// アバターを絵文字/写真URL(http・data)両対応で丸く表示する共通バブル。
+function AvatarBubble({ value, className = 'h-8 w-8 text-base' }: { value?: string; className?: string }) {
+  const isImg = !!value && (value.startsWith('http') || value.startsWith('data:'));
+  return (
+    <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-pink/10 ${className}`}>
+      {isImg ? <img src={value} alt="" className="h-full w-full object-cover" /> : (value || '📷')}
+    </span>
+  );
+}
+
 // 個人ブログの記事（アメブロ風・1人1記事＝交換日記とは別機能）
 type BlogPost = {
   id: string;
@@ -1401,11 +1411,22 @@ function HomeScreen({
           <p className="mt-0.5 text-[11px] font-bold text-muted">タイトルをつけて書く、自分だけのブログ</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {[...blogPosts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()).slice(0, 5).map((p) => (
-              <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 p-4 text-left shadow-card active:scale-[0.98]">
-                <p className="text-sm">{p.weather}{p.mood}</p>
-                <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</p>
-                <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
-                <p className="mt-3 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
+              <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] max-w-[220px] overflow-hidden rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 text-left shadow-card active:scale-[0.98]">
+                {p.photoUrl && (
+                  <div className="h-24 w-full overflow-hidden bg-pink/5">
+                    <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+                  </div>
+                )}
+                <div className="p-4">
+                  <p className="text-sm">{p.weather}{p.mood}</p>
+                  <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</p>
+                  <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <AvatarBubble value={p.authorAvatar} className="h-6 w-6 text-xs" />
+                    <span className="truncate text-[11px] font-black text-ink">{p.authorName}</span>
+                  </div>
+                  <p className="mt-2 text-xs font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
+                </div>
               </button>
             ))}
             <button onClick={() => go('blog-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-sm font-black text-purple shadow-card active:scale-[0.98]">
@@ -6737,14 +6758,24 @@ function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any
                 <span className="text-[11px] font-black text-muted">🗓 {dateStr}</span>
                 <span className="text-base">{p.weather}{p.mood}</span>
               </div>
+              {p.photoUrl && (
+                <div className="h-40 w-full overflow-hidden bg-pink/5">
+                  <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+                </div>
+              )}
               <div className="p-4">
                 {p.title && <p className="mb-1 text-base font-black leading-snug" style={{ color: p.textColor || '#EC4899' }}>✿ <RetroText text={p.title} /></p>}
                 <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={blogPlain(p.body)} /></p>
                 <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-pink/10 text-base">{p.authorAvatar}</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); go('profile', p.authorId); }}
+                    className="flex items-center gap-2 rounded-full -m-1 p-1 transition hover:bg-pink/5 cursor-pointer"
+                  >
+                    <AvatarBubble value={p.authorAvatar} className="h-8 w-8 text-base" />
                     <span className="text-xs font-black text-ink">{p.authorName}</span>
-                  </div>
+                  </span>
                   <div className="flex items-center gap-3 text-[11px] font-black text-muted">
                     <span className="flex items-center gap-1"><Heart size={13} fill={p.likedByMe ? 'currentColor' : 'none'} className={p.likedByMe ? 'text-pink' : ''} />{p.likes}</span>
                     <span>💬 {p.comments.length}</span>
@@ -6879,10 +6910,14 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
             {post.photoUrl && <div className="mb-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
             <BlogBody body={post.body} titleColor={post.textColor} />
             <div className="mt-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-pink/10 text-lg">{post.authorAvatar}</span>
+              <button
+                type="button"
+                onClick={() => go('profile', post.authorId)}
+                className="flex items-center gap-2 rounded-full -m-1 p-1 transition hover:bg-pink/5 active:scale-[0.98]"
+              >
+                <AvatarBubble value={post.authorAvatar} className="h-9 w-9 text-lg" />
                 <p className="text-xs font-black text-ink">{post.authorName}</p>
-              </div>
+              </button>
               {isMine && <button onClick={() => setConfirmDelete(true)} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">削除</button>}
             </div>
           </div>
