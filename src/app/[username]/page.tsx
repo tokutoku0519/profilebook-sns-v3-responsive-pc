@@ -424,6 +424,35 @@ function ProfileCelebration({ data, onClose }: { data: Celebration; onClose: () 
   );
 }
 
+// アイコン画像を縮小して軽いJPEG data URIにする。
+// base64 のまま巨大画像を保存するとサーバー保存が失敗したりフィードが重くなるため、
+// 最大辺 max px・JPEG 品質 quality に落としてから保存する（数MB→数十KB）。
+function downscaleImageFile(file: File, max = 256, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read_failed'));
+    reader.onload = () => {
+      const src = reader.result as string;
+      const img = new Image();
+      img.onerror = () => resolve(src); // デコード不可なら原本のまま
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w >= h && w > max) { h = Math.round((h * max) / w); w = max; }
+        else if (h > w && h > max) { w = Math.round((w * max) / h); h = max; }
+        else if (w === h && w > max) { w = max; h = max; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(src); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL('image/jpeg', quality)); } catch { resolve(src); }
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // Supabase の回答行(AnswerRow)を、アプリ内の Answer 形に変換する
 function feedRowToAnswer(row: AnswerRow): Answer {
   const reactions = { like: 0, same: 0, wakaru: 0, natsukashii: 0 };
@@ -3005,12 +3034,17 @@ function ProfileEditScreen({
   const [showShare, setShowShare] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
 
-  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setLocalAvatarUrl(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    // 縮小してから反映（保存失敗・重さ対策）。失敗時は原本を使う。
+    try {
+      setLocalAvatarUrl(await downscaleImageFile(file, 256, 0.82));
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (ev) => setLocalAvatarUrl(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   }
 
   function readFileAsDataUrl(file: File): Promise<string> {
@@ -8596,6 +8630,15 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
           } else if (!cancelled && ok) {
             // 有効セッションがあれば profiles 行を保証（旧アカウントで欠落していると回答保存が失敗する）
             await ensureProfile();
+            // 前回サーバー保存に失敗した編集（写真・プロフ帳）があれば、
+            // セッションが復帰したこのタイミングで自動的に再送する。
+            if (localStorage.getItem('miri_pending_profile_sync') === '1') {
+              await persistBook();               // book（プロフ帳・BEST3・ゲーム）を再送
+              syncIdentityToProfiles();          // 名前・写真アイコンを再送
+              if (localStorage.getItem('miri_pending_profile_sync') !== '1') {
+                showToast('✅ 未保存だった変更をサーバーに保存しました');
+              }
+            }
           }
         }
       } catch {}
@@ -8689,7 +8732,12 @@ function syncIdentityToProfiles(override?: { info?: typeof defaultProfileBookInf
 
   // Supabase の公開プロフィールへ保存（未設定・未認証なら best-effort でスキップ）
   if (!dbReady()) return;
-  try { void saveProfileIdentity({ display_name: displayName, avatar_url: avatar }); } catch {}
+  (async () => {
+    try {
+      const res = await saveProfileIdentity({ display_name: displayName, avatar_url: avatar });
+      if (!res.ok && res.error !== 'not_configured') onProfileSyncFailed();
+    } catch { onProfileSyncFailed(); }
+  })();
 }
 
 const [appTheme, setAppTheme] = useState<AppThemeId>(() => {
@@ -9343,7 +9391,7 @@ function persistGame() {
   try { void saveGameData(composeGameData()); } catch {}
 }
 
-function persistBook() {
+async function persistBook() {
   if (!dbReady()) return;
   try {
     const info = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
@@ -9356,8 +9404,21 @@ function persistBook() {
     if (qs) book.__questions = JSON.parse(qs);
     // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
     book.__game = composeGameData();
-    void saveProfileBook(book);
+    const ok = await saveProfileBook(book);
+    if (ok) { try { localStorage.removeItem('miri_pending_profile_sync'); } catch {} }
+    else onProfileSyncFailed();
+  } catch { onProfileSyncFailed(); }
+}
+
+// 保存がサーバーへ届かなかったとき：未保存フラグを立て、はっきり通知する。
+// セッション復帰時（マウント effect）に自動で再送する。二重トーストは避ける。
+function onProfileSyncFailed() {
+  let already = false;
+  try {
+    already = localStorage.getItem('miri_pending_profile_sync') === '1';
+    localStorage.setItem('miri_pending_profile_sync', '1');
   } catch {}
+  if (!already) showToast('⚠️ 変更をサーバーに保存できませんでした。ログインし直すと自動で再保存します', 'error');
 }
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
