@@ -312,6 +312,33 @@ const REWARDABLE_FIELDS: (keyof typeof defaultProfileBookInfo)[] = [
 
 const SEASON_OPTIONS = ['春', '夏', '秋', '冬'];
 
+// 項目ごとの公開範囲。未設定は「公開」扱い。
+type FieldVisibility = 'public' | 'followers' | 'private';
+// 公開設定を切り替えられる項目（個人情報系を上に）。編集画面の「公開設定」で使う。
+const PRIVACY_FIELDS: { key: string; label: string }[] = [
+  { key: 'name', label: 'なまえ（本名）' },
+  { key: 'birthday', label: 'たん生日' },
+  { key: 'bloodType', label: '血液型' },
+  { key: 'gender', label: '性別' },
+  { key: 'hometown', label: '出身地' },
+  { key: 'mbti', label: 'MBTI' },
+  { key: 'favoriteFood', label: '好きな食べ物' },
+  { key: 'dislikeFood', label: 'きらいな食べ物' },
+  { key: 'favoriteColor', label: '好きな色' },
+  { key: 'favoriteCharacter', label: '好きなキャラ' },
+  { key: 'favoriteSubject', label: '好きな教科' },
+  { key: 'dislikeSubject', label: '苦手な教科' },
+  { key: 'favoriteSeason', label: '好きな季節' },
+  { key: 'specialty', label: '特技' },
+  { key: 'myBoom', label: 'マイブーム' },
+  { key: 'holiday', label: '休日の過ごし方' },
+  { key: 'wantToGo', label: '行ってみたい場所' },
+  { key: 'collection', label: '集めているもの' },
+  { key: 'motto', label: '好きな言葉・座右の銘' },
+  { key: 'charmPoint', label: 'チャームポイント' },
+  { key: 'dream', label: '将来のゆめ' },
+];
+
 // ── プロフィール完成度＆節目ごほうび（ドーパミン設計） ──────────
 // 埋めるほど楽しくなるよう、①完成度メーター ②節目(25/50/75/100%)の
 // ジャックポット ③次のごほうび予告 ④達成演出 を用意する。
@@ -2174,6 +2201,8 @@ function ProfileBookContent({
   onGoDetail,
   lang = 'ja',
   bare = false,
+  visibility = {},
+  viewerIsFollower = false,
 }: {
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
@@ -2192,8 +2221,20 @@ function ProfileBookContent({
   lang?: Lang;
   /** 画面側が背景を用意する場合は true（自前で背景を描かない＝トンマナ統一用） */
   bare?: boolean;
+  /** 項目ごとの公開設定 { fieldKey: 'public'|'followers'|'private' }。未設定=公開。 */
+  visibility?: Record<string, FieldVisibility>;
+  /** 閲覧者がこのプロフの持ち主をフォローしているか（followers限定の判定用）。 */
+  viewerIsFollower?: boolean;
 }) {
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
+  // 項目の公開判定：本人は常に表示。他人は 公開=常に / フォロワー限定=フォロワーのみ / 非公開=不可。
+  const canShow = (key: string): boolean => {
+    if (isSelf) return true;
+    const v = visibility[key] ?? 'public';
+    if (v === 'public') return true;
+    if (v === 'followers') return viewerIsFollower;
+    return false;
+  };
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
 
   const [translatedQA, setTranslatedQA] = useState<Array<{q:string;a:string}> | null>(null);
@@ -2310,13 +2351,13 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="☆" title={t('sec_basic', lang)} theme={themeColor} />
         <div className="space-y-2">
-        <ProfileLine label={t('field_name', lang)} value={info.name} />
+        {canShow('name') && <ProfileLine label={t('field_name', lang)} value={info.name} />}
         <ProfileLine label={t('field_nickname', lang)} value={info.nickname} />
-        <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />
-        {t('show_bloodType', lang) === 'true' && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
-        {info.gender && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
-        <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />
-        <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />
+        {canShow('birthday') && <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />}
+        {t('show_bloodType', lang) === 'true' && canShow('bloodType') && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
+        {info.gender && canShow('gender') && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
+        {canShow('mbti') && <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />}
+        {canShow('hometown') && <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />}
         </div>
       </section>
       )}
@@ -2328,16 +2369,16 @@ function ProfileBookContent({
         {/* 定番のお気に入りは“丸バブルに手書き”で（プロフ帳の顔） */}
         {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
         <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-4">
-          <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />
-          <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />
-          <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />
-          <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />
+          {canShow('favoriteFood') && <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />}
+          {canShow('dislikeFood') && <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />}
+          {canShow('favoriteColor') && <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />}
+          {canShow('favoriteCharacter') && <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />}
         </div>
         {/* 残りは書き込み欄で */}
         {(lifeStageDef?.showSubjectFields ?? true) && (
           <div className="space-y-1">
-            <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />
-            <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />
+            {canShow('favoriteSubject') && <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />}
+            {canShow('dislikeSubject') && <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />}
           </div>
         )}
       </section>
@@ -2348,15 +2389,15 @@ function ProfileBookContent({
       <section className="pt-1">
         <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
         <div className="space-y-2">
-        <ProfileLine label={t('field_favoriteSeason', lang)} value={info.favoriteSeason} />
-        <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />
-        <ProfileLine label={t('field_myBoom', lang)} value={translatedInfo.myBoom ?? info.myBoom} />
-        <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />
-        <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />
-        <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />
-        <ProfileLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} />
-        <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />
-        <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />
+        {canShow('favoriteSeason') && <ProfileLine label={t('field_favoriteSeason', lang)} value={info.favoriteSeason} />}
+        {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />}
+        {canShow('myBoom') && <ProfileLine label={t('field_myBoom', lang)} value={translatedInfo.myBoom ?? info.myBoom} />}
+        {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />}
+        {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />}
+        {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />}
+        {canShow('motto') && <ProfileLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} />}
+        {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />}
+        {canShow('dream') && <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />}
         </div>
       </section>
       )}
@@ -2611,7 +2652,7 @@ function OtherProfileScreen({
   circles?: Circle[];
   exchanged?: boolean;
   onExchange?: (userId: string) => void;
-  supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null;
+  supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility> } | null;
   targetUid?: string | null;
   onOpenBlog?: (post: BlogPost) => void;
   lang?: Lang;
@@ -2861,6 +2902,8 @@ function OtherProfileScreen({
         themeColor={themeColor}
         onGoDetail={(id) => go('detail', id)}
         lang={lang}
+        visibility={supabaseBook?.visibility ?? {}}
+        viewerIsFollower={isFollowing}
       />
 
       {/* 相手の公開ブログ */}
@@ -3088,6 +3131,8 @@ function ProfileEditScreen({
   onChangeTheme,
   customFields,
   onSaveCustomFields,
+  fieldVisibility = {},
+  onSaveVisibility = () => {},
   premiumContent,
   onSavePremiumContent,
   lang,
@@ -3117,6 +3162,8 @@ function ProfileEditScreen({
   onChangeTheme: (id: AppThemeId) => void;
   customFields: Record<string, string>;
   onSaveCustomFields: (next: Record<string, string>) => void;
+  fieldVisibility?: Record<string, FieldVisibility>;
+  onSaveVisibility?: (next: Record<string, FieldVisibility>) => void;
   premiumContent: PremiumSection;
   onSavePremiumContent: (next: PremiumSection) => void;
   lang: Lang;
@@ -3137,6 +3184,7 @@ function ProfileEditScreen({
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
+  const [visForm, setVisForm] = useState<Record<string, FieldVisibility>>(fieldVisibility);
   const [premiumForm, setPremiumForm] = useState<PremiumSection>(premiumContent);
   const [showShare, setShowShare] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -3711,6 +3759,40 @@ function ProfileEditScreen({
         </section>
 
         {/* ── シェア ── */}
+        {/* ===== 公開設定（項目ごとに 公開/フォロワー限定/非公開） ===== */}
+        <section className="rounded-[32px] bg-white p-5 shadow-card">
+          <p className="mb-1 text-base font-black text-ink">🔒 公開設定</p>
+          <p className="mb-4 text-xs font-bold text-muted">項目ごとに見せる相手を選べます（未設定は「公開」）。名前や出身地などは「非公開」や「フォロワー限定」にできます。</p>
+          <div className="space-y-2.5">
+            {PRIVACY_FIELDS.map((f) => {
+              const cur: FieldVisibility = visForm[f.key] ?? 'public';
+              const opts: { v: FieldVisibility; label: string }[] = [
+                { v: 'public', label: '公開' },
+                { v: 'followers', label: 'フォロワー' },
+                { v: 'private', label: '非公開' },
+              ];
+              return (
+                <div key={f.key} className="flex items-center gap-2">
+                  <span className="flex-1 text-xs font-black text-ink">{f.label}</span>
+                  <div className="flex gap-1">
+                    {opts.map((o) => (
+                      <button
+                        key={o.v}
+                        type="button"
+                        onClick={() => setVisForm((prev) => ({ ...prev, [f.key]: o.v }))}
+                        className={`rounded-full px-2.5 py-1.5 text-[10px] font-black transition ${cur === o.v ? (o.v === 'private' ? 'bg-red-500 text-white' : o.v === 'followers' ? 'bg-purple text-white' : 'bg-pink text-white') : 'bg-base text-muted hover:bg-pink/10'}`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[10px] font-bold text-muted">※ 現在は「表示上の出し分け」です。完全な秘匿は今後のアップデートで対応予定。</p>
+        </section>
+
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
           <p className="mb-4 text-xs font-bold text-muted">QRコードや画像でプロフィールを友達にシェアできます</p>
@@ -3731,6 +3813,7 @@ function ProfileEditScreen({
             onSaveAvatar(localAvatarUrl);
             onSaveFavoritePhotos(localPhotos);
             onSaveCustomFields(localCustomFields);
+            onSaveVisibility(visForm);
             if (me.isOfficial) onSavePremiumContent(premiumForm);
             go('profile');
           }}
@@ -8658,7 +8741,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // モックに居ない（＝Supabase上の実ユーザー）を開いたときに読み込むプロフィール
   const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
   // 開いている他ユーザーの Supabase プロフ帳（info/BEST3/今月/しつもん）
-  const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[] } | null>(null);
+  const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility> } | null>(null);
   // 開いている他ユーザーの uuid（フォロー用）
   const [viewedProfileUid, setViewedProfileUid] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
@@ -8714,6 +8797,18 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     return saved ? { ...defaultProfileBookInfo, ...JSON.parse(saved) } : defaultProfileBookInfo;
   } catch { return defaultProfileBookInfo; }
 });
+
+  // 項目ごとの公開範囲（公開/フォロワー限定/非公開）。未設定＝公開。
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, FieldVisibility>>(() => {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(localStorage.getItem('profileFieldVisibility') || '{}'); } catch { return {}; }
+  });
+  function updateFieldVisibility(next: Record<string, FieldVisibility>) {
+    profileDirtyRef.current = true;
+    setFieldVisibility(next);
+    try { localStorage.setItem('profileFieldVisibility', JSON.stringify(next)); } catch {}
+    persistBook(); // book.__visibility に保存
+  }
 
   // ── ログインユーザーのSupabaseプロフィールを読み込み、me・プロフィール帳へ反映 ──
   // （production で Supabase が設定されているときのみ。dev/未設定では従来どおり）
@@ -8772,7 +8867,12 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       const overwriteFromServer = !profileDirtyRef.current;
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
-      const { __best3, __monthly, __questions, ...info } = book;
+      const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, ...info } = book;
+      // 項目ごとの公開設定を復元（他端末でも引き継ぐ）。
+      if (overwriteFromServer && __visibility && typeof __visibility === 'object') {
+        setFieldVisibility(__visibility);
+        try { localStorage.setItem('profileFieldVisibility', JSON.stringify(__visibility)); } catch {}
+      }
       // 公開表示名はニックネーム優先。DBの display_name が本名など古い値でも、
       // 読み込み時にニックネームへ揃える（サイドバー・新規回答へ即反映）。
       const preferredName =
@@ -9539,6 +9639,10 @@ async function persistBook() {
     if (b3) book.__best3 = JSON.parse(b3);
     if (mo) book.__monthly = JSON.parse(mo);
     if (qs) book.__questions = JSON.parse(qs);
+    try {
+      const vis = JSON.parse(localStorage.getItem('profileFieldVisibility') || '{}');
+      if (vis && Object.keys(vis).length > 0) book.__visibility = vis;
+    } catch {}
     // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
     book.__game = composeGameData();
     const ok = await saveProfileBook(book);
@@ -9895,8 +9999,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           // book(jsonb) を info / BEST3 / 今月 / しつもん に分解して保持
           const b: any = row.book;
           if (b && typeof b === 'object') {
-            const { __best3, __monthly, __questions, ...info } = b;
-            setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions });
+            const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, ...info } = b;
+            setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions, visibility: __visibility });
           }
         }).catch(() => {});
       }
@@ -10296,6 +10400,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onChangeTheme={changeTheme}
       customFields={profileCustomFields}
       onSaveCustomFields={updateProfileCustomFields}
+      fieldVisibility={fieldVisibility}
+      onSaveVisibility={updateFieldVisibility}
       premiumContent={premiumContent}
       onSavePremiumContent={updatePremiumContent}
       lang={lang}
