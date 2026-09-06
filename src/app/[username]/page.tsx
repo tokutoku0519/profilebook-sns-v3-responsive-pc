@@ -6442,7 +6442,7 @@ function BlogBody({ body, titleColor }: { body: string; titleColor?: string }) {
         if (b.type === 'h') return b.level === 3
           ? <h4 key={i} className="mt-3 mb-0.5 text-base font-black" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h4>
           : <h3 key={i} className="mt-4 mb-1 border-l-4 border-pink/40 pl-2 text-lg font-black leading-snug" style={{ color: titleColor || '#EC4899' }}>{renderBlogInline(b.text)}</h3>;
-        return <p key={i} className="text-base font-medium leading-8 text-ink">{renderBlogInline(b.text)}</p>;
+        return <p key={i} className="text-base font-semibold leading-8 text-ink">{renderBlogInline(b.text)}</p>;
       })}
     </div>
   );
@@ -6733,7 +6733,7 @@ function BlogWysiwygEditor({
         onInput={notify}
         onPaste={onPaste}
         data-placeholder="ここに本文を書こう…"
-        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-medium leading-8 text-ink outline-none focus:border-pink"
+        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-semibold leading-8 text-ink outline-none focus:border-pink"
         style={{ ...(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style, ['--title-color' as any]: titleColor }}
       />
       {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}

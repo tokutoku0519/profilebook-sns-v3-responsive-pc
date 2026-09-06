@@ -130,7 +130,7 @@ function ArticleBody({ body, titleColor }: { body: string; titleColor?: string }
         const h2 = line.match(/^#\s+(.*)$/);
         if (h2) return <h2 key={i} style={{ margin: '20px 0 6px', fontSize: 20, fontWeight: 900, color: titleColor || '#EC4899', borderLeft: '4px solid rgba(236,72,153,.4)', paddingLeft: 8 }}>{renderInline(h2[1], `l${i}`)}</h2>;
         if (line.trim() === '') return <div key={i} style={{ height: 10 }} />;
-        return <p key={i} style={{ margin: '6px 0', fontSize: 16, fontWeight: 500, lineHeight: 1.9, color: '#1F2C56' }}>{renderInline(line, `l${i}`)}</p>;
+        return <p key={i} style={{ margin: '6px 0', fontSize: 16, fontWeight: 600, lineHeight: 1.9, color: '#1F2C56' }}>{renderInline(line, `l${i}`)}</p>;
       })}
     </>
   );
