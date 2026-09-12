@@ -128,12 +128,13 @@ declare
   base_name text;
 begin
   base_name := coalesce(nullif(split_part(new.email, '@', 1), ''), left(new.id::text, 8));
-  insert into public.profiles (id, username, display_name)
+  insert into public.profiles (id, username, display_name, titles)
   values (
     new.id,
     -- username は unique 制約があるので UUID 先頭を足して衝突回避
     base_name || '_' || left(new.id::text, 4),
-    base_name
+    base_name,
+    array['pioneer']::text[]   -- テスト公開以降の登録者に「先駆者」称号を自動付与（サーバー権威）
   )
   on conflict (id) do nothing;
   return new;
@@ -144,6 +145,37 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ============================================================
+-- 権限列の保護（なりすまし・不正称号の防止）
+-- 一般ユーザー（authenticated）は is_official / titles を自分で書き換えられない。
+-- これらを変更できるのは service_role（サーバー）と、SQL Editor（認証コンテキスト無し）のみ。
+-- ＝ anon key で直接APIを叩いても「偽の公認バッジ」「偽の称号」を作れない。
+-- ============================================================
+create or replace function public.protect_profile_privileged()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  -- ログイン中の一般ユーザーからの更新だけ、権限列を旧値に戻す（変更を無効化）。
+  if auth.uid() is not null and coalesce(auth.role(), '') = 'authenticated' then
+    new.is_official := old.is_official;
+    new.titles := old.titles;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_privileged_trg on public.profiles;
+create trigger protect_profile_privileged_trg
+  before update on public.profiles
+  for each row execute function public.protect_profile_privileged();
+
+-- 既存ユーザーへ「先駆者」称号をバックフィル（SQL Editor＝認証コンテキスト無しで実行されるので通る）。
+update public.profiles
+set titles = array(select distinct e from unnest(coalesce(titles, array[]::text[]) || array['pioneer']) e)
+where not ('pioneer' = any(coalesce(titles, array[]::text[])));
 
 -- ============================================================
 -- RLS（行レベルセキュリティ）

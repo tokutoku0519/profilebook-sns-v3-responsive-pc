@@ -5,7 +5,7 @@
 // supabase 未設定（null）の場合は安全に空を返す or 何もしない。
 // ============================================================
 import { supabase } from './supabase';
-import { isPioneerAccount, registerUserTitles } from './titles';
+import { registerUserTitles } from './titles';
 
 // DBから読んだ profiles の称号を、画面表示用に "@username" キーで登録する。
 function registerProfileTitles(p?: { username?: string | null; titles?: string[] | null } | null): void {
@@ -13,19 +13,25 @@ function registerProfileTitles(p?: { username?: string | null; titles?: string[]
   registerUserTitles('@' + p.username, p.titles ?? []);
 }
 
-// テスト公開以降に登録した本人アカウントに「先駆者」称号を一度だけ付与する（自分の行のみ）。
+// 「先駆者」称号はサーバー権威（サインアップ時のトリガーで自動付与＋既存はバックフィル）。
+// クライアントからの titles 書き込みは RLS トリガーで無効化されるため、ここでは何もしない。
+// （ローカルに pioneer が未反映でも、次回のプロフィール読み込みでサーバー値が入る）
 async function grantPioneerIfEligible(row: ProfileRow | null): Promise<ProfileRow | null> {
-  if (!supabase || !row) return row;
-  const titles = Array.isArray(row.titles) ? row.titles : [];
-  if (titles.includes('pioneer')) return row;
-  const { data: sess } = await supabase.auth.getSession();
-  const user = sess.session?.user;
-  if (!user || user.id !== row.id) return row; // 付与できるのは自分の行だけ（RLS前提）
-  if (!isPioneerAccount(user.created_at)) return row;
-  const next = [...titles, 'pioneer'];
-  const { error } = await supabase.from('profiles').update({ titles: next }).eq('id', row.id);
-  if (error) return row;
-  return { ...row, titles: next };
+  return row;
+}
+
+// 他人に見せてよい book だけに絞る（内部・機微キーを除去し、非公開指定の項目を落とす）。
+// ※ これはアプリ経由の露出を減らす対策。DB直叩き対策は profiles の book 分離（次段）で行う。
+function sanitizeBookForOthers(book: Record<string, any> | null | undefined): Record<string, any> {
+  if (!book || typeof book !== 'object') return {};
+  const { __game, __purchases, __choices, __visibility, ...rest } = book as Record<string, any>;
+  const vis = (__visibility && typeof __visibility === 'object') ? __visibility : {};
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(rest)) {
+    if (vis[k] === 'private' || vis[k] === 'followers') continue; // 非公開/フォロワー限定は落とす（安全側）
+    out[k] = v;
+  }
+  return out;
 }
 
 export type ProfileRow = {
@@ -256,8 +262,13 @@ export async function getProfileByUsername(username: string): Promise<ProfileRow
   if (!supabase) return null;
   const { data, error } = await supabase.from('profiles').select('*').eq('username', username).single();
   if (error) return null;
-  const row = await grantPioneerIfEligible(data as ProfileRow);
+  const row = data as ProfileRow;
   registerProfileTitles(row);
+  // 本人以外には、機微・内部キーと非公開指定の項目を除いた book を返す。
+  const uid = await getCurrentUserId();
+  if (row && uid !== row.id) {
+    return { ...row, book: sanitizeBookForOthers(row.book) };
+  }
   return row;
 }
 
