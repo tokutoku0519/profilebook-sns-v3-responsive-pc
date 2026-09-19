@@ -264,18 +264,18 @@ const defaultBest3: Best3Data = isDev ? demoBest3 : emptyBest3;
 
 // 今月のBEST3：月ごとに固定テーマを切り替え（1月=index0 … 12月=index11）
 const MONTHLY_BEST3_THEMES = [
-  '今年ハマりたいこと',       // 1月
-  '温まりたい飲み物',         // 2月
-  '春に食べたいもの',         // 3月
-  '新生活で欲しいもの',       // 4月
-  '行ってみたい場所',         // 5月
-  '雨の日のおとも',           // 6月
-  '夏に聴きたい曲',           // 7月
-  '夏にやりたいこと',         // 8月
-  '最近ハマっているもの',     // 9月
-  '秋に読みたい漫画・本',     // 10月
-  'いま欲しいもの',           // 11月
-  '今年買ってよかったもの',   // 12月
+  '今年チャレンジしたいこと',   // 1月：お正月・新年の抱負
+  '温まりたい飲み物',           // 2月：真冬・バレンタイン
+  '春に食べたいもの',           // 3月：ひな祭り・卒業
+  '新生活で始めたいこと',       // 4月：入学・新生活
+  'ゴールデンウィークの過ごし方', // 5月：GW・行楽
+  '雨の日のおとも',             // 6月：梅雨
+  '夏に聴きたい曲',             // 7月：七夕・夏本番
+  '夏にやりたいこと',           // 8月：お盆・花火
+  '秋のおたのしみ（お月見・運動会）', // 9月：お月見・シルバーウィーク・運動会
+  'ハロウィン&秋グルメBEST',    // 10月：ハロウィン・収穫祭・オクトーバーフェス
+  '秋の夜長のすごし方（紅葉・文化祭）', // 11月：紅葉・木枯らし・文化祭
+  '今年の締めくくり（クリスマス・年末）', // 12月：クリスマス・年末年始・雪
 ];
 
 type MonthlyBest3 = { monthKey: string; items: string[] };
@@ -1155,13 +1155,21 @@ function OfficialBadge() {
 
 function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', translatedAnswerBodies = {} }: { answers: Answer[]; go: (s: Screen, answerId?: string) => void; avatarUrl: string; ownedStickerCount: number; lang?: Lang; translatedAnswerBodies?: Record<string, string> }) {
   const myAnswers = answers.filter((a) => a.user.id === me.id);
+  // フォロー中の件数は本番ではSupabaseから取得（マイページと表記を揃える）。デモはダミー件数。
+  const [followingCount, setFollowingCount] = useState<number>(() => (isDev ? followers.length : 0));
+  useEffect(() => {
+    if (isDev || !dbReady()) return;
+    let cancelled = false;
+    getFollowCounts().then((c) => { if (!cancelled) setFollowingCount(c.following); });
+    return () => { cancelled = true; };
+  }, []);
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[320px] shrink-0 overflow-y-auto rounded-[32px] border border-white/70 bg-white/70 p-5 shadow-card backdrop-blur xl:block">
       <section className="cursor-pointer rounded-[28px] bg-white p-4 shadow-card transition hover:bg-pink/5 active:scale-[0.99]" onClick={() => go('profile')}>
         <div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-pink/15 text-2xl">{avatarUrl ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" /> : me.avatar}</div><div><p className="font-black">{me.name}</p><p className="text-xs font-bold text-muted">{me.id}</p></div></div>
         <div className="mt-4 grid grid-cols-3 rounded-3xl bg-base p-3 text-center text-xs font-bold">
           <div><p className="text-lg text-ink">{myAnswers.length}</p>{t('tab_create', lang)}</div>
-          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{followers.length}</p>{t('btn_following', lang)}</button>
+          <button onClick={(e) => { e.stopPropagation(); go('followers'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{followingCount}</p>{t('btn_following', lang)}</button>
           <button onClick={(e) => { e.stopPropagation(); go('shop'); }} className="hover:text-pinkStrong transition"><p className="text-lg text-ink">{ownedStickerCount}</p>{t('nav_shop', lang)}</button>
         </div>
       </section>
