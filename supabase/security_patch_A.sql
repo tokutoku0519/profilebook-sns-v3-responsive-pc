@@ -3,11 +3,15 @@
 -- 目的：anon key で API を直接叩いても、他人の非公開項目・コイン残高・購入履歴を
 --       読めなくする（DB直叩き対策）。他人へは公開分だけ関数経由で見せる。
 --
--- 手順：
---   1) この SQL 全体を Supabase SQL Editor に貼って Run（テーブル作成・データ移行・関数作成）。
---   2) アプリが正常に動くことを確認（プロフィール表示・編集・コイン・診断）。
---   3) 最後の「STEP 3」の update を実行して、旧 profiles.book をクリア（漏えいを完全に閉じる）。
--- ※ 何度実行してもデータは消えません（STEP 3 を除く）。STEP 3 は確認後に1回だけ。
+-- ★実施順（この順番を必ず守る）★
+--   1) この SQL（STEP 1 + STEP 2）を Supabase SQL Editor に貼って Run。
+--      → profile_book テーブル作成・現在の profiles.book を移行/最新化・公開関数作成。
+--      （何度実行してもデータは消えません。STEP 3 は含みません）
+--   2) 新しいアプリ（profile_book を読み書きする版）が Vercel にデプロイされるのを待つ。
+--   3) 実機で動作確認（プロフィール保存→再読込で残る／コイン／他人プロフィール表示／診断）。
+--   4) 問題なければ、いちばん下の「STEP 3」のコメント（--）を外して1回だけ Run。
+--      → 旧 profiles.book を空にして、直叩きでの漏えいを完全に閉じる。
+-- ※ STEP 3 は「3) の確認が取れてから」。順番を守らないとデータが消えます。
 -- ============================================================
 
 -- ── STEP 1: 分離先テーブル（本人しか読めない）──────────────
@@ -22,12 +26,17 @@ drop policy if exists "profile_book self insert" on public.profile_book;
 drop policy if exists "profile_book self update" on public.profile_book;
 create policy "profile_book self select" on public.profile_book for select using (auth.uid() = id);
 create policy "profile_book self insert" on public.profile_book for insert with check (auth.uid() = id);
-create policy "profile_book self update" on public.profile_book for update using (auth.uid() = id);
+-- update は using（既存行）＋ with check（新しい行）両方を本人限定に（upsert 対応）
+create policy "profile_book self update" on public.profile_book for update
+  using (auth.uid() = id) with check (auth.uid() = id);
 
--- 既存ユーザーの book を移行（まだ無い行だけコピー）
-insert into public.profile_book (id, book)
-select id, coalesce(book, '{}'::jsonb) from public.profiles
-on conflict (id) do nothing;
+-- 既存ユーザーの book を profile_book へ移行／最新化。
+-- profiles.book を「現在の正」として反映する（本文がある場合のみ上書き。空での上書きはしない）。
+insert into public.profile_book (id, book, updated_at)
+select id, coalesce(book, '{}'::jsonb), now() from public.profiles
+on conflict (id) do update
+  set book = excluded.book, updated_at = now()
+  where excluded.book is not null and excluded.book <> '{}'::jsonb;
 
 -- ── STEP 2: 他人に見せてよい book を返す関数（公開分のみ）──────
 -- 本人＝全部／他人＝ __game・__purchases・__visibility と、非公開/フォロワー限定
@@ -88,6 +97,6 @@ create trigger on_auth_user_created after insert on auth.users
 -- ============================================================
 -- STEP 3【アプリ動作を確認してから、1回だけ実行】
 -- 旧 profiles.book をクリアして「直叩きでの漏えい」を完全に閉じる。
--- コメント（--）を外して実行してください。
+-- ★上の実施順 3)（保存が再読込後も残る等の確認）が取れてから、--を外して Run。
 -- ------------------------------------------------------------
 -- update public.profiles set book = '{}'::jsonb;
