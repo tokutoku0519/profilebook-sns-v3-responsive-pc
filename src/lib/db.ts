@@ -39,38 +39,34 @@ function sanitizeBookForOthers(book: Record<string, any> | null | undefined): Re
 // SECURITY DEFINER 関数 get_visible_book（公開分のみ返す）経由でしか見せない。
 // SQL移行(security_patch_A)が未適用でも動くよう、旧 profiles.book にフォールバックする。
 
-/** 自分の book を読む（profile_book 優先・無ければ旧 profiles.book）。 */
+// ── book の読み書き ─────────────────────────────────────────
+// 安定性優先で profiles.book を正とする（book分離Aは保存不具合が出たため保留）。
+// 他人向けにはアプリ層で sanitizeBookForOthers を通す（内部・非公開項目を除去）。
+
+/** 自分の book を読む。 */
 async function readMyBook(uid: string): Promise<Record<string, any>> {
   if (!supabase) return {};
-  const { data, error } = await supabase.from('profile_book').select('book').eq('id', uid).maybeSingle();
-  if (!error && data && data.book && typeof data.book === 'object') return data.book as Record<string, any>;
-  const { data: old } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
-  return (old?.book && typeof old.book === 'object') ? (old.book as Record<string, any>) : {};
+  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
+  return (data?.book && typeof data.book === 'object') ? (data.book as Record<string, any>) : {};
 }
 
-/** 自分の book を保存（profile_book に upsert・未作成時は旧 profiles.book へフォールバック）。 */
+/** 自分の book を保存（実際に1行更新されたかで成否を判定）。 */
 async function writeMyBook(uid: string, book: Record<string, any>): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase
-    .from('profile_book')
-    .upsert({ id: uid, book, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ book, updated_at: new Date().toISOString() })
+    .eq('id', uid)
     .select('id');
-  if (!error) return true;
-  // profile_book 未作成（SQL移行前）などはこちら
-  const { data, error: e2 } = await supabase
-    .from('profiles').update({ book, updated_at: new Date().toISOString() }).eq('id', uid).select('id');
-  return !e2 && Array.isArray(data) && data.length > 0;
+  return !error && Array.isArray(data) && data.length > 0;
 }
 
-/** 他人（username）の「公開してよい book」を取得（get_visible_book 経由・未作成時はサニタイズでフォールバック）。 */
+/** 他人（username）の「公開してよい book」を取得（アプリ層サニタイズ）。 */
 async function readVisibleBook(username: string): Promise<Record<string, any>> {
   if (!supabase) return {};
   const uname = username.replace(/^@/, '');
-  const { data, error } = await supabase.rpc('get_visible_book', { target: uname });
-  if (!error && data && typeof data === 'object') return data as Record<string, any>;
-  // 関数未作成（SQL移行前）：旧 profiles.book をアプリ側でサニタイズ
-  const { data: old } = await supabase.from('profiles').select('book').eq('username', uname).maybeSingle();
-  return sanitizeBookForOthers(old?.book as any);
+  const { data } = await supabase.from('profiles').select('book').eq('username', uname).maybeSingle();
+  return sanitizeBookForOthers(data?.book as any);
 }
 
 export type ProfileRow = {
