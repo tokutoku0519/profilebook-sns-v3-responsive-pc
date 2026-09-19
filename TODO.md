@@ -4,8 +4,8 @@
 ## 🔐 セキュリティ（Moltbook事件を踏まえた点検＝`SECURITY.md` 参照）
 - [x] 称号・公認バッジ・権限列の自己改ざん防止（`profiles` トリガーで `is_official`/`titles` をサーバー権威化。pioneer は自動付与＋バックフィル）※`schema.sql` 再実行で有効化
 - [x] 他人プロフィールの book をアプリ経由でサニタイズ（内部・機微キー／非公開項目を除去）
-- [ ] **book の DB 直叩き読み取り対策（最優先の残）**：`book`（`__game`/`__purchases`/`__choices`／非公開項目）を self-only の別テーブルに分離し、公開分は SECURITY DEFINER 関数/ビューで返す
-- [ ] コインのサーバー権威化（獲得/消費もサーバー検証。現状は購入分のみ）
+- [~] **book の DB 直叩き読み取り対策（A・コード実装済み／SQL適用待ち）**：`book` を self-only の `profile_book` に分離し、他人へは `get_visible_book()` 関数で公開分のみ返す。有効化に `supabase/security_patch_A.sql` の実行が必要（STEP3で旧 profiles.book をクリアして漏えいを完全に閉じる）。
+- [ ] コインのサーバー権威化（獲得/消費もサーバー検証。現状は購入分のみ。※`profile_book` 分離で他人からの読み取りは不可になったが、本人による自己改ざんは残る）
 - [ ] UGC モデレーション：通報・ブロック・管理削除・サーバー側NG判定（`reports` テーブル＋通報ボタン）
 - [ ] レート制限（投稿・投票・通知・フィードバック。通知の自己宛制限）
 - [ ] アクセス監視：Supabase Auth/API ログ有効化＋公開後1週間は毎日確認

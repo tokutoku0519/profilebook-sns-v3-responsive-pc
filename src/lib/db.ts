@@ -34,6 +34,45 @@ function sanitizeBookForOthers(book: Record<string, any> | null | undefined): Re
   return out;
 }
 
+// ── book の格納先（本人しか読めない profile_book テーブル）───────────────
+// DB直叩き対策：本文(book)は self-only の profile_book に置き、他人へは
+// SECURITY DEFINER 関数 get_visible_book（公開分のみ返す）経由でしか見せない。
+// SQL移行(security_patch_A)が未適用でも動くよう、旧 profiles.book にフォールバックする。
+
+/** 自分の book を読む（profile_book 優先・無ければ旧 profiles.book）。 */
+async function readMyBook(uid: string): Promise<Record<string, any>> {
+  if (!supabase) return {};
+  const { data, error } = await supabase.from('profile_book').select('book').eq('id', uid).maybeSingle();
+  if (!error && data && data.book && typeof data.book === 'object') return data.book as Record<string, any>;
+  const { data: old } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
+  return (old?.book && typeof old.book === 'object') ? (old.book as Record<string, any>) : {};
+}
+
+/** 自分の book を保存（profile_book に upsert・未作成時は旧 profiles.book へフォールバック）。 */
+async function writeMyBook(uid: string, book: Record<string, any>): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from('profile_book')
+    .upsert({ id: uid, book, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .select('id');
+  if (!error) return true;
+  // profile_book 未作成（SQL移行前）などはこちら
+  const { data, error: e2 } = await supabase
+    .from('profiles').update({ book, updated_at: new Date().toISOString() }).eq('id', uid).select('id');
+  return !e2 && Array.isArray(data) && data.length > 0;
+}
+
+/** 他人（username）の「公開してよい book」を取得（get_visible_book 経由・未作成時はサニタイズでフォールバック）。 */
+async function readVisibleBook(username: string): Promise<Record<string, any>> {
+  if (!supabase) return {};
+  const uname = username.replace(/^@/, '');
+  const { data, error } = await supabase.rpc('get_visible_book', { target: uname });
+  if (!error && data && typeof data === 'object') return data as Record<string, any>;
+  // 関数未作成（SQL移行前）：旧 profiles.book をアプリ側でサニタイズ
+  const { data: old } = await supabase.from('profiles').select('book').eq('username', uname).maybeSingle();
+  return sanitizeBookForOthers(old?.book as any);
+}
+
 export type ProfileRow = {
   id: string;
   username: string;
@@ -149,25 +188,23 @@ export async function saveMyChoices(choices: Record<string, string>): Promise<bo
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
-  const book: Record<string, any> = (data?.book && typeof data.book === 'object') ? data.book : {};
+  const book = await readMyBook(uid);
   book.__choices = choices;
-  const { error } = await supabase.from('profiles').update({ book, updated_at: new Date().toISOString() }).eq('id', uid);
-  return !error;
+  return writeMyBook(uid, book);
 }
 /** 自分の二択回答を取得。 */
 export async function getMyChoices(): Promise<Record<string, string>> {
   if (!supabase) return {};
   const uid = await getCurrentUserId();
   if (!uid) return {};
-  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
-  return ((data?.book as any)?.__choices ?? {}) as Record<string, string>;
+  const book = await readMyBook(uid);
+  return ((book as any)?.__choices ?? {}) as Record<string, string>;
 }
-/** 指定ユーザー（username）の二択回答を取得。 */
+/** 指定ユーザー（username）の二択回答を取得（診断用・公開book経由）。 */
 export async function getUserChoices(username: string): Promise<Record<string, string>> {
   if (!supabase) return {};
-  const { data } = await supabase.from('profiles').select('book').eq('username', username.replace(/^@/, '')).maybeSingle();
-  return ((data?.book as any)?.__choices ?? {}) as Record<string, string>;
+  const book = await readVisibleBook(username);
+  return ((book as any)?.__choices ?? {}) as Record<string, string>;
 }
 
 /** テスターのフィードバック（意見・要望・不具合）を feedback テーブルへ投稿。 */
@@ -218,8 +255,9 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
   if (!uid) return null;
   const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).single();
   if (error) return null;
-  const row = await grantPioneerIfEligible(data as ProfileRow);
+  const row = data as ProfileRow;
   registerProfileTitles(row);
+  row.book = await readMyBook(uid); // book は self-only の profile_book から
   return row;
 }
 
@@ -264,27 +302,18 @@ export async function getProfileByUsername(username: string): Promise<ProfileRow
   if (error) return null;
   const row = data as ProfileRow;
   registerProfileTitles(row);
-  // 本人以外には、機微・内部キーと非公開指定の項目を除いた book を返す。
   const uid = await getCurrentUserId();
-  if (row && uid !== row.id) {
-    return { ...row, book: sanitizeBookForOthers(row.book) };
-  }
+  // 本人は自分の book をフルで、他人へは「公開してよい book」だけを返す。
+  row.book = (uid && uid === row.id) ? await readMyBook(uid) : await readVisibleBook(username);
   return row;
 }
 
-/** プロフィール帳（book）を保存 */
+/** プロフィール帳（book）を保存（self-only の profile_book へ） */
 export async function saveProfileBook(book: Record<string, any>): Promise<boolean> {
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  // .select() で「実際に更新された行」を返させる。RLSの更新ポリシー不足や
-  // 行欠落だと UPDATE は 0 行（エラーなし）になり得るため、行数で成否を判定する。
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ book, updated_at: new Date().toISOString() })
-    .eq('id', uid)
-    .select('id');
-  return !error && Array.isArray(data) && data.length > 0;
+  return writeMyBook(uid, book);
 }
 
 /**
@@ -308,17 +337,11 @@ export async function saveGameData(game: Record<string, any>): Promise<boolean> 
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  const { data } = await supabase.from('profiles').select('book').eq('id', uid).maybeSingle();
-  const book: Record<string, any> = (data?.book && typeof data.book === 'object') ? data.book : {};
+  const book = await readMyBook(uid);
   // 安全網：ローカルが「空」なのにサーバーに中身がある場合は上書きしない。
-  // （再ログイン直後などに復元前の空データで誤って消してしまう事故を防ぐ）
   if (isEmptyGame(game) && !isEmptyGame(book.__game)) return false;
   book.__game = game;
-  const { error } = await supabase
-    .from('profiles')
-    .update({ book, updated_at: new Date().toISOString() })
-    .eq('id', uid);
-  return !error;
+  return writeMyBook(uid, book);
 }
 
 /** ID・表示名・アバターなどの基本情報を保存（/setup で使用） */

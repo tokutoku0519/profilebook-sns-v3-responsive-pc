@@ -12,14 +12,19 @@ export async function creditCoins(
   if (!userId || !Number.isFinite(amount) || amount <= 0 || !purchaseKey) {
     return { ok: false, reason: 'bad_args' };
   }
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('book')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) return { ok: false, reason: 'read_failed' };
+  // book は self-only の profile_book に格納（未移行環境では profiles.book にフォールバック）。
+  let book: Record<string, any> = {};
+  let target: 'profile_book' | 'profiles' = 'profile_book';
+  const pb = await supabaseAdmin.from('profile_book').select('book').eq('id', userId).maybeSingle();
+  if (!pb.error && pb.data) {
+    book = (pb.data.book && typeof pb.data.book === 'object') ? pb.data.book : {};
+  } else {
+    const legacy = await supabaseAdmin.from('profiles').select('book').eq('id', userId).maybeSingle();
+    if (legacy.error) return { ok: false, reason: 'read_failed' };
+    book = (legacy.data?.book && typeof legacy.data.book === 'object') ? legacy.data.book : {};
+    target = pb.error ? 'profiles' : 'profile_book'; // profile_book が読めない=テーブル未作成
+  }
 
-  const book: Record<string, any> = (data?.book && typeof data.book === 'object') ? data.book : {};
   const purchases: string[] = Array.isArray(book.__purchases) ? book.__purchases : [];
   if (purchases.includes(purchaseKey)) return { ok: true, reason: 'already_credited' }; // 冪等
 
@@ -29,10 +34,17 @@ export async function creditCoins(
   book.__game = game;
   book.__purchases = [...purchases, purchaseKey].slice(-200); // 直近200件だけ保持
 
-  const { error: upErr } = await supabaseAdmin
-    .from('profiles')
-    .update({ book, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-  if (upErr) return { ok: false, reason: 'write_failed' };
+  if (target === 'profile_book') {
+    const { error: upErr } = await supabaseAdmin
+      .from('profile_book')
+      .upsert({ id: userId, book, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    if (upErr) return { ok: false, reason: 'write_failed' };
+  } else {
+    const { error: upErr } = await supabaseAdmin
+      .from('profiles')
+      .update({ book, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+    if (upErr) return { ok: false, reason: 'write_failed' };
+  }
   return { ok: true };
 }
