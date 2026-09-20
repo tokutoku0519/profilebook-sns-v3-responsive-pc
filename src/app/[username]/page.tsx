@@ -263,19 +263,21 @@ const demoBest3: Best3Data = {
 const defaultBest3: Best3Data = isDev ? demoBest3 : emptyBest3;
 
 // 今月のBEST3：月ごとに固定テーマを切り替え（1月=index0 … 12月=index11）
+// 各月のテーマは「◯◯のBEST3を教えて！」という質問として表示される。
+// 迷わず答えられるよう、シンプルな名詞のお題にする（例示カッコは付けない）。
 const MONTHLY_BEST3_THEMES = [
-  '今年チャレンジしたいこと',   // 1月：お正月・新年の抱負
-  '温まりたい飲み物',           // 2月：真冬・バレンタイン
-  '春に食べたいもの',           // 3月：ひな祭り・卒業
-  '新生活で始めたいこと',       // 4月：入学・新生活
-  'ゴールデンウィークの過ごし方', // 5月：GW・行楽
-  '雨の日のおとも',             // 6月：梅雨
-  '夏に聴きたい曲',             // 7月：七夕・夏本番
-  '夏にやりたいこと',           // 8月：お盆・花火
-  '秋のおたのしみ（お月見・運動会）', // 9月：お月見・シルバーウィーク・運動会
-  'ハロウィン&秋グルメBEST',    // 10月：ハロウィン・収穫祭・オクトーバーフェス
-  '秋の夜長のすごし方（紅葉・文化祭）', // 11月：紅葉・木枯らし・文化祭
-  '今年の締めくくり（クリスマス・年末）', // 12月：クリスマス・年末年始・雪
+  '今年やってみたいこと',   // 1月：お正月・新年の抱負
+  '温まりたい飲みもの',     // 2月：真冬・バレンタイン
+  '春に食べたいもの',       // 3月：ひな祭り・卒業
+  '新生活で始めたいこと',   // 4月：入学・新生活
+  '連休にやりたいこと',     // 5月：GW・行楽
+  '雨の日の楽しみ方',       // 6月：梅雨
+  '夏に聴きたい曲',         // 7月：七夕・夏本番
+  '夏にやりたいこと',       // 8月：お盆・花火
+  'この秋やってみたいこと', // 9月：お月見・シルバーウィーク・運動会
+  '秋に食べたいもの',       // 10月：ハロウィン・収穫祭・食欲の秋
+  '秋におでかけしたい場所', // 11月：紅葉・行楽・文化祭
+  '今年やってよかったこと', // 12月：クリスマス・年末年始のふりかえり
 ];
 
 type MonthlyBest3 = { monthKey: string; items: string[] };
@@ -3599,7 +3601,8 @@ function ProfileEditScreen({
 <section className="space-y-4 rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
   <div>
     <p className="text-xl font-black text-ink">🗓️ 今月のBEST3</p>
-    <p className="mt-1 text-xs font-bold text-muted">{monthInfo.label}のテーマ「{monthInfo.theme}」。毎月テーマが変わります。</p>
+    <p className="mt-1 text-sm font-black text-pinkStrong">Q. {monthInfo.theme} は？</p>
+    <p className="mt-1 text-xs font-bold text-muted">あなたのBEST3を教えて！（お題は毎月かわります）</p>
   </div>
   <Best3EditBlock
     title={monthInfo.theme}
