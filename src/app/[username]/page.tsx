@@ -8723,6 +8723,10 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
   );
 }
 
+// プロフィール保存(persistBook)を直列化するための共有チェーン（モジュール単一インスタンス）。
+// 複数の保存呼び出しを順番に流し、古い内容の保存が新しい内容を上書きするのを防ぐ。
+let __persistChain: Promise<void> = Promise.resolve();
+
 export default function Page() {
   const [ready, setReady] = useState(isDev);
 
@@ -9696,7 +9700,8 @@ function persistGame() {
   try { void saveGameData(composeGameData()); } catch {}
 }
 
-async function persistBook() {
+// localStorage の最新内容から book を組んで1回保存する実体。
+async function persistBookNow() {
   if (!dbReady()) return;
   try {
     const info = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
@@ -9717,6 +9722,17 @@ async function persistBook() {
     if (ok) { try { localStorage.removeItem('miri_pending_profile_sync'); } catch {} }
     else onProfileSyncFailed();
   } catch { onProfileSyncFailed(); }
+}
+
+// persistBook の直列化。保存ボタンは onSave/onSaveBest3/… と複数ハンドラを連続で呼び、
+// それぞれが persistBook を発火する。並行実行すると「古い内容で組んだ保存」が最後に
+// 着地して新しい入力を上書きして消すレースが起きるため、呼び出しをキューで直列化する。
+// 直列化により各 persistBookNow は「全 setItem 完了後の最新 localStorage」を読むので、
+// どの保存も同じ完全な book を書き、最終状態が必ず正しくなる（チェーンは __persistChain）。
+function persistBook(): Promise<void> {
+  const run = __persistChain.then(() => persistBookNow());
+  __persistChain = run.catch(() => {}); // 失敗してもチェーンを切らさない
+  return run;
 }
 
 // 保存がサーバーへ届かなかったとき：未保存フラグを立て、はっきり通知する。
