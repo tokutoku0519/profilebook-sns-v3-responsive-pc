@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { TERMS_VERSION, TERMS_ENACTED_AT } from '@/lib/terms';
+import { TERMS_VERSION, TERMS_ENACTED_AT, TERMS_REVISED_AT } from '@/lib/terms';
 
 export const metadata: Metadata = {
   title: '利用規約 — Miri',
@@ -64,6 +64,7 @@ export default function TermsPage() {
         <Section title="第5条（本サービスの内容）">
           <ol className="list-decimal space-y-1 pl-5">
             <li>本サービスは、お題への回答・プロフィール帳の作成と交換・日記・サークル等の機能を提供するSNSです。</li>
+            <li><span className="text-ink">本サービスはプロフィールを見せ合うことを目的としています。</span>ユーザーが公開設定で登録・投稿したプロフィール項目・お題への回答・ブログ・日記等は、他のユーザーおよびログインしていない訪問者を含む第三者が閲覧できます。プロフィール帳の各項目は「公開／フォロワー限定／非公開」を項目ごとに選択でき、「非公開」に設定した項目は他のユーザーに表示されません。ユーザーは、公開範囲を理解したうえで、公開したくない情報を投稿しないものとします。</li>
             <li>本サービスには、スポンサー企業によるPR質問が含まれることがあります。PR質問には広告・PRである旨を表示します。</li>
             <li>当社は、ユーザーに事前に通知することなく、本サービスの内容を変更・追加・廃止することがあります。</li>
           </ol>
@@ -185,7 +186,7 @@ export default function TermsPage() {
 
         <div className="rounded-[28px] bg-white p-6 text-center shadow-card">
           <p className="text-xs font-bold text-muted">
-            {TERMS_ENACTED_AT} 制定（Version {TERMS_VERSION}）
+            {TERMS_ENACTED_AT} 制定 / {TERMS_REVISED_AT} 最終改定（Version {TERMS_VERSION}）
           </p>
         </div>
 

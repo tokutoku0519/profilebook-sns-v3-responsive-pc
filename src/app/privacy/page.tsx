@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { TERMS_VERSION, TERMS_ENACTED_AT } from '@/lib/terms';
+import { TERMS_VERSION, TERMS_ENACTED_AT, TERMS_REVISED_AT } from '@/lib/terms';
 
 export const metadata: Metadata = {
   title: 'プライバシーポリシー — Miri',
@@ -40,6 +40,18 @@ export default function PrivacyPage() {
             <li>投稿情報：お題・PR質問への回答、日記、コメント、画像その他ユーザーが投稿したコンテンツ</li>
             <li>利用情報：本サービスの利用履歴（回答履歴、ポイント履歴、閲覧・操作ログ等）</li>
             <li>端末・接続情報：端末の種類、OS、ブラウザの種類、IPアドレス、Cookieその他の識別子</li>
+          </ol>
+        </Section>
+
+        <Section title="◆ プロフィール・投稿の公開について（重要）">
+          <p>
+            本サービスは「プロフィール帳を見せ合う」ことを目的としたSNSです。ユーザーが公開設定で登録・投稿した内容は、他のユーザーおよびログインしていない訪問者を含む第三者が閲覧できます。
+          </p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>公開される主な情報：ニックネーム、ユーザーID、プロフィール帳のうち公開設定にした項目、公開設定で投稿したお題への回答・ブログ・日記等。</li>
+            <li>プロフィール帳の各項目は「公開／フォロワー限定／非公開」を項目ごとに設定できます。「非公開」にした項目は他のユーザーには表示されません。</li>
+            <li>コイン残高・購入履歴・各項目の公開設定などの内部情報は、他のユーザーには公開されません。</li>
+            <li>本名・住所・電話番号・勤務先など、公開を望まない情報は入力しないようご注意ください。いったん公開・送信された情報は、第三者に閲覧・保存される可能性があります。</li>
           </ol>
         </Section>
 
@@ -131,7 +143,7 @@ export default function PrivacyPage() {
 
         <div className="rounded-[28px] bg-white p-6 text-center shadow-card">
           <p className="text-xs font-bold text-muted">
-            {TERMS_ENACTED_AT} 制定（Version {TERMS_VERSION}）
+            {TERMS_ENACTED_AT} 制定 / {TERMS_REVISED_AT} 最終改定（Version {TERMS_VERSION}）
           </p>
         </div>
 
