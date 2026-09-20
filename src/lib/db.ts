@@ -56,20 +56,36 @@ async function readMyBook(uid: string): Promise<Record<string, any>> {
   return (p?.book && typeof p.book === 'object') ? (p.book as Record<string, any>) : {};
 }
 
-/** 自分の book を保存（profile_book へ upsert。行が無くても作成されるので取りこぼさない）。
- *  profile_book がまだ無い（移行前）ときは旧 profiles.book にフォールバックして保存する。
- *  → コード先行デプロイ→後からSQL適用、のどちらの順でも保存が壊れない。 */
+/** 自分の book を保存する。
+ *  通常経路は profile_book の UPDATE（profiles の update と同じ auth.uid()=id 条件＝実績あり）。
+ *  移行後は各ユーザーに profile_book 行が必ずあるので UPDATE で確実に当たる。
+ *  行が無い（0件）ときだけ INSERT、profile_book 自体が使えない（未導入）ときだけ
+ *  旧 profiles.book へフォールバックする。
+ *  ※ upsert（INSERT ... ON CONFLICT）は insert ポリシー依存で RLS に弾かれ得たため使わない。 */
 async function writeMyBook(uid: string, book: Record<string, any>): Promise<boolean> {
   if (!supabase) return false;
-  const { data, error } = await supabase
+  const now = new Date().toISOString();
+  // ① 通常：既存行を UPDATE
+  const { data: upd, error: updErr } = await supabase
     .from('profile_book')
-    .upsert({ id: uid, book, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .update({ book, updated_at: now })
+    .eq('id', uid)
     .select('id');
-  if (!error) return Array.isArray(data) && data.length > 0;
-  // エラー＝profile_book 未導入とみなし、旧 profiles.book へ保存（移行後は通らない）
+  if (!updErr && Array.isArray(upd) && upd.length > 0) return true;
+
+  // ② UPDATE がエラー無しで0件＝行が無いだけ → INSERT を試す（移行漏れ・新規）
+  if (!updErr) {
+    const { data: ins, error: insErr } = await supabase
+      .from('profile_book')
+      .insert({ id: uid, book, updated_at: now })
+      .select('id');
+    if (!insErr && Array.isArray(ins) && ins.length > 0) return true;
+  }
+
+  // ③ ここまで来る＝profile_book が使えない（テーブル未導入等）→旧 profiles.book へ
   const { data: d2, error: e2 } = await supabase
     .from('profiles')
-    .update({ book, updated_at: new Date().toISOString() })
+    .update({ book, updated_at: now })
     .eq('id', uid)
     .select('id');
   return !e2 && Array.isArray(d2) && d2.length > 0;
