@@ -364,17 +364,27 @@ const MONTHLY_EPISODE_POOL: string[][] = [
   ],
 ];
 
-// __monthly.episodes は { 質問文: 回答 } で保存（複数質問に答えられる）。
-type MonthlyBest3 = { monthKey: string; items: string[]; episodes?: Record<string, string> };
+// __monthly.episode は今月出題された1問への回答（文字列）。質問文は monthKey から決定的に選ぶ。
+type MonthlyBest3 = { monthKey: string; items: string[]; episode?: string };
 
-// 現在の月のキー・テーマ・ラベル・イベント見出し・質問プールを返す（ローカル時刻基準）
+// monthKey から決定的に1問のインデックスを選ぶ（毎月変わる・同月内は固定・全ユーザー共通）。
+function pickMonthlyEpisodeIndex(monthKey: string, poolLen: number): number {
+  if (poolLen <= 0) return 0;
+  let h = 0;
+  for (let i = 0; i < monthKey.length; i++) h = (h * 31 + monthKey.charCodeAt(i)) >>> 0;
+  return h % poolLen;
+}
+
+// 現在の月のキー・テーマ・ラベル・イベント見出し・今月のエピソード質問(1問)を返す。
 function currentMonthInfo() {
   const d = new Date();
+  const monthKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
+  const pool = MONTHLY_EPISODE_POOL[d.getMonth()];
   return {
-    monthKey: `${d.getFullYear()}-${d.getMonth() + 1}`,
+    monthKey,
     theme: MONTHLY_BEST3_THEMES[d.getMonth()],
     events: MONTHLY_EVENT_LABELS[d.getMonth()],
-    episodePool: MONTHLY_EPISODE_POOL[d.getMonth()],
+    episodeQ: pool[pickMonthlyEpisodeIndex(monthKey, pool.length)],
     label: `${d.getMonth() + 1}月`,
   };
 }
@@ -2313,7 +2323,7 @@ function ProfileBookContent({
 }: {
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
-  monthlyBest3?: { theme: string; label: string; items: string[]; events?: string; episodes?: Record<string, string> } | null;
+  monthlyBest3?: { theme: string; label: string; items: string[]; events?: string; episodeQ?: string; episode?: string } | null;
   isSelf?: boolean;
   questions: Array<{ q: string; a: string }>;
   answers: Answer[];
@@ -2535,30 +2545,28 @@ function ProfileBookContent({
         </section>
       )}
 
-      {/* ── 今月のおだい（エピソード質問＋BEST3・毎月切替） ── */}
+      {/* ── 今月のおだい（今月の1問＋BEST3・毎月切替） ── */}
       {(() => {
         if (!monthlyBest3) return null;
-        const answeredEpisodes = Object.entries(monthlyBest3.episodes ?? {}).filter(([, a]) => (a ?? '').trim());
+        const hasEpisode = (monthlyBest3.episode ?? '').trim();
         const hasBest3 = monthlyBest3.items.some((v) => v.trim());
-        if (!answeredEpisodes.length && !hasBest3 && !isSelf) return null;
+        if (!hasEpisode && !hasBest3 && !isSelf) return null;
         return (
           <section className="space-y-4 rounded-[28px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-pink/15 px-3 py-1 text-[10px] font-black text-pink">🗓️ {monthlyBest3.label}のおだい</span>
             </div>
-            {/* 今月のエピソード質問（答えたものを並べる） */}
-            {answeredEpisodes.length > 0 ? (
-              <div className="space-y-3">
-                {answeredEpisodes.map(([q, a]) => (
-                  <div key={q}>
-                    <p className="mb-1 text-sm font-black text-ink">Q. {q}</p>
-                    <p className="whitespace-pre-wrap text-[15px] text-ink prof-hand">{a}</p>
-                  </div>
-                ))}
+            {/* 今月のエピソード質問（今月の1問） */}
+            {(monthlyBest3.episodeQ || hasEpisode) && (
+              <div>
+                {monthlyBest3.episodeQ && <p className="mb-1 text-sm font-black text-ink">Q. {monthlyBest3.episodeQ}</p>}
+                {hasEpisode ? (
+                  <p className="whitespace-pre-wrap text-[15px] text-ink prof-hand">{monthlyBest3.episode}</p>
+                ) : isSelf ? (
+                  <p className="text-xs font-bold text-muted">まだ書かれていません。✏️ 編集から今月の質問に答えられます。</p>
+                ) : null}
               </div>
-            ) : isSelf ? (
-              <p className="text-xs font-bold text-muted">まだ書かれていません。✏️ 編集から今月のエピソード質問に答えられます。</p>
-            ) : null}
+            )}
             {/* 今月のBEST3 */}
             <div>
               <p className="mb-1 text-sm font-black text-ink">Q. {monthlyBest3.theme} は？</p>
@@ -2873,9 +2881,8 @@ function OtherProfileScreen({
   const otherMonthly = (() => {
     const m = supabaseBook?.monthly;
     const cur = currentMonthInfo();
-    const hasEpisode = m?.episodes && Object.values(m.episodes).some((a) => (a ?? '').trim());
-    if (m && m.monthKey === cur.monthKey && (m.items.some((v) => v.trim()) || hasEpisode)) {
-      return { theme: cur.theme, label: cur.label, items: m.items, events: cur.events, episodes: m.episodes };
+    if (m && m.monthKey === cur.monthKey && (m.items.some((v) => v.trim()) || (m.episode ?? '').trim())) {
+      return { theme: cur.theme, label: cur.label, items: m.items, events: cur.events, episodeQ: cur.episodeQ, episode: m.episode };
     }
     return null;
   })();
@@ -3145,7 +3152,7 @@ function ProfileScreen({
   go: (s: Screen, answerId?: string) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
   best3: typeof defaultBest3;
-  monthlyBest3?: { theme: string; label: string; items: string[]; events?: string; episodes?: Record<string, string> } | null;
+  monthlyBest3?: { theme: string; label: string; items: string[]; events?: string; episodeQ?: string; episode?: string } | null;
   profileQuestions: typeof defaultProfileQuestions;
   avatarUrl: string;
   favoritePhotos: string[];
@@ -3277,7 +3284,7 @@ function ProfileEditScreen({
   profileBookInfo: typeof defaultProfileBookInfo;
   best3: typeof defaultBest3;
   monthlyBest3: MonthlyBest3;
-  onSaveMonthlyBest3: (items: string[], episodes: Record<string, string>) => void;
+  onSaveMonthlyBest3: (items: string[], episode: string) => void;
   profileQuestions: typeof defaultProfileQuestions;
   onSave: (next: typeof defaultProfileBookInfo) => void;
   onSaveBest3: (next: typeof defaultBest3) => void;
@@ -3307,8 +3314,7 @@ function ProfileEditScreen({
   const [form, setForm] = useState(profileBookInfo);
   const [best3Form, setBest3Form] = useState(best3);
   const [monthlyForm, setMonthlyForm] = useState<string[]>(monthlyBest3.items);
-  const [monthlyEpisodes, setMonthlyEpisodes] = useState<Record<string, string>>(monthlyBest3.episodes ?? {});
-  const [episodeQIdx, setEpisodeQIdx] = useState<number>(0);
+  const [monthlyEpisodeForm, setMonthlyEpisodeForm] = useState<string>(monthlyBest3.episode ?? '');
   const monthInfo = currentMonthInfo();
   const [questionsForm, setQuestionsForm] = useState(profileQuestions);
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
@@ -3715,49 +3721,19 @@ function ProfileEditScreen({
     <p className="text-xl font-black text-ink">🗓️ 今月のおだい</p>
     <p className="mt-1 text-xs font-bold text-muted">お題は毎月かわります。エピソードとBEST3、どちらか片方だけでもOK！</p>
   </div>
-  {/* 今月のエピソード質問（プールから選んで自由記述・複数回答OK） */}
-  {(() => {
-    const pool = monthInfo.episodePool;
-    const curQ = pool[episodeQIdx % pool.length];
-    const answeredList = Object.entries(monthlyEpisodes).filter(([, a]) => (a ?? '').trim());
-    return (
-      <div className="rounded-[20px] bg-white/70 p-4">
-        <p className="text-[11px] font-black text-muted">🍂 {monthInfo.events}</p>
-        <div className="mt-1 flex items-start justify-between gap-2">
-          <p className="text-sm font-black text-pinkStrong">Q. {curQ}</p>
-          <button
-            type="button"
-            onClick={() => setEpisodeQIdx((i) => (i + 1) % pool.length)}
-            className="shrink-0 rounded-full bg-pink/10 px-3 py-1 text-[11px] font-black text-pinkStrong active:scale-95"
-          >🔀 ほかの質問</button>
-        </div>
-        <textarea
-          value={monthlyEpisodes[curQ] ?? ''}
-          onChange={(e) => setMonthlyEpisodes((prev) => ({ ...prev, [curQ]: e.target.value }))}
-          rows={3}
-          maxLength={300}
-          placeholder="エピソードを自由に書いてみよう（答えたい質問だけでOK）"
-          className="mt-2 w-full resize-none rounded-2xl border border-pink/20 bg-white p-3 text-sm font-bold text-ink outline-none focus:border-pink"
-        />
-        {answeredList.length > 0 && (
-          <div className="mt-3 space-y-2">
-            <p className="text-[11px] font-black text-muted">回答ずみ（{answeredList.length}）※タップで編集</p>
-            {answeredList.map(([q, a]) => (
-              <button
-                key={q}
-                type="button"
-                onClick={() => { const idx = pool.indexOf(q); if (idx >= 0) setEpisodeQIdx(idx); }}
-                className="block w-full rounded-2xl bg-pink/5 p-3 text-left active:scale-[0.99]"
-              >
-                <span className="block text-[11px] font-black text-pinkStrong">Q. {q}</span>
-                <span className="mt-0.5 block text-xs font-bold text-ink line-clamp-2">{a}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  })()}
+  {/* 今月のエピソード質問（今月の1問・自由記述） */}
+  <div className="rounded-[20px] bg-white/70 p-4">
+    <p className="text-[11px] font-black text-muted">🍂 {monthInfo.events}</p>
+    <p className="mt-1 text-sm font-black text-pinkStrong">Q. {monthInfo.episodeQ}</p>
+    <textarea
+      value={monthlyEpisodeForm}
+      onChange={(e) => setMonthlyEpisodeForm(e.target.value)}
+      rows={3}
+      maxLength={300}
+      placeholder="エピソードを自由に書いてみよう"
+      className="mt-2 w-full resize-none rounded-2xl border border-pink/20 bg-white p-3 text-sm font-bold text-ink outline-none focus:border-pink"
+    />
+  </div>
   {/* 今月のBEST3 */}
   <div className="rounded-[20px] bg-white/70 p-4">
     <p className="text-sm font-black text-pinkStrong">Q. {monthInfo.theme} は？</p>
@@ -3955,7 +3931,7 @@ function ProfileEditScreen({
           onClick={() => {
             onSave(form);
             onSaveBest3(best3Form);
-            onSaveMonthlyBest3(monthlyForm, monthlyEpisodes);
+            onSaveMonthlyBest3(monthlyForm, monthlyEpisodeForm);
             onSaveQuestions(questionsForm);
             onSaveAvatar(localAvatarUrl);
             onSaveFavoritePhotos(localPhotos);
@@ -10007,12 +9983,12 @@ const [monthlyBest3, setMonthlyBest3] = useState<MonthlyBest3>(() => {
   return { monthKey, items: ['', '', ''] };
 });
 
-function updateMonthlyBest3(items: string[], episodes?: Record<string, string>) {
+function updateMonthlyBest3(items: string[], episode?: string) {
   const { monthKey } = currentMonthInfo();
-  // episodes は引数優先。未指定なら今月の既存値を維持（別々に保存しても消えないように）。
-  const prevEpisodes =
-    monthlyBest3 && monthlyBest3.monthKey === monthKey ? (monthlyBest3.episodes ?? {}) : {};
-  const rec: MonthlyBest3 = { monthKey, items, episodes: episodes !== undefined ? episodes : prevEpisodes };
+  // episode は引数優先。未指定なら今月の既存値を維持（別々に保存しても消えないように）。
+  const prevEpisode =
+    monthlyBest3 && monthlyBest3.monthKey === monthKey ? (monthlyBest3.episode ?? '') : '';
+  const rec: MonthlyBest3 = { monthKey, items, episode: episode !== undefined ? episode : prevEpisode };
   setMonthlyBest3(rec);
   localStorage.setItem('miri_monthly_best3', JSON.stringify(rec));
   persistBook();
@@ -10768,7 +10744,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         go={go}
         profileBookInfo={profileBookInfo}
         best3={best3}
-        monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items, events: currentMonthInfo().events, episodes: monthlyBest3.episodes }}
+        monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items, events: currentMonthInfo().events, episodeQ: currentMonthInfo().episodeQ, episode: monthlyBest3.episode }}
         profileQuestions={profileQuestions}
         avatarUrl={avatarUrl}
         favoritePhotos={favoritePhotos}
@@ -10827,7 +10803,7 @@ return <ProfileScreen
   go={go}
   profileBookInfo={profileBookInfo}
   best3={best3}
-  monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items, events: currentMonthInfo().events, episodes: monthlyBest3.episodes }}
+  monthlyBest3={{ theme: currentMonthInfo().theme, label: currentMonthInfo().label, items: monthlyBest3.items, events: currentMonthInfo().events, episodeQ: currentMonthInfo().episodeQ, episode: monthlyBest3.episode }}
   profileQuestions={profileQuestions}
   avatarUrl={avatarUrl}
   favoritePhotos={favoritePhotos}
