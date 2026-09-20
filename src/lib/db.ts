@@ -229,6 +229,24 @@ export async function getUserChoices(username: string): Promise<Record<string, s
   return ((book as any)?.__choices ?? {}) as Record<string, string>;
 }
 
+/** コンテンツの通報を reports テーブルへ投稿（最小構成）。 */
+export async function submitReport(
+  targetType: 'answer' | 'blog' | 'diary' | 'comment' | 'profile',
+  targetId: string,
+  reason = '',
+): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: uid,
+    target_type: targetType,
+    target_id: String(targetId),
+    reason: (reason || '').slice(0, 500),
+  });
+  return !error;
+}
+
 /** テスターのフィードバック（意見・要望・不具合）を feedback テーブルへ投稿。 */
 export async function submitFeedback(kind: 'bug' | 'request' | 'question', body: string): Promise<boolean> {
   if (!supabase) return false;

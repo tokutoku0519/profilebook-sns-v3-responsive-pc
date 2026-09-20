@@ -202,7 +202,15 @@ drop policy if exists "answers readable"   on public.answers;
 drop policy if exists "answers insert own" on public.answers;
 drop policy if exists "answers update own" on public.answers;
 drop policy if exists "answers delete own" on public.answers;
-create policy "answers readable"   on public.answers for select using (visibility <> 'private' or auth.uid() = user_id);
+-- 公開=誰でも / 本人=常に / フォロワー限定=作者をフォローしている人だけ / 非公開=本人のみ
+create policy "answers readable"   on public.answers for select using (
+  visibility = 'public'
+  or auth.uid() = user_id
+  or (visibility = 'followers' and exists (
+        select 1 from public.follows f
+        where f.following_id = answers.user_id and f.follower_id = auth.uid()
+      ))
+);
 create policy "answers insert own" on public.answers for insert with check (auth.uid() = user_id);
 create policy "answers update own" on public.answers for update using (auth.uid() = user_id);
 create policy "answers delete own" on public.answers for delete using (auth.uid() = user_id);
@@ -631,3 +639,22 @@ create policy "perception readable"  on public.perception_votes for select using
 create policy "perception insert own" on public.perception_votes for insert with check (auth.uid() = voter_id and voter_id <> target_id);
 create policy "perception update own" on public.perception_votes for update using (auth.uid() = voter_id);
 create policy "perception delete own" on public.perception_votes for delete using (auth.uid() = voter_id);
+
+-- ── reports：ユーザーからの通報（最小構成）─────────────────
+-- 誰でも自分名義で通報を投稿でき、閲覧は本人のぶんのみ。運営は SQL Editor / service_role で確認。
+create table if not exists public.reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  target_type text not null,             -- answer / blog / diary / comment / profile
+  target_id   text not null,             -- 対象のID（文字列で保持）
+  reason      text default '',
+  status      text not null default 'open', -- open / handled
+  created_at  timestamptz default now()
+);
+create index if not exists reports_status_idx on public.reports (status, created_at);
+
+alter table public.reports enable row level security;
+drop policy if exists "reports insert own" on public.reports;
+drop policy if exists "reports select own" on public.reports;
+create policy "reports insert own" on public.reports for insert with check (auth.uid() = reporter_id);
+create policy "reports select own" on public.reports for select using (auth.uid() = reporter_id);

@@ -46,7 +46,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, submitReport, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'collab' | 'diagnosis';
 type Question = (typeof questions)[number];
@@ -5194,7 +5194,7 @@ function firstGrapheme(s: string): string {
 }
 
 function DetailScreen({
-  go, answer, onReact, reactions, authorUid, isBookmarked, onToggleBookmark, onShare,
+  go, answer, onReact, reactions, authorUid, isBookmarked, onToggleBookmark, onShare, onReport,
   ownedPackIds = [], ownedGachaStickers = [],
 }: {
   go: (s: Screen, payload?: any) => void;
@@ -5205,6 +5205,7 @@ function DetailScreen({
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
   onShare: (text: string) => void;
+  onReport?: (answerId: string) => void;
   ownedPackIds?: string[];
   ownedGachaStickers?: string[];
 }) {
@@ -5310,6 +5311,18 @@ function DetailScreen({
             {isBookmarked ? '保存済み' : 'ブックマーク'}
           </button>
         </div>
+
+        {/* 通報（自分の回答には出さない） */}
+        {onReport && answer.user?.id !== me.id && (
+          <div className="text-center">
+            <button
+              onClick={() => onReport(answer.id)}
+              className="text-[11px] font-bold text-muted underline underline-offset-2 active:opacity-70"
+            >
+              🚩 この回答を通報する
+            </button>
+          </div>
+        )}
 
         <section className="rounded-[28px] bg-white p-4 shadow-card">
           <SectionHeader title="コメント" />
@@ -10505,8 +10518,17 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     );
   }
 
-  function reportDiaryEntry(_pageId: string, _entryId: string) {
-    // 実装時はサーバーへ報告を送る。現状はUI側で「報告済み」表示のみ。
+  // 通報：確認 → reports テーブルへ送信 → トースト。運営は Supabase で確認して手動対応。
+  async function reportAnswer(answerId: string) {
+    if (!dbReady()) { showToast('通報は本番環境でのみ利用できます', 'error'); return; }
+    if (!window.confirm('この回答を通報しますか？（運営が内容を確認します）')) return;
+    const ok = await submitReport('answer', answerId);
+    showToast(ok ? '通報しました。ご協力ありがとうございます' : '通報に失敗しました。時間をおいて再度お試しください', ok ? 'success' : 'error');
+  }
+
+  function reportDiaryEntry(pageId: string, entryId: string) {
+    if (!dbReady()) return;
+    void submitReport('diary', `${pageId}:${entryId}`);
   }
 
   // ── ブログ（個人記事）────────────────────────────────────────
@@ -10769,6 +10791,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         isBookmarked={bookmarks.includes(selectedAnswer.id)}
         onToggleBookmark={toggleBookmark}
         onShare={shareText}
+        onReport={reportAnswer}
       />
     );
     if (screen === 'bookmarks') return (
