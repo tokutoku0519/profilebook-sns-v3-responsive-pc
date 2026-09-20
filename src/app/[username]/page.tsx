@@ -27,7 +27,7 @@ import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
-import { getQuestionsForLang } from '@/lib/localeQuestions';
+import { getQuestionsForLang, getActiveQuestionsForLang } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
@@ -8902,7 +8902,10 @@ function AppContent() {
   // 画面全体のハードコード日本語UIを自動翻訳（t()未対応の文字列を一括でカバー）
   useAutoTranslateUI(lang);
 
+  // 全質問（過去回答のタイトル解決・検索用。RETIRED も含む＝表示が壊れない）
   const localizedQuestions = useMemo(() => getQuestionsForLang(lang), [lang]);
+  // 現役の質問（デイリー出題・新規回答の候補に使う。RETIRED は除外）
+  const activeQuestions = useMemo(() => getActiveQuestionsForLang(lang), [lang]);
 
   const [translatedAnswerBodies, setTranslatedAnswerBodies] = useState<Record<string, string>>({});
   const [isTranslating, setIsTranslating] = useState(false);
@@ -8957,9 +8960,9 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // 日次お題は「プロフ帳の標準しつもん」と同内容のものを出さない（二度手間を避ける）。
   // 重複するお題IDをここに追加する（例：q4/eq14＝「いま一番ハマってること」＝しつもん「最近ハマっていることは？」）。
   const dailyPool = useMemo(() => {
-    const pool = localizedQuestions.filter((q) => !DAILY_EXCLUDE_QIDS.has(q.id));
-    return pool.length ? pool : localizedQuestions;
-  }, [localizedQuestions]);
+    const pool = activeQuestions.filter((q) => !DAILY_EXCLUDE_QIDS.has(q.id));
+    return pool.length ? pool : activeQuestions;
+  }, [activeQuestions]);
 
   // ── 今日のお題（言語に応じて切り替わる）────────────────────────
   const dailyQuestion = useMemo(() => {
@@ -10189,7 +10192,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       setSelectedQuestion(payload);
     } else {
       const dailyOk = dailyQuestion && !myAnsweredQids.has(dailyQuestion.id) ? dailyQuestion : null;
-      const firstUnanswered = localizedQuestions.find((q) => !myAnsweredQids.has(q.id));
+      const firstUnanswered = activeQuestions.find((q) => !myAnsweredQids.has(q.id));
       setSelectedQuestion(dailyOk ?? firstUnanswered ?? dailyQuestion ?? null);
     }
   }
@@ -10720,7 +10723,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       go={go}
       onPost={postAnswer}
       question={selectedQuestion}
-      questionList={[...communityQuestions, ...localizedQuestions].filter((q) => !myAnsweredQids.has(q.id) || q.id === selectedQuestion?.id)}
+      questionList={[...communityQuestions, ...activeQuestions].filter((q) => !myAnsweredQids.has(q.id) || q.id === selectedQuestion?.id)}
       onCreateDiary={(caption, photoUrl, _font, textColor, visibility, mentionedUserIds) =>
         createDiaryPage(caption.slice(0, 20) || '思い出の1ページ', '', caption, photoUrl, visibility, mentionedUserIds, { textColor })
       }
