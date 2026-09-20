@@ -24,13 +24,17 @@ Moltbook の致命傷（①RLS が無い ②service_role 級の鍵がブラウ�
 
 > ⚠️ 有効化には Supabase SQL Editor で `supabase/schema.sql` の再実行が必要（トリガー追加・バックフィル）。
 
+## 対応済み（追記）
+- **プロフィール book の DB 直叩き読み取りを封鎖（教訓1・2／旧・最優先の残1）＝完了・本番確認済み**
+  - `book` を本人しか読めない `profile_book` テーブルへ分離（RLS: self のみ select）。
+  - 他人へは SECURITY DEFINER 関数 `get_visible_book()` で公開分のみ返す（非公開/フォロワー
+    限定・`__game`/`__purchases`/`__visibility` は除外）。
+  - 旧 `profiles.book` は STEP3 でクリア済み（直叩きしても中身は空）。DBで確認済み
+    （profiles.book_with_data=0 / profile_book にデータ）。
+  - 書き込みは `profile_book` への UPDATE（本人のみ）に統一。フォールバックで公開テーブルへ
+    書く経路も撤去済み。
+
 ## 残（要対応・データモデル変更やインフラ設定が必要／今回は未実施）
-1. **プロフィール book の DB 直叩き読み取り**（教訓1・2の残り／最優先）
-   - 現状 `profiles readable using(true)` のため、anon key で API を直接叩けば他人の生 `book`
-     （非公開指定の項目含む）を取得可能。アプリ経由はサニタイズ済みだが、直叩きは防げていない。
-   - 恒久対策：`book`（少なくとも `__game`/`__purchases`/`__choices` と非公開項目）を
-     **self-only RLS の別テーブルへ分離**し、公開分は SECURITY DEFINER 関数/ビューで返す。
-     ＝読み取り経路の書き換えを伴う中規模の移行。
 2. **コインのサーバー権威化**（教訓の経済整合性）
    - 現状は獲得/消費がクライアント権威で、ユーザーが自分の `book.__game.coins` を直叩きで改変可能
      （自分の残高のみ・他人やデータ流出には無関係）。購入分のみサーバー権威（Webhook）。
