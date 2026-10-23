@@ -901,6 +901,8 @@ const BLOOD_TYPE_OPTIONS = ['A型', 'B型', 'O型', 'AB型', '不明'];
 const MBTI_OPTIONS = ['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'];
 const SUBJECT_OPTIONS = ['国語','数学','英語','理科','社会','体育','音楽','美術','家庭科','技術','現代文','古文','漢文','化学','物理','生物','地理','歴史','倫理','情報'];
 const PERSONALITY_OPTIONS = ['おっとり系','元気・明るい','クール・落ち着き','ちょっと不思議','真面目','天然','ふわふわ','ツンデレ','好奇心旺盛','マイペース','リーダー気質','聞き上手'];
+// 性格投票の集計は選択肢にある値だけを表示する（DB側の値チェックと合わせた二重の守り）
+const onlyKnownPerception = (s: PerceptionSummary): PerceptionSummary => s.filter((x) => PERSONALITY_OPTIONS.includes(x.value));
 
 type ProfileFieldDef = {
   key: string;
@@ -2716,7 +2718,7 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const load = () => {
-    getPerceptionSummary(targetUid).then((r) => { setSummary(r.summary); setMyVote(r.myVote); setTotal(r.total); });
+    getPerceptionSummary(targetUid).then((r) => { const known = onlyKnownPerception(r.summary); setSummary(known); setMyVote(r.myVote && PERSONALITY_OPTIONS.includes(r.myVote) ? r.myVote : null); setTotal(known.reduce((n, x) => n + x.count, 0)); });
   };
   useEffect(() => { if (dbReady() && targetUid) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [targetUid]);
   if (!dbReady() || !targetUid) return null;
@@ -2788,7 +2790,7 @@ function MyPerceptionCard() {
     let cancelled = false;
     getCurrentUserId().then((uid) => {
       if (cancelled || !uid) return;
-      getPerceptionSummary(uid).then((r) => { if (!cancelled) { setSummary(r.summary); setTotal(r.total); } });
+      getPerceptionSummary(uid).then((r) => { if (!cancelled) { const known = onlyKnownPerception(r.summary); setSummary(known); setTotal(known.reduce((n, x) => n + x.count, 0)); } });
     });
     return () => { cancelled = true; };
   }, []);

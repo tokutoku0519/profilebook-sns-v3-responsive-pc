@@ -150,12 +150,30 @@ export async function getCurrentUserId(): Promise<string | null> {
 // ── 他己紹介アンケート（性格などを他人が投票） ────────────────
 export type PerceptionSummary = { value: string; count: number }[];
 
-/** 対象ユーザーの投票集計（多い順）と、自分が入れている票を取得。 */
+/** 対象ユーザーの投票集計（多い順）と、自分が入れている票を取得。
+ *  ① 集計関数 get_perception_summary（patch_perception_votes.sql 最終版）があればそれを使う。
+ *     → 票数と「自分の票か」だけが返り、誰が投票したか（voter_id）は返らない。
+ *  ② 関数がまだ無い環境（SQL 未適用）だけ、従来どおり表を直接集計する。
+ *  テーブル自体が無い場合はどちらも失敗し、空の集計（0人）を返す（画面は壊さない）。 */
 export async function getPerceptionSummary(
   targetUid: string,
   category = 'personality',
 ): Promise<{ summary: PerceptionSummary; myVote: string | null; total: number }> {
-  if (!supabase || !targetUid) return { summary: [], myVote: null, total: 0 };
+  const empty = { summary: [] as PerceptionSummary, myVote: null, total: 0 };
+  if (!supabase || !targetUid) return empty;
+  const { data: agg, error: aggErr } = await supabase.rpc('get_perception_summary', { target: targetUid, cat: category });
+  if (!aggErr && Array.isArray(agg)) {
+    const rows = agg as { value: string; votes: number | string; mine: boolean }[];
+    const summary = rows.map((r) => ({ value: r.value, count: Number(r.votes) || 0 })).sort((a, b) => b.count - a.count);
+    return {
+      summary,
+      myVote: rows.find((r) => r.mine)?.value ?? null,
+      total: summary.reduce((s, r) => s + r.count, 0),
+    };
+  }
+  // 関数が「存在しない」場合だけ旧方式へ（通信エラー等で旧方式に落ちると票数が狂うため）
+  const fnMissing = aggErr && (aggErr.code === 'PGRST202' || aggErr.code === '42883' || /could not find the function/i.test(aggErr.message ?? ''));
+  if (aggErr && !fnMissing) return empty;
   const { data } = await supabase
     .from('perception_votes')
     .select('voter_id,value')

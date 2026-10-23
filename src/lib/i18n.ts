@@ -290,7 +290,7 @@ const dict: Record<Lang, Dict> = {
     sec_free_stamps: 'Libreng Sticker', sec_paid_stamps: 'Premium Sticker', sec_gacha_stamps: 'Gacha Sticker', label_free: 'Libre',
   },
   ms: {
-    tab_home: 'Utama', tab_search: 'Terokai', tab_create: 'Hantar', tab_notifications: 'Pemberitahuan', tab_mypage: 'Profil',
+    tab_home: 'Utama', tab_search: 'Terokai', tab_create: 'Hantar', tab_notifications: 'Notifikasi', tab_mypage: 'Profil',
     sec_basic: 'Maklumat Asas', sec_likes: 'Suka & Tidak Suka', sec_about: 'Tentang Saya',
     field_name: 'Nama', field_nickname: 'Nama Panggilan', field_birthday: 'Hari Jadi',
     field_bloodType: '', field_gender: 'Jantina', field_mbti: 'MBTI', field_hometown: 'Kampung Halaman',
@@ -346,7 +346,7 @@ const dict: Record<Lang, Dict> = {
     sec_free_stamps: 'Calcomanías Gratis', sec_paid_stamps: 'Calcomanías Premium', sec_gacha_stamps: 'Calcomanías Gacha', label_free: 'Gratis',
   },
   pt: {
-    tab_home: 'Início', tab_search: 'Explorar', tab_create: 'Publicar', tab_notifications: 'Notificações', tab_mypage: 'Perfil',
+    tab_home: 'Início', tab_search: 'Explorar', tab_create: 'Publicar', tab_notifications: 'Alertas', tab_mypage: 'Perfil',
     sec_basic: 'Informações básicas', sec_likes: 'Gostos e desgostos', sec_about: 'Sobre mim',
     field_name: 'Nome', field_nickname: 'Apelido', field_birthday: 'Aniversário',
     field_bloodType: '', field_gender: 'Gênero', field_mbti: 'MBTI', field_hometown: 'Cidade natal',
@@ -402,7 +402,7 @@ const dict: Record<Lang, Dict> = {
     sec_free_stamps: 'Autocollants Gratuits', sec_paid_stamps: 'Autocollants Premium', sec_gacha_stamps: 'Autocollants Gacha', label_free: 'Gratuit',
   },
   de: {
-    tab_home: 'Startseite', tab_search: 'Entdecken', tab_create: 'Posten', tab_notifications: 'Benachrichtigungen', tab_mypage: 'Profil',
+    tab_home: 'Startseite', tab_search: 'Entdecken', tab_create: 'Posten', tab_notifications: 'Meldungen', tab_mypage: 'Profil',
     sec_basic: 'Grundinformationen', sec_likes: 'Mag & Mag nicht', sec_about: 'Über mich',
     field_name: 'Name', field_nickname: 'Spitzname', field_birthday: 'Geburtstag',
     field_bloodType: '', field_gender: 'Geschlecht', field_mbti: 'MBTI', field_hometown: 'Heimatstadt',
@@ -458,7 +458,7 @@ const dict: Record<Lang, Dict> = {
     sec_free_stamps: 'Adesivi Gratuiti', sec_paid_stamps: 'Adesivi Premium', sec_gacha_stamps: 'Adesivi Gacha', label_free: 'Gratuito',
   },
   ru: {
-    tab_home: 'Главная', tab_search: 'Поиск', tab_create: 'Создать', tab_notifications: 'Уведомления', tab_mypage: 'Профиль',
+    tab_home: 'Главная', tab_search: 'Поиск', tab_create: 'Создать', tab_notifications: 'Оповещения', tab_mypage: 'Профиль',
     sec_basic: 'Основная информация', sec_likes: 'Нравится и не нравится', sec_about: 'О себе',
     field_name: 'Имя', field_nickname: 'Никнейм', field_birthday: 'День рождения',
     field_bloodType: '', field_gender: 'Пол', field_mbti: 'MBTI', field_hometown: 'Родной город',

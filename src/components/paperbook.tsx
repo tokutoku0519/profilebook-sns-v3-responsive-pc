@@ -267,7 +267,7 @@ export function HeartMeter({ level, max = 5 }: { level: number; max?: number }) 
           <span
             key={i}
             aria-hidden
-            className="grid h-8 w-8 place-items-center rounded-full border-2 border-dashed border-pink/45 bg-white/60 text-[15px] font-black leading-none text-pink/70"
+            className="grid h-8 w-8 place-items-center rounded-full border-2 border-dashed border-muted/50 bg-white/60 text-[15px] font-black leading-none text-muted"
           >
             ♡
           </span>

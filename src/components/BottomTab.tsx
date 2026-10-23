@@ -50,12 +50,17 @@ export function BottomTab({ active, onChange, lang = 'ja', unread = 0, themeGrad
               </button>
             );
           }
+          // 長い訳語（例：独 Benachrichtigungen）は文字を少し小さくし、それでも入らなければ省略。
+          // 正式名は読み上げ名（aria-label）とツールチップ（title）で常に提供する。
+          const long = label.length > 8;
           return (
             <button
               key={item.key}
               onClick={() => onChange(item.key)}
+              aria-label={label}
+              title={label}
               aria-current={isActive ? 'page' : undefined}
-              className={`relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-t-xl px-1 pb-1 pt-2 text-[11px] font-black transition ${
+              className={`relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-t-xl px-0.5 pb-1 pt-2 text-[11px] font-black transition ${
                 isActive
                   ? '-translate-y-1 bg-white text-ink shadow-[0_-2px_8px_rgba(0,0,0,.08)]'
                   : 'text-muted'
@@ -69,7 +74,7 @@ export function BottomTab({ active, onChange, lang = 'ja', unread = 0, themeGrad
                   <span className="absolute -right-2.5 -top-1.5 grid h-4 min-w-[16px] place-items-center rounded-full bg-pink px-1 text-[9px] font-black text-white">{unread > 9 ? '9+' : unread}</span>
                 )}
               </span>
-              {label}
+              <span aria-hidden className={`block w-full truncate text-center leading-tight ${long ? 'text-[10px] tracking-tight' : ''}`}>{label}</span>
             </button>
           );
         })}
