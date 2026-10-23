@@ -138,7 +138,7 @@ export const BG_THEMES: BgTheme[] = [
     emoji: '🎀',
     description: 'プリ帳・デコ電・りぼん。あのころの女の子の部屋。',
     rarity: 'SR',
-    gradient: 'from-pink-300 via-fuchsia-200 to-purple-300',
+    gradient: 'from-[#f9a8d4] via-fuchsia-200 to-[#d8b4fe]',
     floaters: [
       { art: 'ribbon', left: 76, top: 10, size: 1.8, delay: 0.0, duration: 6 },
       { art: 'ribbon', left: 34, top: 30, size: 0.9, delay: 2.4, duration: 7 },
@@ -160,7 +160,7 @@ export const BG_THEMES: BgTheme[] = [
     emoji: '🌌',
     description: '流れ星に願いごと。満天の星のプロフ帳。',
     rarity: 'SR',
-    gradient: 'from-indigo-400 via-purple-300 to-pink-300',
+    gradient: 'from-indigo-400 via-[#d8b4fe] to-[#f9a8d4]',
     floaters: [
       { art: 'galaxy', left: 70, top: 12, size: 1.8, delay: 0.0, duration: 9 },
       { art: 'planet', left: 86, top: 56, size: 1.4, delay: 0.4, duration: 8 },
@@ -187,12 +187,12 @@ export const BG_THEMES: BgTheme[] = [
 export type PurchasableTheme = BgTheme & { price: number };
 
 export const COLOR_THEMES: PurchasableTheme[] = [
-  { id: 'ct-sakura',  name: 'さくら夜',           emoji: '🌸', description: '夜桜みたいなピンクのグラデーション。', rarity: 'N', gradient: 'from-pink-200 via-rose-100 to-purple-100',    floaters: [], price: 120 },
+  { id: 'ct-sakura',  name: 'さくら夜',           emoji: '🌸', description: '夜桜みたいなピンクのグラデーション。', rarity: 'N', gradient: 'from-[#fbcfe8] via-rose-100 to-[#f3e8ff]',    floaters: [], price: 120 },
   { id: 'ct-ocean',   name: 'ディープオーシャン', emoji: '🌊', description: '深い海の色。すっきりクールに。',       rarity: 'N', gradient: 'from-blue-200 via-cyan-100 to-sky-100',       floaters: [], price: 150 },
-  { id: 'ct-galaxy',  name: 'ギャラクシー',       emoji: '🌌', description: '銀河のむらさき。ちょっとミステリアス。', rarity: 'N', gradient: 'from-indigo-300 via-purple-200 to-pink-200',  floaters: [], price: 200 },
+  { id: 'ct-galaxy',  name: 'ギャラクシー',       emoji: '🌌', description: '銀河のむらさき。ちょっとミステリアス。', rarity: 'N', gradient: 'from-indigo-300 via-[#e9d5ff] to-[#fbcfe8]',  floaters: [], price: 200 },
   { id: 'ct-autumn',  name: 'もみじ',             emoji: '🍂', description: '秋のあたたかいオレンジ。',             rarity: 'N', gradient: 'from-orange-200 via-amber-100 to-yellow-100', floaters: [], price: 120 },
-  { id: 'ct-rainbow', name: 'レインボー',         emoji: '🌈', description: 'にじ色でいちばん目立つ！',             rarity: 'N', gradient: 'from-pink-200 via-yellow-100 to-green-100',   floaters: [], price: 180 },
-  { id: 'ct-mist',    name: 'ミスティパープル',   emoji: '🌙', description: '霧のかかった夜のむらさき。',           rarity: 'N', gradient: 'from-violet-300 via-purple-200 to-fuchsia-100', floaters: [], price: 150 },
+  { id: 'ct-rainbow', name: 'レインボー',         emoji: '🌈', description: 'にじ色でいちばん目立つ！',             rarity: 'N', gradient: 'from-[#fbcfe8] via-yellow-100 to-green-100',   floaters: [], price: 180 },
+  { id: 'ct-mist',    name: 'ミスティパープル',   emoji: '🌙', description: '霧のかかった夜のむらさき。',           rarity: 'N', gradient: 'from-violet-300 via-[#e9d5ff] to-fuchsia-100', floaters: [], price: 150 },
 ];
 
 // ── ガチャ排出ロジック（スタンプガチャと同じ重み） ──────────

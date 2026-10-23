@@ -3013,7 +3013,7 @@ function OtherProfileScreen({
       <div className="px-4 pt-3">
         <button
           onClick={() => go('diagnosis', profile.id)}
-          className="relative w-full overflow-hidden rounded-[18px] border-2 border-dashed border-white/70 bg-gradient-to-r from-pink to-purple py-3.5 text-sm font-black text-white shadow-card active:scale-[0.99]"
+          className="relative w-full overflow-hidden rounded-[18px] pb-banner border-2 border-dashed border-white/70 py-3.5 text-sm font-black shadow-card active:scale-[0.99]"
         >
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
           💯 {profile.name}との一致率しんだん
@@ -7828,9 +7828,9 @@ function DiagnosisScreen({ go, target }: { go: (s: Screen, payload?: any) => voi
       <>
         <AppHeader title="一致率しんだん" back onBack={back} />
         <div className="space-y-4 px-4 pt-3 pb-32">
-          <div className="rounded-[24px] bg-gradient-to-r from-blue-400 to-purple-400 p-5 text-white shadow-card">
+          <div className="pb-banner rounded-[24px] p-5 shadow-card">
             <p className="text-sm font-black">💯 あなたの答えを登録</p>
-            <p className="mt-1 text-xs font-bold opacity-90">答えておくと、友達があなたとの一致率を診断できます！</p>
+            <p className="mt-1 text-xs font-bold">答えておくと、友達があなたとの一致率を診断できます！</p>
           </div>
           {CHOICE_QUESTIONS.map((q) => <QChoice key={q.key} q={q} accent="bg-pink" />)}
           <button onClick={async () => setSaved(await saveMyChoices(picks))} disabled={answered === 0}
@@ -7878,9 +7878,9 @@ function DiagnosisScreen({ go, target }: { go: (s: Screen, payload?: any) => voi
     <>
       <AppHeader title="一致率しんだん" back onBack={back} />
       <div className="space-y-4 px-4 pt-3 pb-32">
-        <div className="rounded-[24px] bg-gradient-to-r from-pink to-purple-400 p-5 text-white shadow-card">
+        <div className="pb-banner rounded-[24px] p-5 shadow-card">
           <p className="text-sm font-black">💯 {target} との一致率しんだん</p>
-          <p className="mt-1 text-xs font-bold opacity-90">あなたはどっち？答えると一致率が出るよ！</p>
+          <p className="mt-1 text-xs font-bold">あなたはどっち？答えると一致率が出るよ！</p>
         </div>
         {answerable.map((q) => <QChoice key={q.key} q={q} accent="bg-blue-400" />)}
         <button onClick={() => setResult(matchPercent(picks, targetChoices))} disabled={done < answerable.length}
@@ -7899,9 +7899,9 @@ function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
     <>
       <AppHeader title="コラボ特集" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
-        <div className="rounded-[24px] bg-gradient-to-r from-blue-400 to-purple-400 p-5 text-white shadow-card">
+        <div className="pb-banner rounded-[24px] p-5 shadow-card">
           <p className="text-sm font-black">🤝 ブランドコラボ</p>
-          <p className="mt-1 text-xs font-bold opacity-90">お気に入りブランドの限定スタンプ・背景・お題をチェック！</p>
+          <p className="mt-1 text-xs font-bold">お気に入りブランドの限定スタンプ・背景・お題をチェック！</p>
         </div>
         {campaigns.length === 0 && <EmptyState text="いまは開催中のコラボはありません。" />}
         {campaigns.map((c) => {

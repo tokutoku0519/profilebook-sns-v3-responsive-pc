@@ -573,3 +573,15 @@ button, input, textarea { font: inherit; }
   flex: 1; min-width: 0; word-break: break-word; padding-bottom: 3px;
   border-bottom: 2px dotted rgb(var(--pb-line) / .42);
 }
+
+/* 白文字を載せる帯（一致率しんだん・コラボ・診断チケットなど）。
+   テーマ色に追従しつつ固定ネイビーを混ぜ、全8テーマで白文字のコントラスト 4.76:1 以上を確保。
+   ※ 夜テーマは --color-ink が明るい色になるため、ink トークンではなく固定ネイビーで暗くする。
+   ※ color-mix 非対応ブラウザでは単色（pink-strong）になる。 */
+.pb-banner {
+  background-color: rgb(var(--color-pink-strong));
+  background-image: linear-gradient(90deg,
+    color-mix(in srgb, rgb(var(--color-pink-strong)) 60%, #1F2C56),
+    color-mix(in srgb, rgb(var(--color-purple)) 55%, #1F2C56));
+  color: #fff;
+}
