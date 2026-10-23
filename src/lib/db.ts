@@ -172,22 +172,48 @@ export async function getPerceptionSummary(
   return { summary, myVote, total: rows.length };
 }
 
-/** 対象ユーザーへ1票入れる（付け替え）。自分自身へは不可。 */
+/** 投票結果。失敗時は理由を返す（UIで「なぜ投票できないか」を表示するため）。 */
+export type VoteResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_configured' | 'not_logged_in' | 'self' | 'not_ready' | 'error'; detail?: string };
+
+/** 対象ユーザーへ1票入れる（付け替え）。自分自身へは不可。
+ *  upsert（INSERT … ON CONFLICT）は RLS の insert/update 併用で弾かれ得るため使わず、
+ *  既存票を UPDATE → 無ければ INSERT する（重複防止は unique(target,voter,category) が担保）。 */
 export async function castPerceptionVote(
   targetUid: string,
   value: string,
   category = 'personality',
-): Promise<boolean> {
-  if (!supabase || !targetUid) return false;
+): Promise<VoteResult> {
+  if (!supabase) return { ok: false, reason: 'not_configured' };
+  if (!targetUid) return { ok: false, reason: 'error', detail: 'no_target' };
   const uid = await getCurrentUserId();
-  if (!uid || uid === targetUid) return false;
-  const { error } = await supabase
+  if (!uid) return { ok: false, reason: 'not_logged_in' };
+  if (uid === targetUid) return { ok: false, reason: 'self' };
+  const { data: upd, error: updErr } = await supabase
     .from('perception_votes')
-    .upsert(
-      { target_id: targetUid, voter_id: uid, category, value },
-      { onConflict: 'target_id,voter_id,category' },
-    );
-  return !error;
+    .update({ value })
+    .eq('target_id', targetUid)
+    .eq('voter_id', uid)
+    .eq('category', category)
+    .select('target_id');
+  if (updErr) return classifyVoteError(updErr);
+  if (Array.isArray(upd) && upd.length > 0) return { ok: true };
+  const { error: insErr } = await supabase
+    .from('perception_votes')
+    .insert({ target_id: targetUid, voter_id: uid, category, value });
+  if (insErr) return classifyVoteError(insErr);
+  return { ok: true };
+}
+
+// テーブル未作成（42P01 / PGRST205）は「準備未完了」、それ以外は一般エラー。
+function classifyVoteError(err: { code?: string; message?: string }): VoteResult {
+  const code = err.code ?? '';
+  const msg = err.message ?? '';
+  if (code === '42P01' || code === 'PGRST205' || /does not exist|schema cache/i.test(msg)) {
+    return { ok: false, reason: 'not_ready', detail: msg };
+  }
+  return { ok: false, reason: 'error', detail: msg };
 }
 
 /** 自分の票を取り消す。 */

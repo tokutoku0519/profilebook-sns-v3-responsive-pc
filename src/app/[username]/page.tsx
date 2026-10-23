@@ -19,7 +19,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
     return this.props.children;
   }
 }
-import { ArrowLeft, Bell, Bookmark, Heart, Home, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, Bookmark, Handshake, Heart, Home, Lock, LogOut, Plus, Search, Settings, Share2, ShoppingBag, UserRound, Users } from 'lucide-react';
 import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
@@ -1211,33 +1211,41 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
     { key: 'notifications', labelKey: 'tab_notifications', icon: Bell, screen: 'notifications' },
     { key: 'mypage', labelKey: 'tab_mypage', icon: UserRound, screen: 'mypage' }
   ];
+  // 全項目を同じルール（アイコン/文字/余白）で描く。選択中は「ノートのインデックス」：
+  // クリーム紙＋左端の色付きタブ＋濃い文字。装飾は選択中だけに付けて主張しすぎない。
+  const NavRow = ({ icon: Icon, label, selected, onClick }: { icon: any; label: string; selected: boolean; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      aria-current={selected ? 'page' : undefined}
+      className={`relative flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-black transition ${
+        selected ? 'bg-cream text-ink shadow-[0_2px_0_rgba(0,0,0,.08)]' : 'text-muted hover:bg-pink/10 hover:text-ink'
+      }`}
+    >
+      {selected && <span aria-hidden className="absolute inset-y-1.5 left-0 w-1.5 rounded-r-full bg-pink" />}
+      <Icon size={20} className={selected ? 'text-pink' : ''} />
+      {label}
+    </button>
+  );
+  const secondary: { screen: Screen; label: string; icon: any }[] = [
+    { screen: 'shop', label: t('nav_shop', lang), icon: ShoppingBag },
+    { screen: 'collab', label: 'コラボ', icon: Handshake },
+    { screen: 'circles', label: t('nav_circles', lang), icon: Lock },
+    { screen: 'followers', label: t('nav_following', lang), icon: Users },
+    { screen: 'settings', label: t('nav_settings', lang), icon: Settings },
+  ];
   return (
     <aside className="hidden h-[calc(100vh-48px)] w-[220px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur md:block lg:w-[260px]">
       <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card overflow-hidden"><img src="/icon.png" alt="Miri" className="h-full w-full object-cover" /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
-      <nav className="space-y-2">
-        <div className="mb-1 pl-1"><TapeLabel tone="sax" rotate={-2} className="text-[11px]">めにゅー</TapeLabel></div>
-        {items.map((item) => { const Icon = item.icon; const isActive = !inSecondary && active === item.key; return (
-          <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-            <Icon size={20} />{t(item.labelKey, lang)}
-          </button>
-        ); })}
+      <nav className="space-y-1">
+        {items.map((item) => (
+          <NavRow key={item.key} icon={item.icon} label={t(item.labelKey, lang)} selected={!inSecondary && active === item.key} onClick={() => go(item.screen)} />
+        ))}
       </nav>
-      <div className="mt-4 space-y-2">
-        <button onClick={() => go('shop')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'shop' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-          <ShoppingBag size={20} />{t('nav_shop', lang)}
-        </button>
-        <button onClick={() => go('collab')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'collab' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-          <span className="text-base">🤝</span>コラボ
-        </button>
-        <button onClick={() => go('circles')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'circles' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-          <span className="text-base">🔒</span>{t('nav_circles', lang)}
-        </button>
-        <button onClick={() => go('followers')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'followers' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-          <UserRound size={20} />{t('nav_following', lang)}
-        </button>
-        <button onClick={() => go('settings')} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${currentScreen === 'settings' ? 'bg-pink/15 text-ink' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
-          <Settings size={20} />{t('nav_settings', lang)}
-        </button>
+      <div className="mx-3 my-3 border-t-2 border-dotted border-black/10" aria-hidden />
+      <div className="space-y-1">
+        {secondary.map((s) => (
+          <NavRow key={s.screen} icon={s.icon} label={s.label} selected={currentScreen === s.screen} onClick={() => go(s.screen)} />
+        ))}
       </div>
       {isDev && (
       <div className="mt-6 rounded-[24px] bg-cream p-4 text-xs font-bold leading-6">
@@ -2706,18 +2714,41 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
   const [myVote, setMyVote] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const load = () => {
     getPerceptionSummary(targetUid).then((r) => { setSummary(r.summary); setMyVote(r.myVote); setTotal(r.total); });
   };
   useEffect(() => { if (dbReady() && targetUid) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [targetUid]);
   if (!dbReady() || !targetUid) return null;
+  const VOTE_FAIL_MESSAGE: Record<string, string> = {
+    not_logged_in: 'ログインすると投票できます',
+    self: '自分には投票できません',
+    not_configured: 'いまは投票できません（接続設定がありません）',
+    not_ready: '投票の準備ができていません。運営にお知らせください',
+    error: '投票できませんでした。時間をおいてもう一度ためしてね',
+  };
   const vote = async (v: string) => {
     if (busy) return;
     setBusy(true);
-    if (myVote === v) { setMyVote(null); await clearPerceptionVote(targetUid); }
-    else { setMyVote(v); await castPerceptionVote(targetUid, v); }
-    load();
-    setBusy(false);
+    setNotice(null);
+    const prev = myVote;
+    try {
+      if (prev === v) {
+        setMyVote(null); // 楽観表示（取り消し）
+        const ok = await clearPerceptionVote(targetUid);
+        if (!ok) { setMyVote(prev); setNotice(VOTE_FAIL_MESSAGE.error); }
+      } else {
+        setMyVote(v); // 楽観表示（選択）
+        const r = await castPerceptionVote(targetUid, v);
+        if (!r.ok) { setMyVote(prev); setNotice(VOTE_FAIL_MESSAGE[r.reason] ?? VOTE_FAIL_MESSAGE.error); }
+      }
+      load();
+    } catch {
+      setMyVote(prev);
+      setNotice(VOTE_FAIL_MESSAGE.error);
+    } finally {
+      setBusy(false); // 例外時も必ず解除（ボタンが押せないまま固まらない）
+    }
   };
   return (
     <NotebookSection
@@ -2726,18 +2757,21 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
       title={`${targetName}さんって、どんな人？`}
       right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>}
     >
-      <p className="-mt-1 mb-2 text-[11px] font-bold text-muted">友達から見た{targetName}さんを、シールで教えてあげよう</p>
+      <p className="-mt-1 mb-2 text-[11px] font-bold text-muted">友達から見た{targetName}さんを、シールで教えてあげよう（もう一度押すと取り消し）</p>
       <div className="flex flex-wrap gap-1.5">
         {PERSONALITY_OPTIONS.map((opt) => {
           const c = summary.find((s) => s.value === opt)?.count ?? 0;
           const mine = myVote === opt;
           return (
-            <CapsulePill key={opt} active={mine} disabled={busy} onClick={() => vote(opt)}>
-              {opt}{c > 0 ? <span className={mine ? 'text-white/90' : 'text-pink'}>{c}</span> : null}
+            <CapsulePill key={opt} active={mine} disabled={busy} onClick={() => vote(opt)} title={mine ? 'タップで取り消し' : 'タップで投票'}>
+              {mine && <span aria-hidden>✓</span>}{opt}{c > 0 ? <span className={mine ? 'text-white/90' : 'text-pink'}>{c}</span> : null}
             </CapsulePill>
           );
         })}
       </div>
+      {notice && (
+        <p role="status" className="mt-2 rounded-lg bg-cream px-3 py-1.5 text-[12px] font-black text-ink">⚠️ {notice}</p>
+      )}
       {summary[0] && summary[0].count > 0 && (
         <p className="mt-3 text-[12px] font-black text-pink prof-hand">🏆 いちばん多いのは「{summary[0].value}」（{summary[0].count}票）</p>
       )}
@@ -2977,7 +3011,7 @@ function OtherProfileScreen({
       <div className="px-4 pt-3">
         <button
           onClick={() => go('diagnosis', profile.id)}
-          className="relative w-full overflow-hidden rounded-[18px] border-2 border-dashed border-white/70 bg-gradient-to-r from-pink to-purple-400 py-3.5 text-sm font-black text-white shadow-card active:scale-[0.99]"
+          className="relative w-full overflow-hidden rounded-[18px] border-2 border-dashed border-white/70 bg-gradient-to-r from-pink to-purple py-3.5 text-sm font-black text-white shadow-card active:scale-[0.99]"
         >
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
           💯 {profile.name}との一致率しんだん
@@ -3010,7 +3044,7 @@ function OtherProfileScreen({
             ))}
             {friendActions.map((a) => (
               <span key={a.label}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black ${a.done ? 'bg-purple/10 text-purple ring-1 ring-purple/20' : 'border border-dashed border-black/10 bg-base text-muted/70'}`}>
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black ${a.done ? 'bg-purple/10 text-purple ring-1 ring-purple/20' : 'border border-dashed border-black/15 bg-base text-muted'}`}>
                 {a.done ? '✓' : '○'} {a.label}
               </span>
             ))}

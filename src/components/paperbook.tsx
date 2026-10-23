@@ -192,11 +192,26 @@ export function CapsulePill({
   title?: string;
   className?: string;
 }) {
-  const cls = `inline-flex items-center justify-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black leading-none transition ${
-    active ? 'bg-pink text-white shadow-sm' : 'bg-cream text-ink ring-1 ring-black/5 hover:bg-pink/10'
-  } ${className}`;
-  if (onClick) return <button type="button" onClick={onClick} disabled={disabled} title={title} className={cls}>{children}</button>;
-  return <span title={title} className={cls}>{children}</span>;
+  const base = `inline-flex items-center justify-center gap-1 rounded-full px-3.5 font-black leading-none transition`;
+  const look = active
+    ? 'bg-pink text-white shadow-sm'
+    : 'bg-cream text-ink ring-1 ring-black/10';
+  if (onClick) {
+    // 押せるチップ：44px近いタップ領域＋“貼れるシール”の立体感（下影）で装飾と区別する
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        title={title}
+        aria-pressed={active}
+        className={`${base} ${look} min-h-[38px] py-2 text-[12px] cursor-pointer shadow-[0_2px_0_rgba(0,0,0,.10)] hover:-translate-y-px active:translate-y-px active:shadow-none disabled:cursor-wait disabled:opacity-60 ${active ? '' : 'hover:bg-pink/10'} ${className}`}
+      >
+        {children}
+      </button>
+    );
+  }
+  return <span title={title} className={`${base} ${look} py-1.5 text-[11px] ${className}`}>{children}</span>;
 }
 
 /** ノート風セクション：地紋つき紙シート＋マステ見出し＋シールアイコン。 */
@@ -233,19 +248,32 @@ export function NotebookSection({
   );
 }
 
-/** なかよし度などの“育つハート”メーター（塗り/白抜きで関係性の進み具合を表す）。 */
+/** なかよし度などの“育つハート”メーター。シール台紙に貼っていくイメージで、
+ *  貼れたハート＝白フチのシール、まだのハート＝点線の空き枠（はっきり見える濃さ）。 */
 export function HeartMeter({ level, max = 5 }: { level: number; max?: number }) {
   return (
-    <span className="inline-flex items-center gap-1">
-      {Array.from({ length: max }).map((_, i) => (
-        <span
-          key={i}
-          className={`text-xl leading-none transition-transform ${i < level ? 'scale-100' : 'scale-90 opacity-30'}`}
-          style={{ filter: i < level ? 'drop-shadow(0 1px 1px rgba(0,0,0,.15))' : 'grayscale(1)' }}
-        >
-          {i < level ? '💗' : '🤍'}
-        </span>
-      ))}
+    <span className="inline-flex items-center gap-1.5" role="img" aria-label={`なかよし度 ${level} / ${max}`}>
+      {Array.from({ length: max }).map((_, i) =>
+        i < level ? (
+          <span
+            key={i}
+            aria-hidden
+            className="grid h-8 w-8 place-items-center rounded-full bg-white text-lg leading-none"
+            style={{ boxShadow: 'inset 0 0 0 2px rgba(255,255,255,.9), 0 2px 4px rgba(0,0,0,.18)' }}
+          >
+            💗
+          </span>
+        ) : (
+          <span
+            key={i}
+            aria-hidden
+            className="grid h-8 w-8 place-items-center rounded-full border-2 border-dashed border-pink/45 bg-white/60 text-[15px] font-black leading-none text-pink/70"
+          >
+            ♡
+          </span>
+        ),
+      )}
+      <span className="ml-1 text-[11px] font-black text-muted">{level}/{max}</span>
     </span>
   );
 }

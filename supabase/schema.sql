@@ -637,7 +637,8 @@ drop policy if exists "perception delete own"   on public.perception_votes;
 -- 集計は全員が閲覧可。ただし自分自身への投票は不可（with check で voter<>target）。
 create policy "perception readable"  on public.perception_votes for select using (true);
 create policy "perception insert own" on public.perception_votes for insert with check (auth.uid() = voter_id and voter_id <> target_id);
-create policy "perception update own" on public.perception_votes for update using (auth.uid() = voter_id);
+create policy "perception update own" on public.perception_votes for update
+  using (auth.uid() = voter_id) with check (auth.uid() = voter_id and voter_id <> target_id);
 create policy "perception delete own" on public.perception_votes for delete using (auth.uid() = voter_id);
 
 -- ── reports：ユーザーからの通報（最小構成）─────────────────

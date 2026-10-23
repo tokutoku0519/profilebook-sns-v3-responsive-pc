@@ -30,28 +30,23 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
   );
 }
 
+// 称号は共通の「シール」ルールで表示（白フチ＋小さな影）。色はテーマに左右されない
+// 明示値で、文字と背景のコントラストはすべて 7:1 以上を確保している。
+const TITLE_STICKER: Record<TitleType, { bg: string; fg: string }> = {
+  official: { bg: '#DCEBFF', fg: '#1E3A8A' }, // サックス地 × 濃紺
+  founder:  { bg: '#1F2C56', fg: '#FFD666' }, // ネイビー地 × 金
+  pioneer:  { bg: '#FFE0EC', fg: '#8A1C4A' }, // さくら地 × ベリー
+};
+
 export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
   const def = TITLE_DEFS[type];
-
-  if (type === 'founder') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-0.5 text-[10px] font-black tracking-widest text-amber-400 ring-1 ring-amber-500/40 shadow-sm">
-        {def.emoji} {def.label}
-      </span>
-    );
-  }
-
-  if (type === 'pioneer') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 px-2.5 py-0.5 text-[10px] font-black tracking-widest text-white ring-1 ring-white/50 shadow-sm">
-        {def.emoji} {def.label}
-      </span>
-    );
-  }
-
+  const c = TITLE_STICKER[type] ?? TITLE_STICKER.official;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-0.5 text-[10px] font-black text-sky-600 ring-1 ring-sky-200">
-      {def.emoji} {def.label}
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black leading-none tracking-wide"
+      style={{ background: c.bg, color: c.fg, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,.85), 0 1px 3px rgba(0,0,0,.18)' }}
+    >
+      <span aria-hidden>{def.emoji}</span>{def.label}
     </span>
   );
 }
