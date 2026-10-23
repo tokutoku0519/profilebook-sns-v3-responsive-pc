@@ -24,6 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
+import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine } from '@/components/paperbook';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
@@ -2403,8 +2404,6 @@ function ProfileBookContent({
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
   const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream', 'wantToGo', 'collection', 'motto', 'holiday');
 
-  // 見出しのバブル色（テーマ連動）。海っぽさは背景テーマ側で表現し、ここでは強制しない。
-  const bubbleClass = themeColor === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
   // デコシールはテーマ非依存の中立キュート（海には寄せない）。
   const deco = ['🌸', '💗', '⭐', '✨', '🎀', '🍀'];
 
@@ -2426,34 +2425,49 @@ function ProfileBookContent({
       <span className="prof-deco text-lg" style={{ top: '78%', left: 6, ['--r' as any]: '6deg', animationDelay: '1.1s' } as any}>{deco[4]}</span>
       <span className="prof-deco text-xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>{deco[5]}</span>
 
-      {/* ── 表紙カード（My Profile） ── */}
-      <section className="prof-pill relative overflow-hidden p-5">
-        <div className="mb-3 flex items-center justify-center gap-2">
-          <span className={`${bubbleClass} text-3xl leading-none`}>My Profile</span>
-        </div>
-        <div className="absolute right-4 top-4 rotate-6 rounded-xl bg-pink/10 px-2.5 py-1 text-[10px] font-black text-pink tracking-widest">
-          ✿ PROFILE ✿
-        </div>
-        <div className="relative flex items-center gap-4">
-          <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white text-5xl shadow-md ring-4 ring-pink/30 rotate-[-3deg]">
-            {avatarUrl
-              ? <img src={avatarUrl} alt="avatar" className="h-full w-full object-cover" />
-              : avatarEmoji}
+      {/* ── 表紙（わたしのプロフ帳）：ポラロイド写真＋マステ見出し＋シール ── */}
+      <PaperSheet variant="grid" className="relative overflow-hidden px-5 pb-5 pt-6">
+        {/* 上部：英字スタンプ＋日本語見出し（マステ） */}
+        <div className="mb-3 flex items-end justify-between">
+          <div>
+            <p className="pb-pop text-[11px] tracking-[.3em] text-muted">MY PROFILE</p>
+            <TapeLabel tone="cream" rotate={-2} className="mt-1 text-lg">わたしのプロフ帳</TapeLabel>
           </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-black text-ink leading-tight prof-hand">{info.nickname || info.name || userId}</p>
-            <p className="text-xs font-bold text-muted">{userId}</p>
+          <Sticker color="rgb(255 122 105 / .9)" rotate={8} size={38} className="text-white" title="PROFILE">✿</Sticker>
+        </div>
+
+        <div className="relative flex items-start gap-4">
+          {/* 貼った写真（ポラロイド＋マステ留め） */}
+          <div className="relative">
+            <span className="pb-tape pb-tape-sax absolute -top-2 left-1/2 z-10 h-4 w-14 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(-4deg)' }} />
+            <PolaroidPhoto src={avatarUrl} emoji={avatarEmoji} rotate={-3} size={88} />
+          </div>
+
+          {/* 名前・ID・ひとこと（印刷ラベル＋手書き） */}
+          <div className="min-w-0 flex-1 pt-1">
+            <div className="pb-fieldline">
+              <span className="pb-fieldline-label">なまえ</span>
+              <span className="pb-fieldline-value text-[21px] font-black leading-tight text-ink prof-hand">
+                {info.nickname || info.name || userId}
+              </span>
+            </div>
+            <div className="pb-fieldline">
+              <span className="pb-fieldline-label">ID</span>
+              <span className="pb-fieldline-value text-[13px] font-bold leading-tight text-muted">{userId}</span>
+            </div>
             {info.catchphrase && (
-              <p className={`mt-2 inline-block rounded-full bg-pink/10 px-3 py-1 text-xs font-black ${accent}`}>
-                {info.catchphrase}
+              <p className={`mt-2 inline-block -rotate-1 rounded-[10px] bg-cream px-3 py-1 text-xs font-black ${accent}`}>
+                ❝ {info.catchphrase} ❞
               </p>
             )}
           </div>
         </div>
-        {/* ひとこと帯（未入力なら非表示） */}
+
+        {/* ひとこと帯（未入力なら非表示）：付箋メモ風 */}
         {(translatedInfo.message ?? info.message) && (
-          <div className="relative mt-4 rounded-2xl bg-base px-4 py-2.5 text-xs font-bold text-ink leading-relaxed">
-            ✉ {translatedInfo.message ?? info.message}
+          <div className="relative mt-4 rotate-[-0.5deg] rounded-[4px] bg-cream px-4 py-2.5 text-[13px] font-bold leading-relaxed text-ink shadow-sm prof-hand">
+            <span className="pb-sticker absolute -left-2 -top-2 text-[11px]" style={{ background: 'rgb(255 122 105)', width: 20, height: 20 }}>✎</span>
+            {translatedInfo.message ?? info.message}
           </div>
         )}
         {bgTheme && (
@@ -2461,22 +2475,25 @@ function ProfileBookContent({
             <span className="inline-flex items-center gap-1 rounded-full bg-base px-2 py-0.5 text-[9px] font-black text-muted">{bgTheme.floaters[0] && <ThemeArt art={bgTheme.floaters[0].art} size={12} />}{bgTheme.name}</span>
           </div>
         )}
-      </section>
+      </PaperSheet>
 
-      {/* ── きほんじょうほう ── */}
+      {/* ── きほんじょうほう（ルーズリーフ記入欄） ── */}
       {showBasic && (
-      <section className="pt-1">
-        <ProfSectionHeader icon="☆" title={t('sec_basic', lang)} theme={themeColor} />
-        <div className="space-y-2">
-        {canShow('name') && <ProfileLine label={t('field_name', lang)} value={info.name} />}
-        <ProfileLine label={t('field_nickname', lang)} value={info.nickname} />
-        {canShow('birthday') && <ProfileLine label={t('field_birthday', lang)} value={info.birthday} />}
-        {t('show_bloodType', lang) === 'true' && canShow('bloodType') && <ProfileLine label={t('field_bloodType', lang)} value={info.bloodType} />}
-        {info.gender && canShow('gender') && <ProfileLine label={t('field_gender', lang)} value={info.gender} />}
-        {canShow('mbti') && <ProfileLine label={t('field_mbti', lang)} value={info.mbti} />}
-        {canShow('hometown') && <ProfileLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />}
+      <PaperSheet variant="ruled" className="px-4 pb-4 pt-5">
+        <div className="mb-2 flex items-center gap-2">
+          <Sticker color="rgb(206 227 255)" rotate={-6} size={28}>☆</Sticker>
+          <TapeLabel tone="sax" rotate={-1}>{t('sec_basic', lang)}</TapeLabel>
         </div>
-      </section>
+        <div className="space-y-0.5">
+        {canShow('name') && (isSelf || (info.name ?? '').trim()) && <PaperFieldLine label={t('field_name', lang)} value={info.name} />}
+        {(isSelf || (info.nickname ?? '').trim()) && <PaperFieldLine label={t('field_nickname', lang)} value={info.nickname} />}
+        {canShow('birthday') && (isSelf || (info.birthday ?? '').trim()) && <PaperFieldLine label={t('field_birthday', lang)} value={info.birthday} />}
+        {t('show_bloodType', lang) === 'true' && canShow('bloodType') && (isSelf || (info.bloodType ?? '').trim()) && <PaperFieldLine label={t('field_bloodType', lang)} value={info.bloodType} />}
+        {info.gender && canShow('gender') && <PaperFieldLine label={t('field_gender', lang)} value={info.gender} />}
+        {canShow('mbti') && (isSelf || (info.mbti ?? '').trim()) && <PaperFieldLine label={t('field_mbti', lang)} value={info.mbti} />}
+        {canShow('hometown') && (isSelf || (info.hometown ?? '').trim()) && <PaperFieldLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />}
+        </div>
+      </PaperSheet>
       )}
 
       {/* ── すきなもの（MY FAVORITE：バブル＋書き込み欄） ── */}

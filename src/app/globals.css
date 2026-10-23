@@ -487,3 +487,89 @@ button, input, textarea { font: inherit; }
   100% { transform: translateY(-38px) scale(1); opacity: 0; }
 }
 .pct-pop { animation: pct-pop 1s ease-out forwards; }
+
+/* ========================================================================
+   Paper Profile-Book デザイン基盤（Phase A：表紙＋きほんじょうほう）
+   ※ 追加のみ。既存クラスは変更しない。prefix: pb-
+   ===================================================================== */
+:root {
+  --pb-coral: 255 122 105;   /* コーラル（アクセント） */
+  --pb-navy:  31 44 86;      /* ネイビー（＝ink） */
+  --pb-line:  120 120 160;   /* 罫線・点線 */
+  --pb-tape:  255 236 179;   /* マステ：クリーム */
+  --pb-tape2: 206 227 255;   /* マステ：サックスブルー */
+}
+
+/* 見出し：ポップ印刷文字（Yusei Magic）＋白フチ */
+.pb-pop {
+  font-family: "Yusei Magic", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  letter-spacing: .04em;
+  text-shadow:
+    1.5px 1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px -1.5px 0 #fff,
+    0 3px 6px rgba(0,0,0,.10);
+}
+
+/* 紙シート（やわらかい色紙） */
+.pb-sheet {
+  position: relative;
+  background: rgba(255,255,255,.97);
+  border-radius: 18px;
+  box-shadow: 0 2px 0 rgba(0,0,0,.06), 0 8px 18px rgba(0,0,0,.08);
+}
+/* 方眼メモ地 */
+.pb-grid {
+  background-image:
+    linear-gradient(rgb(var(--pb-line) / .09) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--pb-line) / .09) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+/* ルーズリーフ横罫地 */
+.pb-ruled {
+  background-image: repeating-linear-gradient(transparent 0 27px, rgb(var(--pb-line) / .14) 27px 28px);
+  background-position: 0 8px;
+}
+
+/* マスキングテープ */
+.pb-tape {
+  position: relative; display: inline-block;
+  padding: 3px 14px;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px),
+    rgb(var(--pb-tape));
+  box-shadow: 0 2px 5px rgba(0,0,0,.12);
+  color: rgb(var(--pb-navy));
+}
+.pb-tape-sax { background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.4) 0 6px, transparent 6px 12px),
+    rgb(var(--pb-tape2)); }
+.pb-tape::before, .pb-tape::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 8px;
+  background: linear-gradient(90deg, rgba(0,0,0,.06), transparent);
+}
+.pb-tape::before { left: 0; }
+.pb-tape::after  { right: 0; transform: scaleX(-1); }
+
+/* ポラロイド写真フレーム */
+.pb-polaroid {
+  background: #fff; padding: 7px 7px 18px;
+  border-radius: 3px;
+  box-shadow: 0 3px 0 rgba(0,0,0,.05), 0 9px 16px rgba(0,0,0,.18);
+}
+
+/* 丸シール */
+.pb-sticker {
+  display: inline-grid; place-items: center; border-radius: 999px;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.85), 0 2px 4px rgba(0,0,0,.18);
+}
+
+/* ルーズリーフ記入欄：印刷ラベル＋手書き回答（点線ベースライン） */
+.pb-fieldline { display: flex; align-items: flex-end; gap: 8px; padding: 5px 2px; }
+.pb-fieldline-label {
+  flex-shrink: 0; font-family: "M PLUS Rounded 1c", system-ui, sans-serif; font-weight: 800;
+  font-size: 11px; color: rgb(var(--pb-navy)); opacity: .92;
+  background: rgb(var(--color-cream)); border-radius: 7px; padding: 2px 9px;
+}
+.pb-fieldline-value {
+  flex: 1; min-width: 0; word-break: break-word; padding-bottom: 3px;
+  border-bottom: 2px dotted rgb(var(--pb-line) / .42);
+}
