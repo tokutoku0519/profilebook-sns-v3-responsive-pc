@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine } from '@/components/paperbook';
+import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine, StickerBadge, HandwrittenText, CapsulePill, NotebookSection, HeartMeter } from '@/components/paperbook';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
@@ -1215,6 +1215,7 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
     <aside className="hidden h-[calc(100vh-48px)] w-[220px] shrink-0 rounded-[32px] border border-white/70 bg-white/80 p-5 shadow-card backdrop-blur md:block lg:w-[260px]">
       <div className="mb-8 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink shadow-card overflow-hidden"><img src="/icon.png" alt="Miri" className="h-full w-full object-cover" /></div><div><p className="flex items-center gap-1.5 text-xl font-black">Miri<RetroMiniStar /></p><p className="text-xs font-bold text-muted">Profile Book SNS</p></div></div>
       <nav className="space-y-2">
+        <div className="mb-1 pl-1"><TapeLabel tone="sax" rotate={-2} className="text-[11px]">めにゅー</TapeLabel></div>
         {items.map((item) => { const Icon = item.icon; const isActive = !inSecondary && active === item.key; return (
           <button key={item.key} onClick={() => go(item.screen)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-black transition ${isActive ? 'bg-pink text-white shadow-floating' : 'text-muted hover:bg-pink/10 hover:text-ink'}`}>
             <Icon size={20} />{t(item.labelKey, lang)}
@@ -1238,9 +1239,11 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
           <Settings size={20} />{t('nav_settings', lang)}
         </button>
       </div>
+      {isDev && (
       <div className="mt-6 rounded-[24px] bg-cream p-4 text-xs font-bold leading-6">
         投稿・検索・リアクション・コメントが動くPC対応版です。次はSupabase保存に進めます。
       </div>
+      )}
     </aside>
   );
 }
@@ -1283,10 +1286,12 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
           </button>
         ))}</div>
       </section>
+      {profiles.length > 0 && (
       <section className="mt-5 rounded-[28px] bg-white p-4 shadow-card">
         <SectionHeader title={t('feed_suggested', lang)} />
         <div className="space-y-3">{profiles.slice(0,3).map((profile) => <button key={profile.id} onClick={() => go('profile', profile.id)} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left hover:bg-pink/10"><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-xl">{profile.avatar}</span><span><b className="text-sm">{profile.name}</b><br /><span className="text-xs text-muted">{profile.common}</span></span></button>)}</div>
       </section>
+      )}
     </aside>
   );
 }
@@ -2706,7 +2711,6 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
   };
   useEffect(() => { if (dbReady() && targetUid) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [targetUid]);
   if (!dbReady() || !targetUid) return null;
-  const maxCount = summary[0]?.count ?? 0;
   const vote = async (v: string) => {
     if (busy) return;
     setBusy(true);
@@ -2716,31 +2720,28 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
     setBusy(false);
   };
   return (
-    <section className="rounded-[28px] bg-white/90 p-4 shadow-card">
-      <p className="text-sm font-black text-ink">💭 {targetName}さんはどんな性格？</p>
-      <p className="mb-3 text-[11px] font-bold text-muted">みんなで「こんな人！」を教えてあげよう（{total}人が投票）</p>
-      <div className="grid grid-cols-3 gap-2">
+    <NotebookSection
+      variant="grid"
+      icon="💭"
+      title={`${targetName}さんって、どんな人？`}
+      right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>}
+    >
+      <p className="-mt-1 mb-2 text-[11px] font-bold text-muted">友達から見た{targetName}さんを、シールで教えてあげよう</p>
+      <div className="flex flex-wrap gap-1.5">
         {PERSONALITY_OPTIONS.map((opt) => {
           const c = summary.find((s) => s.value === opt)?.count ?? 0;
           const mine = myVote === opt;
           return (
-            <button
-              key={opt}
-              type="button"
-              disabled={busy}
-              onClick={() => vote(opt)}
-              className={`relative overflow-hidden rounded-2xl px-2 py-2 text-[11px] font-black transition ${mine ? 'bg-pink text-white shadow-card' : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'}`}
-            >
-              {c > 0 && !mine && <span className="absolute inset-y-0 left-0 bg-pink/15" style={{ width: `${maxCount ? (c / maxCount) * 100 : 0}%` }} />}
-              <span className="relative">{opt}{c > 0 ? ` ${c}` : ''}</span>
-            </button>
+            <CapsulePill key={opt} active={mine} disabled={busy} onClick={() => vote(opt)}>
+              {opt}{c > 0 ? <span className={mine ? 'text-white/90' : 'text-pink'}>{c}</span> : null}
+            </CapsulePill>
           );
         })}
       </div>
-      {summary[0] && (
-        <p className="mt-3 text-[11px] font-black text-pink">🏆 いまのトップ：{summary[0].value}（{summary[0].count}票）</p>
+      {summary[0] && summary[0].count > 0 && (
+        <p className="mt-3 text-[12px] font-black text-pink prof-hand">🏆 いちばん多いのは「{summary[0].value}」（{summary[0].count}票）</p>
       )}
-    </section>
+    </NotebookSection>
   );
 }
 
@@ -2949,74 +2950,77 @@ function OtherProfileScreen({
       <div className="relative min-h-full">
       <div className="pointer-events-none absolute inset-0 prof-paper" />
       <div className="relative z-10">
-      <div className="flex gap-2 px-4 pt-2">
-        <button
-          onClick={toggleFollow}
-          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${
-            isFollowing
-              ? 'bg-base text-pink ring-2 ring-pink'
-              : 'bg-pink text-white'
-          }`}
-        >
-          {isFollowing ? '🎀 フォロー中' : '🎀 フォロー'}
-        </button>
-        <button
-          onClick={onFriendAction}
-          className={`h-11 flex-1 rounded-full text-sm font-black shadow-card active:scale-[0.98] transition ${friendBtn.cls}`}
-        >
-          {friendBtn.label}
-        </button>
+      {/* プロフ帳を交換（フォロー／なかよし） */}
+      <div className="px-4 pt-2">
+        <PaperSheet variant="plain" className="flex items-center gap-2 p-2.5">
+          <StickerBadge tone="cream" rotate={-4} className="shrink-0">📖 交換</StickerBadge>
+          <div className="flex min-w-0 flex-1 gap-2">
+            <button
+              onClick={toggleFollow}
+              className={`h-10 flex-1 rounded-full text-[13px] font-black shadow-sm active:scale-[0.98] transition ${
+                isFollowing ? 'bg-base text-pink ring-2 ring-pink' : 'bg-pink text-white'
+              }`}
+            >
+              {isFollowing ? '🎀 フォロー中' : '🎀 フォロー'}
+            </button>
+            <button
+              onClick={onFriendAction}
+              className={`h-10 flex-1 rounded-full text-[13px] font-black shadow-sm active:scale-[0.98] transition ${friendBtn.cls}`}
+            >
+              {friendBtn.label}
+            </button>
+          </div>
+        </PaperSheet>
       </div>
 
-      {/* 一致率しんだん */}
-      <div className="px-4 pt-2">
+      {/* 一致率しんだん（診断チケット風） */}
+      <div className="px-4 pt-3">
         <button
           onClick={() => go('diagnosis', profile.id)}
-          className="w-full rounded-full bg-gradient-to-r from-pink to-purple-400 py-3 text-sm font-black text-white shadow-card active:scale-[0.99]"
+          className="relative w-full overflow-hidden rounded-[18px] border-2 border-dashed border-white/70 bg-gradient-to-r from-pink to-purple-400 py-3.5 text-sm font-black text-white shadow-card active:scale-[0.99]"
         >
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
           💯 {profile.name}との一致率しんだん
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
         </button>
       </div>
 
       {/* 他己紹介アンケート（性格をみんなで投票） */}
       {targetUid && (
-        <div className="px-4 pt-2">
+        <div className="px-4 pt-3">
           <PerceptionVoteCard targetUid={targetUid} targetName={profile.name} />
         </div>
       )}
 
       {/* なかよし度 */}
       <div className="px-4 pt-3">
-        <section className="prof-pill p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-black text-ink">🍀 なかよし度</p>
-            <p className="text-xs font-black text-pink">{FRIEND_LEVEL_LABELS[friendLevel]}</p>
-          </div>
-          <div className="mt-2 flex gap-1">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <span key={i} className={`text-xl transition ${i < friendLevel ? '' : 'opacity-20 grayscale'}`}>💗</span>
-            ))}
-          </div>
+        <NotebookSection
+          variant="ruled"
+          icon="🍀"
+          title="なかよし度"
+          right={<StickerBadge tone="coral" rotate={4}>{FRIEND_LEVEL_LABELS[friendLevel]}</StickerBadge>}
+        >
+          <HeartMeter level={friendLevel} />
           {/* なかよしアクションの内訳 */}
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-1.5">
             {commonPoints.map((c) => (
-              <span key={c.label} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">
+              <span key={c.label} className="inline-flex items-center gap-1 rounded-full bg-pink/10 px-3 py-1.5 text-[11px] font-black text-pink ring-1 ring-pink/20">
                 ✨ {c.label}が一緒：{c.value}
               </span>
             ))}
             {friendActions.map((a) => (
               <span key={a.label}
-                className={`rounded-full px-3 py-1 text-[10px] font-black ${a.done ? 'bg-purple/10 text-purple' : 'bg-base text-muted opacity-60'}`}>
-                {a.done ? '✓ ' : ''}{a.label}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black ${a.done ? 'bg-purple/10 text-purple ring-1 ring-purple/20' : 'border border-dashed border-black/10 bg-base text-muted/70'}`}>
+                {a.done ? '✓' : '○'} {a.label}
               </span>
             ))}
           </div>
           {friendLevel < 5 && (
-            <p className="mt-2 text-[10px] font-bold text-muted">
-              プロフ帳を交換したり、いっしょに日記を書いたりするとなかよし度が上がるよ
+            <p className="mt-3 text-[11px] font-bold text-muted prof-hand">
+              プロフ帳を交換したり、いっしょに日記を書いたりするとなかよし度が上がるよ 🌱
             </p>
           )}
-        </section>
+        </NotebookSection>
       </div>
 
       {/* 称号バッジ */}

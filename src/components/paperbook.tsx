@@ -134,3 +134,118 @@ export function PaperFieldLine({
     </div>
   );
 }
+
+/** シール風バッジ（ラベル付き。インデックス/称号などに） */
+export function StickerBadge({
+  children,
+  tone = 'cream',
+  rotate = -2,
+  className = '',
+}: {
+  children: React.ReactNode;
+  tone?: 'cream' | 'sax' | 'coral' | 'white';
+  rotate?: number;
+  className?: string;
+}) {
+  const bg =
+    tone === 'sax' ? 'rgb(206 227 255)'
+    : tone === 'coral' ? 'rgb(255 122 105)'
+    : tone === 'white' ? '#fff'
+    : 'rgb(var(--color-cream))';
+  const fg = tone === 'coral' ? 'text-white' : 'text-ink';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black leading-none ${fg} ${className}`}
+      style={{ background: bg, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,.7), 0 2px 4px rgba(0,0,0,.14)', transform: `rotate(${rotate}deg)` }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** 手書き風テキスト（回答・本文・自己紹介向け） */
+export function HandwrittenText({
+  children,
+  className = '',
+  as: As = 'span',
+}: {
+  children: React.ReactNode;
+  className?: string;
+  as?: any;
+}) {
+  return <As className={`prof-hand ${className}`}>{children}</As>;
+}
+
+/** Miriらしいチップ（汎用pillより紙シール寄り）。onClick があればボタン。 */
+export function CapsulePill({
+  children,
+  active = false,
+  onClick,
+  disabled,
+  title,
+  className = '',
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}) {
+  const cls = `inline-flex items-center justify-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black leading-none transition ${
+    active ? 'bg-pink text-white shadow-sm' : 'bg-cream text-ink ring-1 ring-black/5 hover:bg-pink/10'
+  } ${className}`;
+  if (onClick) return <button type="button" onClick={onClick} disabled={disabled} title={title} className={cls}>{children}</button>;
+  return <span title={title} className={cls}>{children}</span>;
+}
+
+/** ノート風セクション：地紋つき紙シート＋マステ見出し＋シールアイコン。 */
+export function NotebookSection({
+  title,
+  icon,
+  tone = 'cream',
+  variant = 'plain',
+  right,
+  tilt = 0,
+  className = '',
+  children,
+}: {
+  title: React.ReactNode;
+  icon?: React.ReactNode;
+  tone?: 'cream' | 'sax';
+  variant?: 'plain' | 'grid' | 'ruled';
+  right?: React.ReactNode;
+  tilt?: number;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <PaperSheet variant={variant} tilt={tilt} className={`p-4 ${className}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {icon != null && <Sticker color="rgb(206 227 255)" rotate={-6} size={28}>{icon}</Sticker>}
+          <TapeLabel tone={tone} rotate={-1}>{title}</TapeLabel>
+        </div>
+        {right}
+      </div>
+      {children}
+    </PaperSheet>
+  );
+}
+
+/** なかよし度などの“育つハート”メーター（塗り/白抜きで関係性の進み具合を表す）。 */
+export function HeartMeter({ level, max = 5 }: { level: number; max?: number }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {Array.from({ length: max }).map((_, i) => (
+        <span
+          key={i}
+          className={`text-xl leading-none transition-transform ${i < level ? 'scale-100' : 'scale-90 opacity-30'}`}
+          style={{ filter: i < level ? 'drop-shadow(0 1px 1px rgba(0,0,0,.15))' : 'grayscale(1)' }}
+        >
+          {i < level ? '💗' : '🤍'}
+        </span>
+      ))}
+    </span>
+  );
+}
