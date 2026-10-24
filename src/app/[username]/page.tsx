@@ -8933,10 +8933,12 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 let __persistChain: Promise<void> = Promise.resolve();
 
 export default function Page() {
-  const [ready, setReady] = useState(isDev);
+  // 初回描画は常にスプラッシュ（サーバーと一致させる）。AppContent は localStorage 等を
+  // 初期値に使うため、マウント後にだけ描画する（dev で true から始めると #418 になる）。
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (isDev) return;
+    if (isDev) { setReady(true); return; }
     // miri-test 環境は認証不要
     if (window.location.hostname.includes('miri-test')) { setReady(true); return; }
     // miri_auth クッキーで確認（middleware のフォールバック）

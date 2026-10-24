@@ -875,6 +875,7 @@ export async function markNotificationsRead(): Promise<void> {
   try { await supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false); } catch {}
 }
 
+let notifChannelSeq = 0;
 /**
  * 自分宛ての新着通知をリアルタイム購読する。返り値は購読解除関数。
  * ※ Supabase 側で notifications テーブルを Realtime publication に追加しておくと
@@ -884,8 +885,11 @@ export async function subscribeNotifications(onInsert: (row: NotificationRow) =>
   if (!supabase) return () => {};
   const uid = await getCurrentUserId();
   if (!uid) return () => {};
+  // チャンネル名は購読ごとに一意にする。同名だと supabase-js が購読済みの既存チャンネルを
+  // 返すため、解除前に再購読（React StrictMode の effect 二重実行など）すると
+  // 「subscribe() 後に postgres_changes を追加できない」エラーになる。
   const channel = supabase
-    .channel(`notif:${uid}`)
+    .channel(`notif:${uid}:${++notifChannelSeq}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
