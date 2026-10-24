@@ -36,7 +36,6 @@ export function DecoToolbar({
   const cur = pen ?? DEFAULT_PEN;
   const uid = useId();
   const tools = TOOLS.filter((t) => t.id !== 'sticker' || onOpenSticker);
-  const set = (patch: Partial<Pen>) => onPenChange({ ...cur, ...patch });
 
   return (
     <div className="pb-toolcase p-1.5">
@@ -59,69 +58,8 @@ export function DecoToolbar({
       </div>
 
       <div role="tabpanel" id={`${uid}-panel`} aria-labelledby={`${uid}-tab-${tool}`} className="mt-1.5 rounded-[10px] bg-white/80 p-2.5">
-        {tool === 'pen' && (
-          <>
-            <p className="pb-label mb-1.5">書体（えらぶとすぐ上の便せんに反映）</p>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-              {PEN_FONTS.map((f) => {
-                const on = cur.font === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => set({ font: f.id })}
-                    className={`min-h-[52px] rounded-lg px-2 py-1.5 text-left transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10 hover:bg-pink/5'}`}
-                  >
-                    <span className="block text-[17px] leading-tight text-ink" style={{ fontFamily: f.family, fontWeight: f.weight }}>あいう Aa</span>
-                    <span className="mt-0.5 block text-[10px] font-black text-muted">{on ? '✓ ' : ''}{f.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="pb-label mb-1.5 mt-2.5">文字の大きさ</p>
-            <div className="flex gap-1.5">
-              {PEN_SIZES.map((s) => {
-                const on = cur.size === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => set({ size: s.id })}
-                    className={`min-h-[40px] flex-1 rounded-lg text-sm font-black transition ${on ? 'bg-pink text-white' : 'bg-white text-ink ring-1 ring-black/10'}`}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {tool === 'marker' && (
-          <>
-            <p className="pb-label mb-1.5">インクの色</p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {PEN_INKS.map((c) => {
-                const on = cur.ink === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => set({ ink: c.id })}
-                    className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10'}`}
-                  >
-                    {/* マーカーのキャップ */}
-                    <span aria-hidden className="grid h-5 w-9 place-items-center rounded-full text-[11px] font-black text-white shadow-[inset_0_-3px_0_rgba(0,0,0,.2),0_0_0_2px_rgba(255,255,255,.75)]" style={{ background: c.color }}>{on ? '✓' : ''}</span>
-                    <span className="text-[10px] font-black text-ink">{c.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
+        {tool === 'pen' && <PenFontPicker pen={cur} onChange={onPenChange} hint="書体（えらぶとすぐ上の便せんに反映）" />}
+        {tool === 'marker' && <PenInkPicker pen={cur} onChange={onPenChange} />}
 
         {tool === 'sticker' && onOpenSticker && (
           <div className="flex items-center gap-3">
@@ -148,5 +86,75 @@ export function DecoToolbar({
       </div>
       <p className="mt-1.5 px-1 text-[11px] font-bold text-muted">✎ えらんだペンは「わたしの字」として、プロフ帳と回答に使われます</p>
     </div>
+  );
+}
+
+/** ペンの書体と大きさを選ぶ部品（回答のツールバー・プロフィール編集で共用） */
+export function PenFontPicker({ pen, onChange, hint = '書体' }: { pen: Pen; onChange: (pen: Pen) => void; hint?: string }) {
+  return (
+    <>
+      <p className="pb-label mb-1.5">{hint}</p>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+        {PEN_FONTS.map((f) => {
+          const on = pen.font === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange({ ...pen, font: f.id })}
+              className={`min-h-[52px] rounded-lg px-2 py-1.5 text-left transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10 hover:bg-pink/5'}`}
+            >
+              <span className="block text-[17px] leading-tight text-ink" style={{ fontFamily: f.family, fontWeight: f.weight }}>あいう Aa</span>
+              <span className="mt-0.5 block text-[10px] font-black text-muted">{on ? '✓ ' : ''}{f.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="pb-label mb-1.5 mt-2.5">文字の大きさ</p>
+      <div className="flex gap-1.5">
+        {PEN_SIZES.map((s) => {
+          const on = pen.size === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange({ ...pen, size: s.id })}
+              className={`min-h-[40px] flex-1 rounded-lg text-sm font-black transition ${on ? 'bg-pink text-white' : 'bg-white text-ink ring-1 ring-black/10'}`}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/** インクの色を選ぶ部品（マーカーのキャップ風） */
+export function PenInkPicker({ pen, onChange }: { pen: Pen; onChange: (pen: Pen) => void }) {
+  return (
+    <>
+      <p className="pb-label mb-1.5">インクの色</p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {PEN_INKS.map((c) => {
+          const on = pen.ink === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange({ ...pen, ink: c.id })}
+              className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10'}`}
+            >
+              {/* マーカーのキャップ */}
+              <span aria-hidden className="grid h-5 w-9 place-items-center rounded-full text-[11px] font-black text-white shadow-[inset_0_-3px_0_rgba(0,0,0,.2),0_0_0_2px_rgba(255,255,255,.75)]" style={{ background: c.color }}>{on ? '✓' : ''}</span>
+              <span className="text-[10px] font-black text-ink">{c.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

@@ -28,8 +28,8 @@ import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine, StickerB
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
-import { DEFAULT_PEN, normalizePen, penAttrs, setCachedPen, type Pen } from '@/lib/pen';
-import { DecoToolbar } from '@/components/DecoToolbar';
+import { DEFAULT_PEN, normalizePen, penAttrs, setCachedPen, useUserPen, type Pen } from '@/lib/pen';
+import { DecoToolbar, PenFontPicker, PenInkPicker } from '@/components/DecoToolbar';
 import { getQuestionsForLang, getActiveQuestionsForLang } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
@@ -858,13 +858,6 @@ const mockProfileBooks: Record<string, ProfileBook> = isDev ? {
 
 // 荒らし・イタズラ対策: NGワードフィルター
 const NG_WORDS = ['死ね', 'ころす', '殺す', 'うざい', 'きもい', 'クズ', 'ゴミ', 'バカ', 'アホ', 'ブス', 'デブ'];
-
-const DIARY_FONTS = [
-  { label: 'ふつう',    value: 'inherit' },
-  { label: '丸文字',    value: "'M PLUS Rounded 1c', sans-serif" },
-  { label: '手書き',    value: "'Klee One', cursive" },
-  { label: 'ゆるふわ',  value: "'Zen Kurenaido', cursive" },
-] as const;
 
 const DIARY_COLORS = [
   { label: '黒',        value: '#1a1a2e', bg: '#1a1a2e' },
@@ -1948,7 +1941,6 @@ function CreateScreen({
   const diaryCaptionRef = useRef<HTMLTextAreaElement>(null);
   const [diaryCaptionPhoto, setDiaryCaptionPhoto] = useState('');
   const [diaryNgError, setDiaryNgError] = useState(false);
-  const [diaryFont, setDiaryFont] = useState<string>(DIARY_FONTS[0].value);
   const [diaryColor, setDiaryColor] = useState<string>(DIARY_COLORS[0].value);
   const [diaryVisibility, setDiaryVisibility] = useState<'public' | 'followers' | 'mentioned'>('followers');
   const [diaryMentionedIds, setDiaryMentionedIds] = useState<string[]>([]);
@@ -1976,7 +1968,8 @@ function CreateScreen({
   function submitDiary() {
     if (containsNgWord(diaryCaption)) { setDiaryNgError(true); return; }
     if (!diaryCanSubmit) return;
-    const id = onCreateDiary(diaryCaption.trim(), diaryCaptionPhoto, diaryFont, diaryColor, diaryVisibility, diaryMentionedIds);
+    if (!pen && onPenChange) onPenChange(DEFAULT_PEN);
+    const id = onCreateDiary(diaryCaption.trim(), diaryCaptionPhoto, 'inherit', diaryColor, diaryVisibility, diaryMentionedIds);
     setDiaryCaption('');
     setDiaryCaptionPhoto('');
     setDiaryNgError(false);
@@ -2136,28 +2129,17 @@ function CreateScreen({
               <input type="file" accept="image/*" className="hidden" onChange={handleDiaryCaptionPhoto} />
             </label>
 
-            {/* フォント選択 */}
-            <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <p className="mb-2 text-xs font-black text-muted">フォント</p>
-              <div className="flex gap-2 flex-wrap">
-                {DIARY_FONTS.map((f) => (
-                  <button
-                    key={f.value}
-                    onClick={() => setDiaryFont(f.value)}
-                    style={{ fontFamily: f.value === 'inherit' ? undefined : f.value }}
-                    className={`rounded-full px-4 py-2 text-sm transition ${diaryFont === f.value ? 'bg-pink text-white shadow-sm' : 'bg-base text-ink'}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 mb-2 text-xs font-black text-muted">文字色</p>
+            {/* タイトルの色（ページの見出しに使われる）。本文の字は下の「わたしのペン」 */}
+            <section className="pb-sheet p-4">
+              <p className="pb-label mb-2">タイトルの色</p>
               <div className="flex gap-2 flex-wrap">
                 {DIARY_COLORS.map((c) => (
                   <button
                     key={c.value}
                     onClick={() => setDiaryColor(c.value)}
                     title={c.label}
+                    aria-label={c.label}
+                    aria-pressed={diaryColor === c.value}
                     className={`h-8 w-8 rounded-full transition ${diaryColor === c.value ? 'ring-2 ring-offset-2 ring-pink scale-110' : ''}`}
                     style={{ backgroundColor: c.bg }}
                   />
@@ -2216,23 +2198,31 @@ function CreateScreen({
             </section>
 
             {/* コメント入力 */}
-            <section className="rounded-[28px] border border-purple/15 bg-white p-4 shadow-card">
+            <section className="pb-sheet p-4">
               {diaryNgError && (
                 <p className="mb-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">
                   不適切な言葉が含まれています。書き直してね。
                 </p>
               )}
-              <RetroEmojiPicker onInsert={(code) => insertRetroCode(diaryCaptionRef, code, setDiaryCaption)} />
-              <textarea
-                ref={diaryCaptionRef}
-                value={diaryCaption}
-                onChange={(e) => { setDiaryCaption(e.target.value); if (diaryNgError) setDiaryNgError(false); }}
-                maxLength={200}
-                rows={3}
-                placeholder="コメントを書く…（200文字以内）"
-                style={{ fontFamily: diaryFont === 'inherit' ? undefined : diaryFont, color: diaryColor }}
-                className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted/50"
-              />
+              <div {...penAttrs(writingPen)} style={{ ...penAttrs(writingPen).style, ['--pen-base' as any]: '16px' }}>
+                <textarea
+                  ref={diaryCaptionRef}
+                  value={diaryCaption}
+                  onChange={(e) => { setDiaryCaption(e.target.value); if (diaryNgError) setDiaryNgError(false); }}
+                  maxLength={200}
+                  rows={3}
+                  aria-label="日記の本文"
+                  placeholder="コメントを書く…（200文字以内）"
+                  className="pen-text pen-size pb-ruled pb-ruled-rows w-full resize-none bg-transparent leading-7 outline-none"
+                />
+              </div>
+              <div className="mt-2">
+                <DecoToolbar
+                  pen={writingPen}
+                  onPenChange={(p) => onPenChange?.(p)}
+                  onInsertDeco={(code) => insertRetroCode(diaryCaptionRef, code, setDiaryCaption)}
+                />
+              </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs font-bold text-muted">{diaryCaption.length}/200</span>
                 <button
@@ -3436,6 +3426,8 @@ function ProfileEditScreen({
   equippedBgId = null,
   onEquipBg = () => {},
   onLogout,
+  pen = null,
+  onPenChange = () => {},
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -3467,8 +3459,13 @@ function ProfileEditScreen({
   equippedBgId?: string | null;
   onEquipBg?: (id: string | null) => void;
   onLogout: () => void;
+  /** わたしのペン（保存ボタンで保存） */
+  pen?: Pen | null;
+  onPenChange?: (pen: Pen) => void;
 }) {
   const [form, setForm] = useState(profileBookInfo);
+  const [penForm, setPenForm] = useState<Pen>(pen ?? DEFAULT_PEN);
+  const penTouched = useRef(false);
   const [best3Form, setBest3Form] = useState(best3);
   const [monthlyForm, setMonthlyForm] = useState<string[]>(monthlyBest3.items);
   const [monthlyEpisodeForm, setMonthlyEpisodeForm] = useState<string>(monthlyBest3.episode ?? '');
@@ -3533,17 +3530,481 @@ function ProfileEditScreen({
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  // 保存（下のボタンと、上のインデックスの「保存」で共通）
+  function saveAll() {
+    onSave(form);
+    onSaveBest3(best3Form);
+    onSaveMonthlyBest3(monthlyForm, monthlyEpisodeForm);
+    onSaveQuestions(questionsForm);
+    onSaveAvatar(localAvatarUrl);
+    onSaveFavoritePhotos(localPhotos);
+    onSaveCustomFields(localCustomFields);
+    onSaveVisibility(visForm);
+    if (me.isOfficial) onSavePremiumContent(premiumForm);
+    if (penTouched.current) onPenChange(penForm);
+    go('profile');
+  }
+
+  // インデックス（見出しタブ）：押すとその記入用紙までスクロール
+  const INDEX: [string, string][] = [
+    ['pe-photo', '写真'], ['pe-stage', '立場'], ['pe-basic', 'きほん'], ['pe-likes', 'すき・きらい'],
+    ['pe-about', 'わたしのこと'], ['pe-monthly', '今月'], ['pe-best3', 'BEST3'], ['pe-qa', 'しつもん'],
+    ['pe-pen', 'わたしの字'], ['pe-settings', 'せってい'],
+  ];
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   return (
     <>
       <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
-      <div className="space-y-4 px-4 pt-3 pb-32">
+      <div className="space-y-4 px-4 pt-3 pb-32" {...penAttrs(penForm)} style={penAttrs(penForm).style}>
 
         {/* ===== プロフィール完成度メーター（うめるほど楽しく） ===== */}
         <ProfileProgress info={form} />
 
+        {/* ===== インデックス（見出しタブ）：記入用紙へ移動＋いつでも保存 ===== */}
+        <nav aria-label="編集する項目" className="sticky top-16 z-10 -mx-4 bg-base/95 px-4 py-2 backdrop-blur">
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {INDEX.map(([id, label]) => (
+              <button key={id} type="button" onClick={() => jump(id)}
+                className="shrink-0 rounded-t-lg border-b-2 border-pink/40 bg-white px-3 py-2 text-[12px] font-black text-ink shadow-[0_-1px_3px_rgba(0,0,0,.06)] active:translate-y-px">
+                {label}
+              </button>
+            ))}
+            <button type="button" onClick={saveAll}
+              className="shrink-0 rounded-lg bg-pink px-3 py-2 text-[12px] font-black text-white shadow-card active:scale-[0.98]">
+              ✓ 保存
+            </button>
+          </div>
+        </nav>
+        {/* ===== 写真（アイコン・お気に入り写真） ===== */}
+        <div id="pe-photo" className="scroll-mt-32 space-y-4">
+          <PrintedHeading no="01" kicker="PHOTO" title="写真をはる" />
+        <section className="pb-sheet p-5">
+          <p className="mb-3 text-sm font-black text-muted">アイコン画像</p>
+          <div className="flex items-center gap-4">
+            <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/20 text-4xl shadow-inner">
+              {localAvatarUrl ? (
+                <img src={localAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
+              ) : (
+                me.avatar
+              )}
+            </div>
+            <label className="cursor-pointer rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]">
+              画像を選ぶ
+              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            </label>
+            {localAvatarUrl && (
+              <button type="button" onClick={() => setLocalAvatarUrl('')} className="text-xs font-black text-muted">
+                削除
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="pb-sheet p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-black text-muted">お気に入り写真（{localPhotos.length}/10）</p>
+            {localPhotos.length < 10 && (
+              <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink active:scale-[0.99]">
+                ＋ 追加
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
+              </label>
+            )}
+          </div>
+          {localPhotos.length === 0 ? (
+            <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-pink/30 bg-pink/5 p-8 text-xs font-bold text-muted">
+              タップして写真を追加（最大10枚）
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
+            </label>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {localPhotos.map((photo, index) => (
+                <div key={index} className="relative aspect-square overflow-hidden rounded-2xl">
+                  <img src={photo} alt={`photo-${index}`} className="h-full w-full object-cover" />
+                  <div className="absolute bottom-0 left-0 right-0 flex gap-1 p-1">
+                    <label className="flex-1 cursor-pointer rounded-lg bg-white/80 py-1 text-center text-[10px] font-black text-ink backdrop-blur-sm">
+                      差替
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReplacePhoto(index, e)} />
+                    </label>
+                    <button type="button" onClick={() => handleDeletePhoto(index)} className="flex-1 rounded-lg bg-pink/80 py-1 text-[10px] font-black text-white backdrop-blur-sm">
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        </div>
+        <div id="pe-stage" className="scroll-mt-32 space-y-4">
+        {/* ===== ステップ1: 立場（ライフステージ）===== */}
+        <section className="pb-sheet p-5">
+          <p className="mb-1 text-base font-black text-ink">① 立場を選んでね</p>
+          <p className="mb-4 text-xs font-bold text-muted">どれかひとつ（選ぶと表示項目が変わります）</p>
+          <div className="grid grid-cols-2 gap-2">
+            {LIFE_STAGE_DEFS.map((ls) => (
+              <button
+                key={ls.id}
+                type="button"
+                onClick={() => {
+                  update('attribute', ls.id);
+                  setLocalCustomFields((prev) => {
+                    const next: Record<string, string> = {};
+                    ACTIVITY_DEFS.find((a) => a.id === form.activity)?.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    return next;
+                  });
+                }}
+                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  form.attribute === ls.id
+                    ? 'bg-pink text-white shadow-card'
+                    : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
+                }`}
+              >
+                <span>{ls.emoji}</span>
+                <span className="text-left leading-tight">{ls.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* ===== ステップ2: 特技・活動（任意）===== */}
+        <section className="pb-sheet p-5">
+          <p className="mb-1 text-base font-black text-ink">② 特技・活動（あれば）</p>
+          <p className="mb-4 text-xs font-bold text-muted">ライフステージに関係なく選べます</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                update('activity', '');
+                setLocalCustomFields((prev) => {
+                  const next: Record<string, string> = {};
+                  LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
+                    if (prev[f.key]) next[f.key] = prev[f.key];
+                  });
+                  return next;
+                });
+              }}
+              className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                !form.activity
+                  ? 'bg-purple text-white shadow-card'
+                  : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
+              }`}
+            >
+              <span>✗</span>
+              <span>なし</span>
+            </button>
+            {ACTIVITY_DEFS.map((act) => (
+              <button
+                key={act.id}
+                type="button"
+                onClick={() => {
+                  update('activity', act.id);
+                  setLocalCustomFields((prev) => {
+                    const next: Record<string, string> = {};
+                    LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    act.fields.forEach((f) => {
+                      if (prev[f.key]) next[f.key] = prev[f.key];
+                    });
+                    return next;
+                  });
+                }}
+                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  form.activity === act.id
+                    ? 'bg-purple text-white shadow-card'
+                    : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
+                }`}
+              >
+                <span>{act.emoji}</span>
+                <span className="text-left leading-tight">{act.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        </div>
+        {/* ===== 記入用紙：きほんじょうほう／すき・きらい／わたしのこと（項目の順番は従来どおり） ===== */}
+        <p className="rounded-xl bg-white/70 px-4 py-2.5 text-[12px] font-bold text-muted">
+          保存するとプロフィール帳に反映されます。各項目の右のチップ（🌐公開／👥フォロワー／🔒非公開）で見せる相手を選べます。
+        </p>
+        <section id="pe-basic" className="pb-sheet scroll-mt-32 space-y-3 p-5">
+          <PrintedHeading no="02" kicker="BASIC" title="きほんじょうほう" />
+          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
+          <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
+          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
+          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} {...vprops('bloodType')} />
+          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} {...vprops('gender')} />
+          <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} {...vprops('mbti')} />
+          <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
+        </section>
+        <section id="pe-likes" className="pb-sheet scroll-mt-32 space-y-3 p-5">
+          <PrintedHeading no="03" kicker="LIKE & DISLIKE" title="すき・きらい" />
+          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} {...vprops('favoriteFood')} />
+          <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} {...vprops('dislikeFood')} />
+          <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} {...vprops('favoriteColor')} />
+          {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
+            <>
+              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('favoriteSubject')} />
+              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('dislikeSubject')} />
+            </>
+          )}
+          <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} {...vprops('favoriteCharacter')} />
+          <p className="rounded-xl bg-cream/60 px-4 py-2.5 text-[11px] font-bold text-muted">
+            📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
+          </p>
+        </section>
+        <section id="pe-about" className="pb-sheet scroll-mt-32 space-y-3 p-5">
+          <PrintedHeading no="04" kicker="ABOUT ME" title="わたしのこと" />
+          <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} {...vprops('specialty')} />
+          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} {...vprops('holiday')} />
+          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} {...vprops('wantToGo')} />
+          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} {...vprops('collection')} />
+          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} {...vprops('motto')} />
+          <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} {...vprops('charmPoint')} />
+          <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} {...vprops('dream')} />
+          <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
+        </section>
+        {/* ===== ライフステージ専用フィールド ===== */}
+        {(() => {
+          const lsDef = LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute);
+          if (!lsDef || lsDef.fields.length === 0) return null;
+          return (
+            <section className="space-y-3 pb-sheet p-5">
+              <p className="text-base font-black text-ink">{lsDef.emoji} {lsDef.sectionTitle}</p>
+              {lsDef.fields.map((f) =>
+                f.type === 'select' && f.options ? (
+                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
+                ) : (
+                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
+                )
+              )}
+            </section>
+          );
+        })()}
+
+        {/* ===== 特技・活動専用フィールド ===== */}
+        {(() => {
+          const actDef = ACTIVITY_DEFS.find((a) => a.id === form.activity);
+          if (!actDef) return null;
+          return (
+            <section className="space-y-3 pb-sheet p-5">
+              <p className="text-base font-black text-ink">{actDef.emoji} {actDef.sectionTitle}</p>
+              {actDef.fields.map((f) =>
+                f.type === 'select' && f.options ? (
+                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
+                ) : (
+                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
+                )
+              )}
+            </section>
+          );
+        })()}
+<section id="pe-monthly" className="pb-memo scroll-mt-32 space-y-4 p-5">
+  <div>
+    <PrintedHeading no="05" kicker="THIS MONTH" title="🗓️ 今月のおだい" className="mb-1" />
+    <p className="mt-1 text-xs font-bold text-muted">お題は毎月かわります。エピソードとBEST3、どちらか片方だけでもOK！</p>
+  </div>
+  {/* 今月のエピソード質問（今月の1問・自由記述） */}
+  <div className="rounded-[20px] bg-white/70 p-4">
+    <p className="text-[11px] font-black text-muted">🍂 {monthInfo.events}</p>
+    <p className="mt-1 text-sm font-black text-pinkStrong">Q. {monthInfo.episodeQ}</p>
+    <textarea
+      value={monthlyEpisodeForm}
+      onChange={(e) => setMonthlyEpisodeForm(e.target.value)}
+      rows={3}
+      maxLength={300}
+      placeholder="エピソードを自由に書いてみよう"
+      className="mt-2 w-full resize-none rounded-2xl border border-pink/20 bg-white p-3 text-sm font-bold text-ink outline-none focus:border-pink"
+    />
+  </div>
+  {/* 今月のBEST3 */}
+  <div className="rounded-[20px] bg-white/70 p-4">
+    <p className="text-sm font-black text-pinkStrong">Q. {monthInfo.theme} は？</p>
+    <p className="mt-0.5 mb-2 text-xs font-bold text-muted">あなたのBEST3を教えて！</p>
+    <Best3EditBlock
+      title={monthInfo.theme}
+      items={monthlyForm}
+      onChange={(next) => setMonthlyForm(next)}
+    />
+  </div>
+</section>
+
+<section id="pe-best3" className="pb-sheet pb-grid scroll-mt-32 space-y-5 p-5">
+  <PrintedHeading no="06" kicker="MY BEST 3" title="すきなもの BEST3" />
+
+  {BEST3_CATEGORIES.map((cat) => (
+    <Best3EditBlock
+      key={cat.key}
+      title={`${cat.emoji} ${cat.label}`}
+      items={best3Form[cat.key] ?? ['', '', '']}
+      onChange={(next) =>
+        setBest3Form((prev) => ({ ...prev, [cat.key]: next }))
+      }
+    />
+  ))}
+</section>
+<section id="pe-qa" className="pb-sheet scroll-mt-32 space-y-4 p-5">
+  <PrintedHeading no="07" kicker="QUESTION CORNER" title="ひとことしつもん" />
+
+  {questionsForm.map((item, index) => (
+
+    
+    
+    
+    <div key={index} className="space-y-2 rounded-2xl bg-cream/20 p-4">
+      <EditField
+        label={`質問 ${index + 1}`}
+        value={item.q}
+        onChange={(v) => {
+          const next = [...questionsForm];
+          next[index].q = v;
+          setQuestionsForm(next);
+        }}
+      />
+
+      <EditField
+        label="回答"
+        value={item.a}
+        onChange={(v) => {
+          const next = [...questionsForm];
+          next[index].a = v;
+          setQuestionsForm(next);
+        }}
+      />
+
+      <div className="flex items-center justify-between">
+  <p className="text-sm font-black text-ink">質問 {index + 1}</p>
+  <button
+    type="button"
+    onClick={() =>
+      setQuestionsForm((prev) => prev.filter((_, i) => i !== index))
+    }
+    className="text-xs font-black text-pink"
+  >
+    削除
+  </button>
+</div>
+    </div>
+  ))}
+
+  <button
+  type="button"
+  onClick={() =>
+    setQuestionsForm((prev) => [
+      ...prev,
+      { q: '新しい質問', a: '' },
+    ])
+  }
+  className="w-full rounded-2xl border border-dashed border-pink/40 bg-pink/5 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]"
+>
+  ＋ 質問を追加する
+</button>
+</section>
+        {/* ===== わたしの字：書体・インク・大きさ（文字プレビューつき。保存ボタンで保存） ===== */}
+        <section id="pe-pen" className="pb-sheet scroll-mt-32 space-y-3 p-5">
+          <PrintedHeading no="08" kicker="MY PEN" title="わたしの字" />
+          <p className="-mt-1 text-[12px] font-bold text-muted">プロフ帳とお題の回答が、この字で表示されます。上の記入欄もこの字になります。</p>
+          <div {...penAttrs(penForm)} style={{ ...penAttrs(penForm).style, ['--pen-base' as any]: '18px' }} className="rounded-xl border-2 border-dashed border-ink/15 bg-white px-4 py-3" aria-live="polite">
+            <p className="pb-label">文字プレビュー</p>
+            <p className="pen-text pen-size mt-1 break-words leading-relaxed">{form.nickname || form.name || 'なまえ'}</p>
+            <p className="pen-text mt-0.5 break-words text-[15px] leading-relaxed">{form.message || 'よろしくね！ありがとう♡ ABC 123'}</p>
+          </div>
+          <PenFontPicker pen={penForm} onChange={(p) => { penTouched.current = true; setPenForm(p); }} />
+          <div className="pt-1"><PenInkPicker pen={penForm} onChange={(p) => { penTouched.current = true; setPenForm(p); }} /></div>
+        </section>
+        {/* ===== プレミアム設定（公認ユーザーのみ） ===== */}
+        {me.isOfficial && (
+          <section className="space-y-4 rounded-[32px] border-2 border-amber-100 bg-white p-5 shadow-card">
+            <div>
+              <p className="text-base font-black text-ink">✨ プレミアム設定</p>
+              <p className="mt-1 text-xs font-bold text-muted">購入者だけが見られる特別コンテンツを設定できます（買い切り）</p>
+            </div>
+            <EditField
+              label="紹介文（購入ページに表示）"
+              value={premiumForm.description}
+              onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))}
+            />
+            <div className="flex items-center gap-3">
+              <label className="shrink-0 text-xs font-bold text-muted">販売価格（円）</label>
+              <input
+                type="number"
+                min={0}
+                value={premiumForm.price}
+                onChange={(e) => setPremiumForm((p) => ({ ...p, price: Number(e.target.value) || 480 }))}
+                className="w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-4 py-2 text-sm font-bold outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-black text-ink">プレミアムQ&A</p>
+              {premiumForm.questions.map((item, i) => (
+                <div key={i} className="mb-3 space-y-2 rounded-2xl bg-amber-50 p-4">
+                  <EditField
+                    label={`質問 ${i + 1}`}
+                    value={item.q}
+                    onChange={(v) => {
+                      const next = [...premiumForm.questions];
+                      next[i] = { ...next[i], q: v };
+                      setPremiumForm((p) => ({ ...p, questions: next }));
+                    }}
+                  />
+                  <EditField
+                    label="回答"
+                    value={item.a}
+                    onChange={(v) => {
+                      const next = [...premiumForm.questions];
+                      next[i] = { ...next[i], a: v };
+                      setPremiumForm((p) => ({ ...p, questions: next }));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPremiumForm((p) => ({ ...p, questions: p.questions.filter((_, j) => j !== i) }))}
+                    className="text-xs font-black text-pink"
+                  >
+                    削除
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPremiumForm((p) => ({ ...p, questions: [...p.questions, { q: '', a: '' }] }))}
+                className="w-full rounded-2xl border border-dashed border-amber-300 bg-amber-50 py-3 text-sm font-black text-amber-500 active:scale-[0.99]"
+              >
+                ＋ 質問を追加する
+              </button>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold text-muted">購入者へのメッセージ</label>
+              <textarea
+                value={premiumForm.note}
+                onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))}
+                rows={3}
+                maxLength={300}
+                className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
+                placeholder="購入してくれた人へひとこと..."
+              />
+            </div>
+          </section>
+        )}
+
+        <button
+          onClick={saveAll}
+          className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
+        >
+          保存してプロフィール帳に反映
+        </button>
+        {/* ===== せってい（すぐ反映される項目） ===== */}
+        <div id="pe-settings" className="scroll-mt-32 space-y-4 pt-2">
+          <PrintedHeading no="09" kicker="SETTINGS" title="せってい" />
         {/* ===== ID・表示名（アカウント） ===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section className="pb-sheet p-5">
           <p className="mb-1 text-base font-black text-ink">🆔 ID・表示名</p>
           <p className="mb-3 text-xs font-bold text-muted">現在のID：<span className="font-black text-ink">{me.id}</span></p>
           <button
@@ -3557,7 +4018,7 @@ function ProfileEditScreen({
         </section>
 
         {/* ===== 言語設定 ===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section className="pb-sheet p-5">
           <p className="mb-1 text-base font-black text-ink">🌐 言語 / Language</p>
           <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります（20言語対応）</p>
           <div className="grid grid-cols-4 gap-2" data-noauto>
@@ -3576,7 +4037,7 @@ function ProfileEditScreen({
         </section>
 
         {/* ===== テーマカラー ===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section className="pb-sheet p-5">
           <p className="mb-1 text-base font-black text-ink">🎨 テーマカラー</p>
           <p className="mb-4 text-xs font-bold text-muted">アプリ全体の色と背景を変えられます</p>
           <div className="grid grid-cols-4 gap-3">
@@ -3655,404 +4116,8 @@ function ProfileEditScreen({
           </div>
         </section>
 
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-3 text-sm font-black text-muted">アイコン画像</p>
-          <div className="flex items-center gap-4">
-            <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/20 text-4xl shadow-inner">
-              {localAvatarUrl ? (
-                <img src={localAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
-              ) : (
-                me.avatar
-              )}
-            </div>
-            <label className="cursor-pointer rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]">
-              画像を選ぶ
-              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-            </label>
-            {localAvatarUrl && (
-              <button type="button" onClick={() => setLocalAvatarUrl('')} className="text-xs font-black text-muted">
-                削除
-              </button>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-black text-muted">お気に入り写真（{localPhotos.length}/10）</p>
-            {localPhotos.length < 10 && (
-              <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink active:scale-[0.99]">
-                ＋ 追加
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
-              </label>
-            )}
-          </div>
-          {localPhotos.length === 0 ? (
-            <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-pink/30 bg-pink/5 p-8 text-xs font-bold text-muted">
-              タップして写真を追加（最大10枚）
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
-            </label>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {localPhotos.map((photo, index) => (
-                <div key={index} className="relative aspect-square overflow-hidden rounded-2xl">
-                  <img src={photo} alt={`photo-${index}`} className="h-full w-full object-cover" />
-                  <div className="absolute bottom-0 left-0 right-0 flex gap-1 p-1">
-                    <label className="flex-1 cursor-pointer rounded-lg bg-white/80 py-1 text-center text-[10px] font-black text-ink backdrop-blur-sm">
-                      差替
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReplacePhoto(index, e)} />
-                    </label>
-                    <button type="button" onClick={() => handleDeletePhoto(index)} className="flex-1 rounded-lg bg-pink/80 py-1 text-[10px] font-black text-white backdrop-blur-sm">
-                      削除
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ===== ステップ1: 立場（ライフステージ）===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-base font-black text-ink">① 立場を選んでね</p>
-          <p className="mb-4 text-xs font-bold text-muted">どれかひとつ（選ぶと表示項目が変わります）</p>
-          <div className="grid grid-cols-2 gap-2">
-            {LIFE_STAGE_DEFS.map((ls) => (
-              <button
-                key={ls.id}
-                type="button"
-                onClick={() => {
-                  update('attribute', ls.id);
-                  setLocalCustomFields((prev) => {
-                    const next: Record<string, string> = {};
-                    ACTIVITY_DEFS.find((a) => a.id === form.activity)?.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    return next;
-                  });
-                }}
-                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  form.attribute === ls.id
-                    ? 'bg-pink text-white shadow-card'
-                    : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
-                }`}
-              >
-                <span>{ls.emoji}</span>
-                <span className="text-left leading-tight">{ls.label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* ===== ステップ2: 特技・活動（任意）===== */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-base font-black text-ink">② 特技・活動（あれば）</p>
-          <p className="mb-4 text-xs font-bold text-muted">ライフステージに関係なく選べます</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                update('activity', '');
-                setLocalCustomFields((prev) => {
-                  const next: Record<string, string> = {};
-                  LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
-                    if (prev[f.key]) next[f.key] = prev[f.key];
-                  });
-                  return next;
-                });
-              }}
-              className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                !form.activity
-                  ? 'bg-purple text-white shadow-card'
-                  : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
-              }`}
-            >
-              <span>✗</span>
-              <span>なし</span>
-            </button>
-            {ACTIVITY_DEFS.map((act) => (
-              <button
-                key={act.id}
-                type="button"
-                onClick={() => {
-                  update('activity', act.id);
-                  setLocalCustomFields((prev) => {
-                    const next: Record<string, string> = {};
-                    LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    act.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    return next;
-                  });
-                }}
-                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  form.activity === act.id
-                    ? 'bg-purple text-white shadow-card'
-                    : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
-                }`}
-              >
-                <span>{act.emoji}</span>
-                <span className="text-left leading-tight">{act.label}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="text-xl font-black text-ink">基本プロフィールを編集</p>
-          <p className="mt-1 text-xs font-bold text-muted">
-            保存するとプロフィール帳に上書き反映されます。各項目の右のチップ（🌐公開／👥フォロワー／🔒非公開）で見せる相手を選べます。
-          </p>
-        </section>
-
-        <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
-          <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
-          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
-          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} {...vprops('bloodType')} />
-          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} {...vprops('gender')} />
-          <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} {...vprops('mbti')} />
-          <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
-          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} {...vprops('favoriteFood')} />
-          <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} {...vprops('dislikeFood')} />
-          <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} {...vprops('favoriteColor')} />
-          {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
-            <>
-              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('favoriteSubject')} />
-              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('dislikeSubject')} />
-            </>
-          )}
-          <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} {...vprops('favoriteCharacter')} />
-          <p className="rounded-2xl bg-pink/5 px-4 py-2.5 text-[11px] font-bold text-muted">
-            📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
-          </p>
-          <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} {...vprops('specialty')} />
-          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} {...vprops('holiday')} />
-          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} {...vprops('wantToGo')} />
-          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} {...vprops('collection')} />
-          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} {...vprops('motto')} />
-          <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} {...vprops('charmPoint')} />
-          <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} {...vprops('dream')} />
-          <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
-        </section>
-
-        {/* ===== ライフステージ専用フィールド ===== */}
-        {(() => {
-          const lsDef = LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute);
-          if (!lsDef || lsDef.fields.length === 0) return null;
-          return (
-            <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-              <p className="text-base font-black text-ink">{lsDef.emoji} {lsDef.sectionTitle}</p>
-              {lsDef.fields.map((f) =>
-                f.type === 'select' && f.options ? (
-                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
-                ) : (
-                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
-                )
-              )}
-            </section>
-          );
-        })()}
-
-        {/* ===== 特技・活動専用フィールド ===== */}
-        {(() => {
-          const actDef = ACTIVITY_DEFS.find((a) => a.id === form.activity);
-          if (!actDef) return null;
-          return (
-            <section className="space-y-3 rounded-[32px] bg-white p-5 shadow-card">
-              <p className="text-base font-black text-ink">{actDef.emoji} {actDef.sectionTitle}</p>
-              {actDef.fields.map((f) =>
-                f.type === 'select' && f.options ? (
-                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
-                ) : (
-                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
-                )
-              )}
-            </section>
-          );
-        })()}
-<section className="space-y-4 rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
-  <div>
-    <p className="text-xl font-black text-ink">🗓️ 今月のおだい</p>
-    <p className="mt-1 text-xs font-bold text-muted">お題は毎月かわります。エピソードとBEST3、どちらか片方だけでもOK！</p>
-  </div>
-  {/* 今月のエピソード質問（今月の1問・自由記述） */}
-  <div className="rounded-[20px] bg-white/70 p-4">
-    <p className="text-[11px] font-black text-muted">🍂 {monthInfo.events}</p>
-    <p className="mt-1 text-sm font-black text-pinkStrong">Q. {monthInfo.episodeQ}</p>
-    <textarea
-      value={monthlyEpisodeForm}
-      onChange={(e) => setMonthlyEpisodeForm(e.target.value)}
-      rows={3}
-      maxLength={300}
-      placeholder="エピソードを自由に書いてみよう"
-      className="mt-2 w-full resize-none rounded-2xl border border-pink/20 bg-white p-3 text-sm font-bold text-ink outline-none focus:border-pink"
-    />
-  </div>
-  {/* 今月のBEST3 */}
-  <div className="rounded-[20px] bg-white/70 p-4">
-    <p className="text-sm font-black text-pinkStrong">Q. {monthInfo.theme} は？</p>
-    <p className="mt-0.5 mb-2 text-xs font-bold text-muted">あなたのBEST3を教えて！</p>
-    <Best3EditBlock
-      title={monthInfo.theme}
-      items={monthlyForm}
-      onChange={(next) => setMonthlyForm(next)}
-    />
-  </div>
-</section>
-
-<section className="space-y-5 rounded-[32px] bg-white p-5 shadow-card">
-  <p className="text-xl font-black text-ink">すきなもの BEST3</p>
-
-  {BEST3_CATEGORIES.map((cat) => (
-    <Best3EditBlock
-      key={cat.key}
-      title={`${cat.emoji} ${cat.label}`}
-      items={best3Form[cat.key] ?? ['', '', '']}
-      onChange={(next) =>
-        setBest3Form((prev) => ({ ...prev, [cat.key]: next }))
-      }
-    />
-  ))}
-</section>
-<section className="space-y-4 rounded-[32px] bg-white p-5 shadow-card">
-  <p className="text-xl font-black text-ink">ひとことしつもん</p>
-
-  {questionsForm.map((item, index) => (
-
-    
-    
-    
-    <div key={index} className="space-y-2 rounded-2xl bg-cream/20 p-4">
-      <EditField
-        label={`質問 ${index + 1}`}
-        value={item.q}
-        onChange={(v) => {
-          const next = [...questionsForm];
-          next[index].q = v;
-          setQuestionsForm(next);
-        }}
-      />
-
-      <EditField
-        label="回答"
-        value={item.a}
-        onChange={(v) => {
-          const next = [...questionsForm];
-          next[index].a = v;
-          setQuestionsForm(next);
-        }}
-      />
-
-      <div className="flex items-center justify-between">
-  <p className="text-sm font-black text-ink">質問 {index + 1}</p>
-  <button
-    type="button"
-    onClick={() =>
-      setQuestionsForm((prev) => prev.filter((_, i) => i !== index))
-    }
-    className="text-xs font-black text-pink"
-  >
-    削除
-  </button>
-</div>
-    </div>
-  ))}
-
-  <button
-  type="button"
-  onClick={() =>
-    setQuestionsForm((prev) => [
-      ...prev,
-      { q: '新しい質問', a: '' },
-    ])
-  }
-  className="w-full rounded-2xl border border-dashed border-pink/40 bg-pink/5 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]"
->
-  ＋ 質問を追加する
-</button>
-</section>
-        {/* ===== プレミアム設定（公認ユーザーのみ） ===== */}
-        {me.isOfficial && (
-          <section className="space-y-4 rounded-[32px] border-2 border-amber-100 bg-white p-5 shadow-card">
-            <div>
-              <p className="text-base font-black text-ink">✨ プレミアム設定</p>
-              <p className="mt-1 text-xs font-bold text-muted">購入者だけが見られる特別コンテンツを設定できます（買い切り）</p>
-            </div>
-            <EditField
-              label="紹介文（購入ページに表示）"
-              value={premiumForm.description}
-              onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))}
-            />
-            <div className="flex items-center gap-3">
-              <label className="shrink-0 text-xs font-bold text-muted">販売価格（円）</label>
-              <input
-                type="number"
-                min={0}
-                value={premiumForm.price}
-                onChange={(e) => setPremiumForm((p) => ({ ...p, price: Number(e.target.value) || 480 }))}
-                className="w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-4 py-2 text-sm font-bold outline-none focus:border-amber-400"
-              />
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-black text-ink">プレミアムQ&A</p>
-              {premiumForm.questions.map((item, i) => (
-                <div key={i} className="mb-3 space-y-2 rounded-2xl bg-amber-50 p-4">
-                  <EditField
-                    label={`質問 ${i + 1}`}
-                    value={item.q}
-                    onChange={(v) => {
-                      const next = [...premiumForm.questions];
-                      next[i] = { ...next[i], q: v };
-                      setPremiumForm((p) => ({ ...p, questions: next }));
-                    }}
-                  />
-                  <EditField
-                    label="回答"
-                    value={item.a}
-                    onChange={(v) => {
-                      const next = [...premiumForm.questions];
-                      next[i] = { ...next[i], a: v };
-                      setPremiumForm((p) => ({ ...p, questions: next }));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPremiumForm((p) => ({ ...p, questions: p.questions.filter((_, j) => j !== i) }))}
-                    className="text-xs font-black text-pink"
-                  >
-                    削除
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPremiumForm((p) => ({ ...p, questions: [...p.questions, { q: '', a: '' }] }))}
-                className="w-full rounded-2xl border border-dashed border-amber-300 bg-amber-50 py-3 text-sm font-black text-amber-500 active:scale-[0.99]"
-              >
-                ＋ 質問を追加する
-              </button>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-bold text-muted">購入者へのメッセージ</label>
-              <textarea
-                value={premiumForm.note}
-                onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))}
-                rows={3}
-                maxLength={300}
-                className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
-                placeholder="購入してくれた人へひとこと..."
-              />
-            </div>
-          </section>
-        )}
-
         {/* ── 通知設定 ── */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section className="pb-sheet p-5">
           <p className="mb-1 text-base font-black text-ink">🔔 通知設定</p>
           <p className="mb-4 text-xs font-bold text-muted">ブラウザ通知の許可が必要です</p>
           <label className="flex cursor-pointer items-center justify-between rounded-2xl bg-base px-4 py-3.5">
@@ -4073,7 +4138,7 @@ function ProfileEditScreen({
         </section>
 
         {/* ── シェア ── */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section className="pb-sheet p-5">
           <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
           <p className="mb-4 text-xs font-bold text-muted">QRコードや画像でプロフィールを友達にシェアできます</p>
           <button
@@ -4084,24 +4149,7 @@ function ProfileEditScreen({
           </button>
         </section>
 
-        <button
-          onClick={() => {
-            onSave(form);
-            onSaveBest3(best3Form);
-            onSaveMonthlyBest3(monthlyForm, monthlyEpisodeForm);
-            onSaveQuestions(questionsForm);
-            onSaveAvatar(localAvatarUrl);
-            onSaveFavoritePhotos(localPhotos);
-            onSaveCustomFields(localCustomFields);
-            onSaveVisibility(visForm);
-            if (me.isOfficial) onSavePremiumContent(premiumForm);
-            go('profile');
-          }}
-          className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
-        >
-          保存してプロフィール帳に反映
-        </button>
-
+        </div>
         {/* ご意見・不具合を送る（テスター用の窓口） */}
         <section className="rounded-[32px] bg-white p-5 shadow-card">
           <p className="mb-1 text-base font-black text-ink">💬 ご意見・不具合を送る</p>
@@ -5065,10 +5113,11 @@ function VisChip({ value = 'public', onChange }: { value?: FieldVisibility; onCh
 
 // フィールドのラベル行（右端に任意で公開範囲チップ）
 function FieldLabel({ label, vis, onVis }: { label: string; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
-  if (!onVis) return <span className="text-xs font-black text-muted">{label}</span>;
+  // 記入用紙の印刷された項目名（入力した文字＝手書きと区別する）
+  if (!onVis) return <span className="pb-label pb-label-md">{label}</span>;
   return (
     <span className="flex items-center justify-between gap-2">
-      <span className="text-xs font-black text-muted">{label}</span>
+      <span className="pb-label pb-label-md">{label}</span>
       <VisChip value={vis} onChange={onVis} />
     </span>
   );
@@ -5093,7 +5142,7 @@ function EditField({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
+        className="pen-text mt-1 w-full rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 text-[15px] font-bold text-ink outline-none focus:border-pink"
       />
     </label>
   );
@@ -5139,7 +5188,7 @@ function NameField({ label, value, onChange, vis, onVis }: { label: string; valu
   const last = parts[0] ?? '';
   const first = parts.slice(1).join(' ');
   const set = (l: string, f: string) => onChange(`${l} ${f}`.trim());
-  const inp = 'mt-1 w-full rounded-2xl border border-purple/15 bg-cream/20 px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink';
+  const inp = 'pen-text mt-1 w-full rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 text-[15px] font-bold text-ink outline-none focus:border-pink';
   return (
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
@@ -5209,19 +5258,17 @@ function Best3EditBlock({
   };
 
   return (
-    <div className="space-y-3 rounded-3xl bg-cream/20 p-4">
-      <p className="text-sm font-black text-muted">{title}</p>
+    <div className="space-y-2.5 rounded-xl border border-ink/10 bg-white/70 p-3.5">
+      <p className="pb-label pb-label-md">{title}</p>
 
       {safeItems.map((item, index) => (
         <label key={index} className="flex items-center gap-3">
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pink text-sm font-black text-white">
-            {index + 1}
-          </span>
+          <span className="pb-num" aria-hidden>{index + 1}</span>
           <input
             value={item}
             onChange={(e) => updateItem(index, e.target.value)}
             placeholder={`${index + 1}位を入力`}
-            className="w-full rounded-2xl border border-purple/15 bg-white px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
+            className="pen-text w-full rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 text-[15px] font-bold text-ink outline-none focus:border-pink"
           />
         </label>
       ))}
@@ -6070,6 +6117,13 @@ function DiaryComposer({
   );
 }
 
+// 書いた人の「わたしのペン」で本文を表示（ペン未設定なら従来の文字）
+function AuthorPenText({ userId, className = '', base = '15px', children }: { userId: string; className?: string; base?: string; children: React.ReactNode }) {
+  const pen = useUserPen(userId);
+  if (!pen) return <p className={className}>{children}</p>;
+  return <p {...penAttrs(pen)} style={{ ...penAttrs(pen).style, ['--pen-base' as any]: base }} className={`${className} pen-text pen-size`}>{children}</p>;
+}
+
 function DiaryListScreen({
   go,
   diaryPages,
@@ -6099,25 +6153,28 @@ function DiaryListScreen({
           <button
             key={page.id}
             onClick={() => go('diary-detail', page.id)}
-            className="w-full rounded-[28px] bg-white p-5 text-left shadow-card active:scale-[0.99]"
+            className="pb-sheet relative w-full overflow-hidden py-5 pl-9 pr-5 text-left active:scale-[0.99]"
           >
+            {/* ノートの背（とじ紐の穴） */}
+            <span aria-hidden className="absolute inset-y-0 left-0 w-6 bg-[repeating-linear-gradient(180deg,transparent_0_14px,rgb(var(--pb-line)/.35)_14px_20px)] bg-[length:100%_34px] bg-pink/15" />
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="font-black text-ink">{page.theme}</p>
+                <p className="pb-label">📓 交換ノート</p>
+                <p className="mt-0.5 font-black text-ink">{page.theme}</p>
                 <p className="mt-1 text-xs font-bold leading-5 text-muted">{page.description}</p>
               </div>
-              <span className="shrink-0 rounded-full bg-pink/10 px-3 py-1 text-xs font-black text-pink">
-                {page.entries.length}件
+              <span className="shrink-0 rounded-full bg-cream px-3 py-1 text-xs font-black text-ink shadow-[0_2px_4px_rgba(0,0,0,.12)]">
+                {page.entries.length}ページ
               </span>
             </div>
             {page.entries.length > 0 && (() => {
               const latest = page.entries[page.entries.length - 1];
               return (
-                <div className="mt-3 rounded-2xl bg-cream/30 px-3 py-2">
-                  <p className="text-[10px] font-black text-muted">最新の書き込み</p>
-                  <p className="mt-0.5 line-clamp-1 text-xs font-black text-ink">
+                <div className="pb-memo mt-3 !py-2">
+                  <p className="pb-label">さいしんの書き込み</p>
+                  <AuthorPenText userId={latest.authorId} base="14px" className="mt-0.5 line-clamp-1 text-xs font-black text-ink">
                     {latest.body.slice(0, 24) || '（写真）'}
-                  </p>
+                  </AuthorPenText>
                 </div>
               );
             })()}
@@ -6253,9 +6310,10 @@ function DiaryDetailScreen({
       <AppHeader title={page.theme} back onBack={() => go('diary-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-8">
         {/* テーマカード */}
-        <section className="rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/15 via-white to-purple/15 p-5 shadow-card">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="rounded-full bg-white/80 px-3 py-1 text-[10px] font-black text-muted shadow-sm">{visibilityLabel}</span>
+        <section className="pb-sheet pb-grid p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <TapeLabel tone="cream" rotate={-2}>📓 交換ノート</TapeLabel>
+            <span className="rounded-full bg-cream px-3 py-1 text-[11px] font-black text-ink">{visibilityLabel}</span>
           </div>
           <p className="text-sm font-bold leading-6 text-ink">{page.description}</p>
           <div className="mt-3 flex items-center gap-2">
@@ -6277,10 +6335,10 @@ function DiaryDetailScreen({
           const commentsOpen = openComments.has(entry.id);
           const commentCount = entry.comments?.length ?? 0;
           return (
-          <article key={entry.id} className="overflow-hidden rounded-[28px] bg-white shadow-card">
-            {/* 記事ヘッダー（日付＋気分・天気） */}
-            <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
-              <p className="text-[11px] font-black text-muted">🗓 {dateStr} {timeStr}</p>
+          <article key={entry.id} className="pb-sheet overflow-hidden">
+            {/* ページの上（日付＋気分・天気） */}
+            <div className="flex items-center justify-between border-b-2 border-dotted border-ink/15 px-4 py-2">
+              <p className="pb-label">🗓 {dateStr} {timeStr}</p>
               <div className="flex items-center gap-1 text-base">
                 {entry.weather && <span title="天気">{entry.weather}</span>}
                 {entry.mood && <span title="気分">{entry.mood}</span>}
@@ -6294,8 +6352,8 @@ function DiaryDetailScreen({
                   <span className="mr-1">✿</span><RetroText text={entry.title} />
                 </h3>
               )}
-              {/* 本文 */}
-              <p className="text-sm font-bold leading-7 text-ink"><RetroText text={entry.body} /></p>
+              {/* 本文（書いた人のペンで） */}
+              <AuthorPenText userId={entry.authorId} className="pb-ruled pb-ruled-rows text-sm font-bold leading-7 text-ink"><RetroText text={entry.body} /></AuthorPenText>
               {entry.photoUrl && (
                 <div className="mt-3 overflow-hidden rounded-2xl">
                   <img src={entry.photoUrl} alt="entry photo" className="w-full object-cover" />
@@ -7007,90 +7065,120 @@ function BlogWysiwygEditor({
   const btnActive = 'ring-2 ring-ink bg-pink/10 text-pink';
   const swatchActive = 'ring-2 ring-ink scale-110 shadow-card';
   const swatchIdle = 'ring-2 ring-white';
+  // デコメ道具箱のタブ（押しても本文の選択を保つ）
+  const [tool, setTool] = useState<'text' | 'pen' | 'marker' | 'deco' | 'line' | 'photo'>('text');
+  const TOOLS: { id: typeof tool; label: string }[] = [
+    { id: 'text', label: '✏️ 文字' }, { id: 'pen', label: '🖊 色ペン' }, { id: 'marker', label: '🖍 マーカー' },
+    { id: 'deco', label: '✨ デコ絵文字' }, { id: 'line', label: '〰 区切り' }, { id: 'photo', label: '📷 写真' },
+  ];
+  // デコ絵文字はショートコード（例 [♥]）で入れる。できあがり（記事）ではドット絵で表示される。
+  function insertDeco(code: string) {
+    edRef.current?.focus();
+    document.execCommand('insertText', false, code);
+    notify();
+  }
+
   return (
     <div className="space-y-3">
-      {/* タイトル */}
-      <input
-        value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40}
-        placeholder="タイトル（例：今日のできごと♪）"
-        className="w-full rounded-2xl border border-purple/15 bg-white px-4 py-2.5 text-base font-black outline-none focus:border-pink"
-        style={{ color: titleColor }}
-      />
-      {/* 見出し色 */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-black text-muted">見出し色</span>
-        {DIARY_TITLE_COLORS.map((c) => (
-          <button key={c.value} type="button" onClick={() => setTitleColor(c.value)} aria-label={c.label}
-            className={`h-7 w-7 rounded-full transition active:scale-90 ${titleColor === c.value ? swatchActive : swatchIdle}`}
-            style={{ background: c.value }} />
-        ))}
-      </div>
-      {/* 気分（横1列・はみ出す分はスクロール） */}
-      <div className="flex items-center gap-1">
-        <span className="shrink-0 text-[11px] font-black text-muted">気分</span>
-        <div className="flex flex-nowrap gap-1 overflow-x-auto">
-          {DIARY_MOODS.map((m) => (
-            <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)}
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg transition ${mood === m ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}>{m}</button>
-          ))}
-        </div>
-      </div>
-      {/* 天気（横1列・はみ出す分はスクロール） */}
-      <div className="flex items-center gap-1">
-        <span className="shrink-0 text-[11px] font-black text-muted">天気</span>
-        <div className="flex flex-nowrap gap-1 overflow-x-auto">
-          {DIARY_WEATHERS.map((w) => (
-            <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)}
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-base'}`}>{w}</button>
-          ))}
+      {/* 記事の情報（タイトル・見出し色・気分・天気） */}
+      <div className="gk-frame">
+        <div className="gk-paper space-y-2.5 rounded-[10px] bg-[#fffafd] p-3">
+          <p className="gk-font text-[11px] text-muted">■ 記事の情報</p>
+          <input
+            value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40}
+            placeholder="タイトル（例：今日のできごと♪）" aria-label="タイトル"
+            className="w-full rounded-md border-2 border-[#b9b3cf] bg-[#ffffff] px-3 py-2.5 text-base font-black outline-none focus:border-pink"
+            style={{ color: titleColor }}
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-black text-muted">見出し色</span>
+            {DIARY_TITLE_COLORS.map((c) => (
+              <button key={c.value} type="button" onClick={() => setTitleColor(c.value)} aria-label={c.label} aria-pressed={titleColor === c.value}
+                className={`h-7 w-7 rounded-full transition active:scale-90 ${titleColor === c.value ? swatchActive : swatchIdle}`}
+                style={{ background: c.value }} />
+            ))}
+          </div>
+          {/* 気分（横1列・はみ出す分はスクロール） */}
+          <div className="flex items-center gap-1">
+            <span className="shrink-0 text-[11px] font-black text-muted">気分</span>
+            <div className="flex flex-nowrap gap-1 overflow-x-auto">
+              {DIARY_MOODS.map((m) => (
+                <button key={m} type="button" onClick={() => setMood(mood === m ? '' : m)} aria-pressed={mood === m}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-lg transition ${mood === m ? 'bg-pink/15 ring-1 ring-pink' : 'hover:bg-base'}`}>{m}</button>
+              ))}
+            </div>
+          </div>
+          {/* 天気（横1列・はみ出す分はスクロール） */}
+          <div className="flex items-center gap-1">
+            <span className="shrink-0 text-[11px] font-black text-muted">天気</span>
+            <div className="flex flex-nowrap gap-1 overflow-x-auto">
+              {DIARY_WEATHERS.map((w) => (
+                <button key={w} type="button" onClick={() => setWeather(weather === w ? '' : w)} aria-pressed={weather === w}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-lg transition ${weather === w ? 'bg-blue-100 ring-1 ring-blue-300' : 'hover:bg-base'}`}>{w}</button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ツールバー（押しても本文の選択を保持＝onPointerDownで抑止） */}
-      <div className="flex flex-wrap gap-1.5 rounded-2xl bg-base p-2">
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h2')}>見出し</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h3')}>小見出し</button>
-        <button type="button" className={`${btn} ${active.bold ? btnActive : ''}`} onPointerDown={keepSel} onClick={toggleBold}><b>B</b> 太字</button>
-        <button type="button" className={`${btn} ${active.underline ? btnActive : ''}`} onPointerDown={keepSel} onClick={toggleUnderline}><u>U</u> 下線</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={clearFmt}>✕ 解除</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('p')}>戻す</button>
-        <button type="button" className={btn} onPointerDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真</button>
-        <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
-      </div>
-      {/* 文字色（選択中の色は外枠を強調＋少し大きく。以降の入力もこの色になる） */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-black text-muted">文字色</span>
-        {TEXT_COLORS.map((col) => (
-          <button key={col} type="button" onPointerDown={keepSel} onClick={() => setColor(col)} aria-label={`色 ${col}`}
-            className={`h-7 w-7 rounded-full transition active:scale-90 ${active.color === col.toLowerCase() ? swatchActive : swatchIdle}`}
-            style={{ background: col }} />
-        ))}
-      </div>
-      {/* マーカー色（選択中の色は外枠を強調＋少し大きく。以降の入力もこの色でマーク） */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-black text-muted">🖍 マーカー</span>
-        {MARKER_COLORS.map((col) => (
-          <button key={col} type="button" onPointerDown={keepSel} onClick={() => setHl(col)} aria-label={`マーカー ${col}`}
-            className={`h-7 w-7 rounded-md transition active:scale-90 ${active.hl === col.toLowerCase() ? swatchActive : swatchIdle}`}
-            style={{ background: col }} />
-        ))}
-        <button type="button" onPointerDown={keepSel} onClick={() => setHl('transparent')} className={btn}>マーカーなし</button>
-      </div>
-      {/* 区切り線（ギャルっぽい飾り線も） */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-black text-muted">区切り</span>
-        {BLOG_DIVIDERS.map((d) => (
-          <button key={d.id} type="button" onPointerDown={keepSel} onClick={() => insertDivider(d.id)}
-            className="shrink-0 rounded-xl bg-white px-2.5 py-1.5 text-[11px] font-black text-ink shadow-card transition active:scale-90 hover:bg-pink/10">
-            {d.id === 'line' ? '― 線' : d.text.slice(0, 5)}
-          </button>
-        ))}
+      {/* デコメ道具箱（ガラケーのデコメ編集のように、道具を選んで本文を飾る） */}
+      <div className="gk-frame">
+        <div className="gk-paper rounded-[10px] bg-[#fffafd] p-2">
+          <div role="tablist" aria-label="デコメ道具箱" className="flex gap-1 overflow-x-auto border-b-2 border-pink/30 px-0.5">
+            {TOOLS.map((t) => (
+              <button key={t.id} type="button" role="tab" aria-selected={tool === t.id}
+                onPointerDown={keepSel} onClick={() => setTool(t.id)}
+                className="gk-tab shrink-0">{t.label}</button>
+            ))}
+          </div>
+          <div role="tabpanel" className="flex min-h-[52px] flex-wrap items-center gap-1.5 rounded-b-lg bg-[#ffffff] p-2">
+            {tool === 'text' && (<>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h2')}>見出し</button>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('h3')}>小見出し</button>
+              <button type="button" className={`${btn} ${active.bold ? btnActive : ''}`} aria-pressed={active.bold} onPointerDown={keepSel} onClick={toggleBold}><b>B</b> 太字</button>
+              <button type="button" className={`${btn} ${active.underline ? btnActive : ''}`} aria-pressed={active.underline} onPointerDown={keepSel} onClick={toggleUnderline}><u>U</u> 下線</button>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:1.35em')}>大</button>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => wrapInline('font-size:0.82em')}>小</button>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={clearFmt}>✕ 解除</button>
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => block('p')}>戻す</button>
+            </>)}
+            {tool === 'pen' && (<>
+              <span className="text-[11px] font-black text-muted">文字色</span>
+              {TEXT_COLORS.map((col) => (
+                <button key={col} type="button" onPointerDown={keepSel} onClick={() => setColor(col)} aria-label={`色 ${col}`} aria-pressed={active.color === col.toLowerCase()}
+                  className={`h-8 w-8 rounded-full transition active:scale-90 ${active.color === col.toLowerCase() ? swatchActive : swatchIdle}`}
+                  style={{ background: col }} />
+              ))}
+            </>)}
+            {tool === 'marker' && (<>
+              {MARKER_COLORS.map((col) => (
+                <button key={col} type="button" onPointerDown={keepSel} onClick={() => setHl(col)} aria-label={`マーカー ${col}`} aria-pressed={active.hl === col.toLowerCase()}
+                  className={`h-8 w-8 rounded-md transition active:scale-90 ${active.hl === col.toLowerCase() ? swatchActive : swatchIdle}`}
+                  style={{ background: col }} />
+              ))}
+              <button type="button" onPointerDown={keepSel} onClick={() => setHl('transparent')} className={btn}>マーカーなし</button>
+            </>)}
+            {tool === 'deco' && (
+              <div className="w-full" onPointerDown={keepSel} onMouseDown={keepSel}>
+                <RetroEmojiPicker onInsert={insertDeco} />
+                <p className="mt-1 text-[11px] font-bold text-muted">カーソルの位置に入ります。記事ではドット絵の絵文字になります。</p>
+              </div>
+            )}
+            {tool === 'line' && BLOG_DIVIDERS.map((d) => (
+              <button key={d.id} type="button" onPointerDown={keepSel} onClick={() => insertDivider(d.id)} className={btn}>
+                {d.id === 'line' ? '― 線' : d.text.slice(0, 5)}
+              </button>
+            ))}
+            {tool === 'photo' && (
+              <button type="button" className={btn} onPointerDown={keepSel} onClick={() => fileRef.current?.click()}>🖼 写真をえらんで入れる</button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+          </div>
+        </div>
       </div>
 
       {/* 編集面＝できあがりそのまま（contentEditable） */}
-      <p className="text-[11px] font-bold text-muted">👇 ここに直接書けます。文字を選んで「大／小／文字色／マーカー」、ツールバーで見出し・区切り・写真。</p>
+      <p className="text-[11px] font-bold text-muted">👇 ここに直接書けます。文字を選んでから道具を押すと、その部分を飾れます。</p>
       <div
         ref={edRef}
         contentEditable
@@ -7098,18 +7186,21 @@ function BlogWysiwygEditor({
         spellCheck={false}
         onInput={notify}
         onPaste={onPaste}
+        role="textbox"
+        aria-multiline="true"
+        aria-label="ブログの本文"
         data-placeholder="ここに本文を書こう…"
-        className="blog-editable min-h-[240px] rounded-2xl border-2 border-pink/25 p-4 text-base font-semibold leading-8 text-ink outline-none focus:border-pink"
+        className="gk-paper blog-editable min-h-[240px] rounded-xl border-2 border-pink/25 p-4 text-base font-semibold leading-8 text-ink outline-none focus:border-pink"
         style={{ ...(BLOG_BG_BY_ID[bgId] ?? BLOG_BG[0]).style, ['--title-color' as any]: titleColor }}
       />
       {ngError && <p className="text-[11px] font-black text-red-500">不適切な語が含まれています。</p>}
 
       {/* 記事背景（編集面に即反映） */}
       <div>
-        <p className="mb-1.5 text-[11px] font-black text-muted">ブログの背景</p>
+        <p className="gk-font mb-1.5 text-[11px] text-muted">■ ブログの背景</p>
         <div className="flex flex-wrap gap-1.5">
           {BLOG_BG.map((b) => (
-            <button key={b.id} type="button" onClick={() => setBgId(b.id)} title={b.label}
+            <button key={b.id} type="button" onClick={() => setBgId(b.id)} title={b.label} aria-label={`背景 ${b.label}`} aria-pressed={bgId === b.id}
               className={`h-9 w-9 rounded-xl ring-2 transition ${bgId === b.id ? 'ring-pink scale-110' : 'ring-white'}`}
               style={b.style} />
           ))}
@@ -7119,69 +7210,87 @@ function BlogWysiwygEditor({
   );
 }
 
+
+// ガラケーブログ風の日付（例：2026.10.24(土) 14:32）
+function gkDate(iso: string, withTime = true): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}(${wd})${withTime ? ` ${p2(d.getHours())}:${p2(d.getMinutes())}` : ''}`;
+}
+
 function BlogListScreen({ go, posts, onDelete }: { go: (s: Screen, payload?: any) => void; posts: BlogPost[]; onDelete?: (id: string) => void }) {
   const [tab, setTab] = useState<'all' | 'mine'>('all');
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const base = tab === 'mine' ? posts.filter((p) => p.authorId === me.id) : posts;
   const sorted = [...base].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime());
+  const mineCount = posts.filter((p) => p.authorId === me.id).length;
   return (
     <>
       <AppHeader title="ブログ" back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
-        <button onClick={() => go('blog-create')}
-          className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
-          ＋ ブログを書く
-        </button>
-        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-base p-1">
-          <button onClick={() => setTab('all')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'all' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>みんな</button>
-          <button onClick={() => setTab('mine')} className={`rounded-xl py-2 text-sm font-black transition ${tab === 'mine' ? 'bg-white shadow-card text-pink' : 'text-muted'}`}>自分のブログ {posts.filter((p) => p.authorId === me.id).length}</button>
-        </div>
-        <p className="px-1 text-xs font-bold text-muted">{tab === 'mine' ? 'あなたが投稿したブログの一覧です。' : 'みんなのブログ。いいね・コメントで反応できます。'}</p>
-        {sorted.length === 0 && (
-          <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-            {tab === 'mine' ? 'まだブログを投稿していません。' : 'まだブログがありません。最初のブログを書いてみて！'}
+        {/* ブログのトップ（個人サイトの看板） */}
+        <div className="gk-frame">
+          <div className="gk-paper rounded-[10px] bg-[#fffafd] px-4 py-3 text-center">
+            <p className="gk-font text-[11px] text-muted">☆*:.｡. Miri BLOG .｡.:*☆</p>
+            <p className="gk-font mt-0.5 text-lg text-[#8a1c4a]">{tab === 'mine' ? 'じぶんのブログ' : 'みんなのブログ'}</p>
+            <p className="mt-1 text-[12px] font-bold text-muted">{tab === 'mine' ? 'あなたが書いた記事の一覧です。' : 'いいね・コメントで反応できます。'}</p>
           </div>
+        </div>
+        <button onClick={() => go('blog-create')}
+          className="gk-btn w-full !min-h-[52px] text-[15px]">
+          ✎ ブログを書く
+        </button>
+        <div className="flex gap-1 border-b-2 border-pink/30 px-1" role="group" aria-label="表示するブログ">
+          <button onClick={() => setTab('all')} aria-pressed={tab === 'all'} className="gk-tab">みんな</button>
+          <button onClick={() => setTab('mine')} aria-pressed={tab === 'mine'} className="gk-tab">じぶん（{mineCount}）</button>
+        </div>
+        {sorted.length === 0 && (
+          <div className="gk-frame"><div className="gk-paper rounded-[10px] bg-[#ffffff] p-8 text-center text-sm font-bold text-muted">
+            {tab === 'mine' ? 'まだブログを投稿していません。' : 'まだブログがありません。最初のブログを書いてみて！'}
+          </div></div>
         )}
         {sorted.map((p) => {
-          const d = new Date(p.postedAt);
-          const dateStr = d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+          const isNew = Date.now() - new Date(p.postedAt).getTime() < 24 * 3600 * 1000;
           return (
-            <button key={p.id} onClick={() => go('blog-detail', p.id)}
-              className="block w-full overflow-hidden rounded-[28px] bg-white text-left shadow-card active:scale-[0.99]">
-              <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
-                <span className="text-[11px] font-black text-muted">🗓 {dateStr}</span>
-                <span className="text-base">{p.weather}{p.mood}</span>
-              </div>
-              {p.photoUrl && (
-                <div className="h-40 w-full overflow-hidden bg-pink/5">
-                  <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+            <div key={p.id} className="gk-frame">
+              <button onClick={() => go('blog-detail', p.id)}
+                className="gk-paper block w-full overflow-hidden rounded-[10px] bg-[#ffffff] text-left active:scale-[0.995]">
+                <div className="gk-datebar">
+                  <span className="gk-font">{gkDate(p.postedAt)}{isNew && <span className="gk-new gk-font ml-2">NEW!</span>}</span>
+                  <span className="text-base" aria-hidden>{p.weather}{p.mood}</span>
                 </div>
-              )}
-              <div className="p-4">
-                {p.title && <p className="mb-1 text-base font-black leading-snug" style={{ color: p.textColor || '#EC4899' }}>✿ <RetroText text={p.title} /></p>}
-                <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={blogPlain(p.body)} /></p>
-                <div className="mt-3 flex items-center justify-between">
+                {p.photoUrl && (
+                  <div className="h-40 w-full overflow-hidden bg-pink/5">
+                    <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+                  </div>
+                )}
+                <div className="px-4 pb-3 pt-3">
+                  <p className="mb-1 text-base font-black leading-snug" style={{ color: p.textColor || '#EC4899' }}>☆彡 <RetroText text={p.title || '無題のブログ'} /></p>
+                  <p className="line-clamp-2 text-sm font-bold leading-6 text-ink"><RetroText text={blogPlain(p.body)} /></p>
+                  <p className="mt-1 text-right text-[12px] font-black text-[#8a1c4a]">つづきを読む »</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t-2 border-dotted border-pink/20 px-4 py-2 text-[12px] font-black text-muted">
                   <span
                     role="button"
                     tabIndex={0}
                     onClick={(e) => { e.stopPropagation(); go('profile', p.authorId); }}
-                    className="flex items-center gap-2 rounded-full -m-1 p-1 transition hover:bg-pink/5 cursor-pointer"
+                    className="-m-1 flex items-center gap-1.5 rounded-full p-1 transition hover:bg-pink/5 cursor-pointer"
                   >
-                    <AvatarBubble value={p.authorAvatar} className="h-8 w-8 text-base" />
-                    <span className="text-xs font-black text-ink">{p.authorName}</span>
+                    <AvatarBubble value={p.authorAvatar} className="h-7 w-7 text-sm" />
+                    <span className="text-ink">{p.authorName}</span>
                   </span>
-                  <div className="flex items-center gap-3 text-[11px] font-black text-muted">
-                    <span className="flex items-center gap-1"><Heart size={13} fill={p.likedByMe ? 'currentColor' : 'none'} className={p.likedByMe ? 'text-pink' : ''} />{p.likes}</span>
-                    <span>💬 {p.comments.length}</span>
-                    {onDelete && p.authorId === me.id && (
-                      <span role="button" tabIndex={0}
-                        onClick={(e) => { e.stopPropagation(); setConfirmId(p.id); }}
-                        className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🗑 削除</span>
-                    )}
-                  </div>
+                  <span className="ml-auto flex items-center gap-1"><Heart size={13} fill={p.likedByMe ? 'currentColor' : 'none'} className={p.likedByMe ? 'text-pink' : ''} />いいね({p.likes})</span>
+                  <span>💬 コメント({p.comments.length})</span>
+                  {onDelete && p.authorId === me.id && (
+                    <span role="button" tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); setConfirmId(p.id); }}
+                      className="rounded px-1.5 py-0.5 text-[11px] font-black text-[#B91C1C] underline decoration-dotted">削除</span>
+                  )}
                 </div>
-              </div>
-            </button>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -7236,7 +7345,7 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
     <>
       <AppHeader title="ブログを書く" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
+        <section>
           <BlogWysiwygEditor
             title={title} setTitle={setTitle}
             mood={mood} setMood={setMood}
@@ -7248,13 +7357,13 @@ function BlogCreateScreen({ go, onCreate }: { go: (s: Screen, payload?: any) => 
             ngError={ngError}
           />
         </section>
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-3 font-black text-ink">公開範囲</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setVisibility('public')}
-              className={`rounded-2xl py-3 text-xs font-black transition ${visibility === 'public' ? 'bg-blue-400 text-white shadow-card' : 'bg-base text-muted'}`}>🌍 全体に公開</button>
-            <button onClick={() => setVisibility('followers')}
-              className={`rounded-2xl py-3 text-xs font-black transition ${visibility === 'followers' ? 'bg-pink text-white shadow-card' : 'bg-base text-muted'}`}>👥 フォロワー</button>
+        <section className="gk-frame">
+          <div className="gk-paper rounded-[10px] bg-[#fffafd] p-3">
+            <p className="gk-font mb-2 text-[11px] text-muted">■ 公開範囲</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setVisibility('public')} aria-pressed={visibility === 'public'} className="gk-btn">🌍 全体に公開</button>
+              <button onClick={() => setVisibility('followers')} aria-pressed={visibility === 'followers'} className="gk-btn">👥 フォロワー</button>
+            </div>
           </div>
         </section>
         <button onClick={submit} disabled={!canPost}
@@ -7279,9 +7388,6 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
   const [comment, setComment] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const d = new Date(post.postedAt);
-  const dateStr = d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
-  const timeStr = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
   const isMine = post.authorId === me.id;
   const blogBg = (BLOG_BG_BY_ID[parseBlogDoc(post.body).bgId] ?? BLOG_BG[0]).style;
   function submitComment() {
@@ -7294,67 +7400,83 @@ function BlogDetailScreen({ go, post, onToggleLike, onAddComment, onDelete }: {
     <>
       <AppHeader title="ブログ" back onBack={() => go('blog-list')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-8">
-        <article className="overflow-hidden rounded-[28px] bg-white shadow-card">
-          <div className="flex items-center justify-between border-b border-dashed border-pink/20 bg-gradient-to-r from-pink/10 to-purple/10 px-4 py-2">
-            <p className="text-[11px] font-black text-muted">🗓 {dateStr} {timeStr}</p>
-            <div className="flex items-center gap-1 text-base">{post.weather}{post.mood}</div>
-          </div>
-          <div className="p-4" style={blogBg}>
-            {post.title && <h3 className="mb-2 text-xl font-black leading-snug" style={{ color: post.textColor || '#EC4899' }}>✿ <RetroText text={post.title} /></h3>}
-            {post.photoUrl && <div className="mb-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
-            <BlogBody body={post.body} titleColor={post.textColor} />
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => go('profile', post.authorId)}
-                className="flex items-center gap-2 rounded-full -m-1 p-1 transition hover:bg-pink/5 active:scale-[0.98]"
-              >
-                <AvatarBubble value={post.authorAvatar} className="h-9 w-9 text-lg" />
-                <p className="text-xs font-black text-ink">{post.authorName}</p>
-              </button>
-              {isMine && <button onClick={() => setConfirmDelete(true)} className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">削除</button>}
+        <div className="gk-frame">
+          <article className="gk-paper overflow-hidden rounded-[10px] bg-[#ffffff]">
+            <div className="gk-datebar">
+              <p className="gk-font">{gkDate(post.postedAt)}</p>
+              <div className="flex items-center gap-1 text-base" aria-label={`天気と気分 ${post.weather ?? ''}${post.mood ?? ''}`}>{post.weather}{post.mood}</div>
             </div>
-          </div>
-          <div className="flex items-center gap-2 border-t border-pink/10 px-4 py-2.5">
-            <button onClick={() => onToggleLike(post.id)}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition active:scale-95 ${post.likedByMe ? 'bg-pink/15 text-pink' : 'bg-base text-muted'}`}>
-              <Heart size={15} fill={post.likedByMe ? 'currentColor' : 'none'} className={post.likedByMe ? 'heart-pop' : ''} />いいね {post.likes}
-            </button>
-            <span className="rounded-full bg-base px-3 py-1.5 text-xs font-black text-muted">💬 コメント {post.comments.length}</span>
-            {post.visibility === 'public' && !post.id.startsWith('b-') && (
-              <button
-                onClick={async () => {
-                  const url = `${location.origin}/b/${post.id}`;
-                  try {
-                    if (navigator.share) { await navigator.share({ title: post.title || 'ブログ', url }); }
-                    else { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); }
-                  } catch { try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch {} }
-                }}
-                className="ml-auto rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-500 transition active:scale-95">
-                {linkCopied ? '✓ コピー済' : '🔗 リンク'}
+            <div className="p-4" style={blogBg}>
+              <h3 className="mb-3 border-b-2 border-dotted pb-2 text-xl font-black leading-snug" style={{ color: post.textColor || '#EC4899', borderColor: `${post.textColor || '#EC4899'}55` }}>☆彡 <RetroText text={post.title || '無題のブログ'} /></h3>
+              {post.photoUrl && <div className="mb-3 overflow-hidden rounded-2xl"><img src={post.photoUrl} alt="" className="w-full object-cover" /></div>}
+              <BlogBody body={post.body} titleColor={post.textColor} />
+              <p className="gk-font mt-4 text-right text-[11px] text-muted">posted by {post.authorName}</p>
+            </div>
+            {/* いいね・コメント・リンク（平成のホームページ風の出っ張ったボタン） */}
+            <div className="flex flex-wrap items-center gap-2 border-t-2 border-dotted border-pink/20 bg-[#fffafd] px-4 py-2.5">
+              <button onClick={() => onToggleLike(post.id)} aria-pressed={post.likedByMe} className="gk-btn">
+                <Heart size={15} fill={post.likedByMe ? 'currentColor' : 'none'} className={post.likedByMe ? 'heart-pop text-pink' : ''} />いいね！({post.likes})
               </button>
-            )}
-          </div>
-        </article>
+              <a href="#blog-comments" className="gk-btn">💬 コメント({post.comments.length})</a>
+              {post.visibility === 'public' && !post.id.startsWith('b-') && (
+                <button
+                  onClick={async () => {
+                    const url = `${location.origin}/b/${post.id}`;
+                    try {
+                      if (navigator.share) { await navigator.share({ title: post.title || 'ブログ', url }); }
+                      else { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); }
+                    } catch { try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch {} }
+                  }}
+                  className="gk-btn ml-auto">
+                  {linkCopied ? '✓ コピー済' : '🔗 リンク'}
+                </button>
+              )}
+            </div>
+          </article>
+        </div>
 
-        <section className="space-y-2 rounded-[28px] bg-white p-4 shadow-card">
-          <p className="text-sm font-black text-ink">コメント</p>
-          {post.comments.length === 0 && <p className="text-[11px] font-bold text-muted">まだコメントはありません。</p>}
-          {post.comments.map((c) => (
-            <div key={c.id} className="flex items-start gap-2">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-base text-sm">{c.authorAvatar}</span>
-              <div className="min-w-0 flex-1 rounded-2xl bg-base px-3 py-2">
-                <p className="text-[11px] font-black text-ink">{c.authorName}</p>
-                <p className="text-xs font-bold leading-5 text-ink"><RetroText text={c.body} /></p>
-              </div>
+        {/* この記事を書いた人（前略プロフの自己紹介枠） */}
+        <div className="gk-frame">
+          <div className="gk-paper flex items-center gap-3 rounded-[10px] bg-[#ffffff] px-4 py-3">
+            <AvatarBubble value={post.authorAvatar} className="h-12 w-12 text-xl" />
+            <div className="min-w-0 flex-1">
+              <p className="gk-font text-[11px] text-muted">★この記事を書いた人</p>
+              <p className="truncate text-sm font-black text-ink">{post.authorName}</p>
             </div>
-          ))}
-          <div className="flex items-center gap-2 pt-1">
-            <input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitComment(); }}
-              maxLength={100} placeholder="コメントを書く…"
-              className="min-w-0 flex-1 rounded-full border border-purple/15 bg-white px-4 py-2 text-xs font-bold text-ink outline-none focus:border-pink" />
-            <button onClick={submitComment} disabled={!comment.trim()}
-              className="shrink-0 rounded-full bg-purple px-4 py-2 text-[11px] font-black text-white disabled:opacity-40">送信</button>
+            <button type="button" onClick={() => go('profile', post.authorId)} className="gk-btn shrink-0">プロフを見る »</button>
+          </div>
+          {isMine && (
+            <div className="gk-paper mt-1.5 flex justify-end rounded-[10px] bg-[#fffffff0] px-4 py-2">
+              <button onClick={() => setConfirmDelete(true)} className="gk-btn !text-[#B91C1C]">🗑 この記事を削除</button>
+            </div>
+          )}
+        </div>
+
+        {/* コメント欄（番号つき） */}
+        <section id="blog-comments" className="gk-frame scroll-mt-20">
+          <div className="gk-paper rounded-[10px] bg-[#ffffff] px-4 py-3">
+            <p className="gk-font text-sm text-[#8a1c4a]">■ コメント（{post.comments.length}）</p>
+            {post.comments.length === 0 && <p className="py-2 text-[12px] font-bold text-muted">まだコメントはありません。最初のひとことをどうぞ！</p>}
+            <ol>
+              {post.comments.map((c, i) => (
+                <li key={c.id} className="gk-comment">
+                  <span className="gk-comment-no gk-font" aria-hidden>{i + 1}.</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-black text-ink">
+                      <span aria-hidden className="mr-1">{c.authorAvatar}</span>{c.authorName}
+                      {c.postedAt && <span className="gk-font ml-2 text-[10px] font-normal text-muted">{gkDate(c.postedAt)}</span>}
+                    </p>
+                    <p className="mt-0.5 text-[13px] font-bold leading-6 text-ink"><RetroText text={c.body} /></p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="flex items-center gap-2 pt-3">
+              <input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitComment(); }}
+                maxLength={100} placeholder="コメントを書く…" aria-label="コメントを書く"
+                className="min-h-[40px] min-w-0 flex-1 rounded-md border-2 border-[#b9b3cf] bg-white px-3 py-2 text-[13px] font-bold text-ink outline-none focus:border-pink" />
+              <button onClick={submitComment} disabled={!comment.trim()} className="gk-btn shrink-0 disabled:opacity-40">送信</button>
+            </div>
           </div>
         </section>
       </div>
@@ -10889,6 +11011,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       equippedBgId={equippedBgId}
       onEquipBg={equipBg}
       onLogout={logout}
+      pen={myPen}
+      onPenChange={updateMyPen}
     />
   );
 

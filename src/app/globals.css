@@ -528,6 +528,8 @@ button, input, textarea { font: inherit; }
   background-image: repeating-linear-gradient(transparent 0 27px, rgb(var(--pb-line) / .14) 27px 28px);
   background-position: 0 8px;
 }
+/* 行の高さ 28px（leading-7）の文章に直接敷くとき：罫線が各行の下に来るように */
+.pb-ruled-rows { background-position: 0 0; }
 
 /* マスキングテープ */
 .pb-tape {
@@ -608,6 +610,7 @@ button, input, textarea { font: inherit; }
 
 /* 印刷ラベル（質問・項目名）：チップにせず、紙に印刷された小さな文字として見せる */
 .pb-label { font: 800 11px/1.35 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .78); letter-spacing: .02em; }
+.pb-label-md { font-size: 12.5px; }  /* 編集画面の項目名など、少し大きめの印刷ラベル */
 
 /* 記入マス：誕生日・血液型・MBTI などの小さな枠 */
 .pb-box { position: relative; border: 1.5px solid rgb(var(--pb-line) / .35); border-radius: 10px; padding: 7px 10px 8px; background: rgb(255 255 255 / .7); }
@@ -706,7 +709,10 @@ button, input, textarea { font: inherit; }
   color: var(--pen-ink);
 }
 /* 夜テーマは入力欄の文字色を !important で固定しているため、便せん（ペンで書く入力欄）だけはインクの色を優先 */
-[data-theme="night"] [data-pen-ink] textarea.pen-text { color: var(--pen-ink) !important; }
+[data-theme="night"] [data-pen-ink] textarea.pen-text,
+[data-theme="night"] [data-pen-ink] input.pen-text { color: var(--pen-ink) !important; }
+/* 入力欄のプレースホルダーは手書きにせず、ふつうの文字で薄く */
+[data-pen-ink] .pen-text::placeholder { font-family: "M PLUS Rounded 1c", system-ui, sans-serif; font-weight: 700; color: rgb(var(--color-muted)); }
 /* 回答の本文などペンの大きさを反映する場所（基準の大きさ × 小/中/大） */
 .pen-size { font-size: calc(var(--pen-base, 16px) * var(--pen-scale, 1)); }
 
@@ -718,3 +724,52 @@ button, input, textarea { font: inherit; }
   border-radius: 10px; font: 800 11px/1.2 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .8); }
 .pb-tool[aria-selected="true"] { background: #fff; color: rgb(var(--color-ink)); box-shadow: 0 2px 0 rgb(0 0 0 / .1), 0 0 0 2px rgb(var(--color-pink) / .5); }
 [data-theme="night"] .pb-tool[aria-selected="true"] { background: rgb(var(--card-bg2)); }
+
+/* ========================================================================
+   Unit 4：日記・ブログ ＝「デジタルの平成」（ガラケーブログ・前略プロフ風）
+   プロフ帳の紙とは別の世界観：ドット文字の日付、☆彡タイトル、出っ張ったボタン、
+   番号つきコメント欄。本文は読みやすさ優先で標準の文字のまま。
+   ===================================================================== */
+.gk-font { font-family: "DotGothic16", "M PLUS Rounded 1c", system-ui, sans-serif; letter-spacing: .04em; }
+
+/* ブログの記事面：背景色が明るい固定色なので、どのテーマでも濃いインクで読めるよう
+   この中だけ色トークンを昼の値に固定する */
+.gk-paper { --color-ink: 31 44 86; --color-muted: 92 100 128; color: rgb(var(--color-ink)); }
+
+/* 個人サイトの外枠：うすいチェック柄の台紙＋点線のフチ */
+.gk-frame { border-radius: 14px; padding: 6px;
+  background-color: #f6f0ff;
+  background-image: linear-gradient(45deg, rgb(255 255 255 / .55) 25%, transparent 25%, transparent 75%, rgb(255 255 255 / .55) 75%),
+                    linear-gradient(45deg, rgb(255 255 255 / .55) 25%, transparent 25%, transparent 75%, rgb(255 255 255 / .55) 75%);
+  background-size: 12px 12px; background-position: 0 0, 6px 6px;
+  box-shadow: inset 0 0 0 2px rgb(164 123 255 / .35); }
+[data-theme="night"] .gk-frame { background-color: #2b2450; background-image: none; }
+
+/* 日付バー（ガラケーの画面上部のような帯） */
+.gk-datebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px;
+  background: repeating-linear-gradient(90deg, #ffe3f1 0 8px, #fff0f8 8px 16px); color: #8a1c4a;
+  border-bottom: 2px dotted rgb(236 72 153 / .35); font-size: 12px; }
+
+/* 平成のホームページ風「出っ張った」ボタン（押せることがはっきり分かる） */
+.gk-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; padding: 6px 12px;
+  border-radius: 6px; background: #fff; color: #1F2C56; font: 800 12px/1.2 "M PLUS Rounded 1c", system-ui, sans-serif;
+  border: 2px solid; border-color: #fff #b9b3cf #8f88aa #fff; box-shadow: 0 0 0 1px #8f88aa; }
+.gk-btn:active { border-color: #8f88aa #fff #fff #8f88aa; transform: translateY(1px); }
+.gk-btn[aria-pressed="true"] { background: #ffe3f1; color: #8a1c4a; border-color: #8f88aa #fff #fff #8f88aa; }
+
+/* 小さなタブ（みんな／じぶん、デコメ道具箱） */
+.gk-tab { min-height: 40px; padding: 6px 12px; border-radius: 8px 8px 0 0; font: 800 12px/1.2 "M PLUS Rounded 1c", system-ui, sans-serif;
+  color: rgb(var(--color-ink) / .75); background: rgb(255 255 255 / .55); border: 2px solid transparent; border-bottom: 0; }
+.gk-tab[aria-selected="true"], .gk-tab[aria-pressed="true"] { background: #fff; color: #8a1c4a; border-color: rgb(236 72 153 / .35); }
+[data-theme="night"] .gk-tab[aria-selected="true"], [data-theme="night"] .gk-tab[aria-pressed="true"] { background: rgb(var(--card-bg2)); color: #ffc2de; }
+
+/* 番号つきコメント欄 */
+.gk-comment { display: flex; gap: 8px; padding: 8px 2px; border-bottom: 1.5px dotted rgb(var(--pb-line) / .3); }
+.gk-comment-no { flex-shrink: 0; min-width: 22px; color: #8a1c4a; font-size: 12px; padding-top: 2px; }
+/* コメント番号・日付バーは常に明るい記事面の上なので、夜テーマでも同じ濃い色のまま */
+
+/* NEW! シール（点滅はさせない） */
+.gk-new { display: inline-block; padding: 1px 5px; border-radius: 4px; background: #E5484D; color: #fff; font-size: 10px; line-height: 1.4; transform: rotate(-6deg); }
+/* 夜テーマは入力欄を暗くするが、ブログの記事面（明るい紙）の中では明るいまま */
+[data-theme="night"] .gk-paper input,
+[data-theme="night"] .gk-paper textarea { background-color: #ffffff !important; border-color: #b9b3cf !important; }
