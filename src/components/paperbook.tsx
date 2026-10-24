@@ -277,3 +277,87 @@ export function HeartMeter({ level, max = 5 }: { level: number; max?: number }) 
     </span>
   );
 }
+
+// ============================================================
+// Unit 2：プロフィール帳の紙面パーツ
+// 「印刷された項目名」と「手書きの回答（.prof-hand）」を分け、項目ごとに枠の形を変える。
+// ============================================================
+
+/** 印刷見出し（番号＋英字キッカー＋日本語タイトル）。マステは表紙だけにして、ここでは使わない。 */
+export function PrintedHeading({
+  no,
+  kicker,
+  title,
+  right,
+  className = '',
+}: {
+  no?: string;
+  kicker?: string;
+  title: React.ReactNode;
+  right?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`pb-heading ${className}`}>
+      {no && <span className="pb-heading-no" aria-hidden>{no}</span>}
+      <h3 className="min-w-0 flex-1">
+        {kicker && <span className="pb-heading-kicker" aria-hidden>{kicker}</span>}
+        <span className="pb-heading-title">{title}</span>
+      </h3>
+      {right}
+    </div>
+  );
+}
+
+/** 選択肢に手書きの丸をつける（例：血液型 A・B・O・AB）。どれにも当てはまらない値は手書きでそのまま書く。 */
+export function CircleChoice({ options, value }: { options: string[]; value: string }) {
+  const v = (value ?? '').trim();
+  const norm = v.replace(/型|type|\s/gi, '').toUpperCase();
+  const hit = options.find((o) => o.toUpperCase() === norm);
+  if (v && !hit) return <span className="text-[16px] leading-snug text-ink prof-hand">{v}</span>;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="sr-only">{v || '未記入'}</span>
+      {options.map((o) => (
+        <span key={o} aria-hidden className={`pb-choice ${o === hit ? 'pb-choice-on' : ''}`}>{o}</span>
+      ))}
+    </span>
+  );
+}
+
+/** 1文字ずつのマス（例：MBTI の4文字）。形式が違う値は手書きでそのまま書く。 */
+export function LetterBoxes({ value, count = 4, pattern }: { value: string; count?: number; pattern?: RegExp }) {
+  const v = (value ?? '').trim();
+  const head = v.split('-')[0];
+  if (v && pattern && !pattern.test(v)) return <span className="text-[16px] leading-snug text-ink prof-hand">{v}</span>;
+  const letters = Array.from({ length: count }, (_, i) => head[i] ?? '');
+  const tail = v.includes('-') ? v.slice(v.indexOf('-')) : '';
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="sr-only">{v || '未記入'}</span>
+      {letters.map((c, i) => <span key={i} aria-hidden className="pb-letterbox prof-hand">{c.toUpperCase()}</span>)}
+      {tail && <span aria-hidden className="ml-0.5 text-[14px] text-ink prof-hand">{tail.toUpperCase()}</span>}
+    </span>
+  );
+}
+
+/** 形の違う記入枠。shape で「すき（ハート）」「きらい（×）」「色（パレット）」「キャラ（星）」を描き分ける。 */
+export function ShapedFrame({
+  shape,
+  label,
+  mark,
+  children,
+}: {
+  shape: 'heart' | 'cross' | 'color' | 'star';
+  label: string;
+  mark?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`pb-frame pb-frame-${shape}`}>
+      <span className="pb-frame-label pb-label">{label}</span>
+      {mark && <span className="pb-frame-mark" aria-hidden>{mark}</span>}
+      <div className="relative">{children}</div>
+    </div>
+  );
+}

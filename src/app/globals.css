@@ -585,3 +585,93 @@ button, input, textarea { font: inherit; }
     color-mix(in srgb, rgb(var(--color-purple)) 55%, #1F2C56));
   color: #fff;
 }
+
+/* ========================================================================
+   Unit 2：プロフィール帳の紙面パーツ（prefix: pb-）
+   「印刷された質問（ネイビーの印刷文字）」と「手書きの回答（.prof-hand）」を
+   はっきり分け、項目ごとに記入欄の形を変える。
+   ===================================================================== */
+/* 印刷見出し：番号＋英字キッカー＋日本語タイトル＋点線（マステは表紙だけに使う） */
+.pb-heading { display: flex; align-items: flex-end; gap: 8px; padding-bottom: 6px; margin-bottom: 10px;
+  border-bottom: 2px dotted rgb(var(--pb-line) / .35); }
+.pb-heading-no {
+  flex-shrink: 0; display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 5px;
+  border-radius: 7px; color: #fff;
+  background-color: rgb(var(--color-pink-strong));
+  background-color: color-mix(in srgb, rgb(var(--color-pink-strong)) 72%, #1F2C56); /* 全テーマで白文字 4.5:1 以上 */
+  font: 800 12px/1 "M PLUS Rounded 1c", system-ui, sans-serif; letter-spacing: .02em;
+}
+.pb-heading-kicker { display: block; font: 800 9px/1.2 "M PLUS Rounded 1c", system-ui, sans-serif;
+  letter-spacing: .28em; color: rgb(var(--color-muted)); }
+.pb-heading-title { display: block; font-family: "Yusei Magic", "M PLUS Rounded 1c", system-ui, sans-serif;
+  font-size: 18px; line-height: 1.25; color: rgb(var(--color-ink)); }
+
+/* 印刷ラベル（質問・項目名）：チップにせず、紙に印刷された小さな文字として見せる */
+.pb-label { font: 800 11px/1.35 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .78); letter-spacing: .02em; }
+
+/* 記入マス：誕生日・血液型・MBTI などの小さな枠 */
+.pb-box { position: relative; border: 1.5px solid rgb(var(--pb-line) / .35); border-radius: 10px; padding: 7px 10px 8px; background: rgb(255 255 255 / .7); }
+
+/* 選択肢に手書きの丸をつける（血液型 A・B・O・AB など） */
+.pb-choice { position: relative; display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 3px;
+  font: 800 13px/1 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .55); }
+.pb-choice-on { color: rgb(var(--color-ink)); }
+.pb-choice-on::after { content: ""; position: absolute; inset: -3px -5px; border: 2px solid rgb(var(--pb-coral));
+  border-radius: 50% 46% 52% 48%; transform: rotate(-8deg); pointer-events: none; }
+
+/* 1文字ずつのマス（MBTI） */
+.pb-letterbox { display: inline-grid; place-items: center; width: 24px; height: 28px; border-radius: 4px;
+  border: 1.5px solid rgb(var(--pb-line) / .35); background: #fff; font-size: 17px; line-height: 1; color: rgb(var(--color-ink)); }
+
+/* 形の違う記入枠（すき・きらい など） */
+.pb-frame { position: relative; overflow: hidden; border-radius: 16px; padding: 22px 12px 12px; min-height: 84px;
+  display: flex; flex-direction: column; justify-content: center; text-align: center; background: #fff;
+  border: 2px dashed rgb(var(--pb-line) / .32); }
+.pb-frame-label { position: absolute; top: 6px; left: 0; right: 0; text-align: center; }
+.pb-frame-mark { position: absolute; right: 6px; bottom: -10px; font-size: 54px; line-height: 1; opacity: .13; pointer-events: none; user-select: none; }
+.pb-frame-heart { border-color: rgb(var(--pb-coral) / .45); background: #fff7f8; border-radius: 22px 22px 40px 40px; }
+.pb-frame-cross { border-style: solid; border-color: rgb(var(--pb-line) / .25); background:
+  repeating-linear-gradient(-45deg, rgb(var(--pb-line) / .05) 0 6px, transparent 6px 12px), #fbfbfd; border-radius: 6px; }
+.pb-frame-star  { border-color: rgb(var(--pb-tape) / 1); background: #fffcf0; border-radius: 14px 30px 14px 30px; }
+.pb-frame-color { border-style: solid; border-color: rgb(var(--pb-line) / .2); background: #fff; border-radius: 40px 16px 40px 16px; }
+.pb-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 50% 45% 55% 50%;
+  box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / .12); }
+
+/* 時間割マス（すきな教科・にがてな教科） */
+.pb-cell { border: 1.5px solid rgb(var(--pb-line) / .3); border-radius: 8px; overflow: hidden; background: #fff; }
+.pb-cell-head { padding: 3px 8px; background: rgb(var(--pb-tape2) / .55); border-bottom: 1.5px solid rgb(var(--pb-line) / .25); }
+
+/* 手書きの下線（記入線） */
+.pb-writeline { border-bottom: 2px dotted rgb(var(--pb-line) / .42); padding-bottom: 2px; min-height: 1.6em; word-break: break-word; }
+
+/* 丸数字（BEST3 の ①②③ を印刷文字で） */
+.pb-num { flex-shrink: 0; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
+  border: 1.5px solid rgb(var(--color-ink) / .55); font: 800 11px/1 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .8); }
+
+/* しつもんコーナー：Q は印刷、A は手書き。1問ずつの枠で囲まず点線で区切る */
+.pb-q { padding: 8px 2px 10px; }
+.pb-q-no { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px;
+  background: rgb(var(--color-ink)); color: rgb(var(--color-base)); font: 800 10px/1.4 "M PLUS Rounded 1c", system-ui, sans-serif; letter-spacing: .04em; vertical-align: 1px; }
+
+/* メモ用紙（座右の銘・将来の夢・今月のおだい） */
+.pb-memo { position: relative; border-radius: 4px; padding: 16px 14px 12px; background: rgb(var(--pb-tape) / .55);
+  box-shadow: 0 2px 0 rgb(0 0 0 / .05), 0 6px 12px rgb(0 0 0 / .06); }
+.pb-memo-sax { background: rgb(var(--pb-tape2) / .5); }
+
+/* ハンコ（交換ずみ など）：朱色の丸枠。装飾なのでクリックを妨げない */
+.pb-stamp { display: inline-grid; place-items: center; border: 2.5px solid #D9473F; color: #C23A33; border-radius: 999px;
+  font: 800 10px/1.1 "M PLUS Rounded 1c", system-ui, sans-serif; text-align: center; letter-spacing: .04em;
+  background: rgb(255 255 255 / .6); pointer-events: none; user-select: none; }
+
+/* ナイトモード：黒い台紙のアルバムのように、紙を暗い色にして文字を明るくする */
+[data-theme="night"] .pb-sheet { background: rgb(var(--card-bg)); }
+[data-theme="night"] .pb-fieldline-label { background: rgb(var(--card-bg2)); color: rgb(var(--color-ink)); }
+[data-theme="night"] .pb-box,
+[data-theme="night"] .pb-frame,
+[data-theme="night"] .pb-cell,
+[data-theme="night"] .pb-letterbox { background: rgb(var(--card-bg2)); }
+[data-theme="night"] .pb-cell-head { background: rgb(var(--color-mint)); }
+[data-theme="night"] .pb-memo { background: rgb(var(--card-bg2)); }
+[data-theme="night"] .pb-stamp { background: transparent; color: #ff8a80; border-color: #ff8a80; }
+[data-theme="night"] .pb-polaroid { background: #e9e5f5; }
+[data-theme="night"] .pb-pop { text-shadow: 0 2px 4px rgba(0,0,0,.4); }

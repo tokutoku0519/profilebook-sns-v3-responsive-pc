@@ -24,7 +24,7 @@ import { ToastContainer, ToastItem } from '@/components/Toast';
 import { BottomTab, type TabKey } from '@/components/BottomTab';
 import { EMOJI_CATEGORIES, searchEmojis } from '@/lib/emoji';
 import { AnswerCard, ProfileCard, QuestionCard, SectionHeader, TitleBadge } from '@/components/Cards';
-import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine, StickerBadge, HandwrittenText, CapsulePill, NotebookSection, HeartMeter } from '@/components/paperbook';
+import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine, StickerBadge, HandwrittenText, CapsulePill, NotebookSection, HeartMeter, PrintedHeading, CircleChoice, LetterBoxes, ShapedFrame } from '@/components/paperbook';
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
@@ -2235,16 +2235,9 @@ const THEME_BG: Record<string, string> = {
   orange: 'bg-orange-50',
 };
 
-function ProfSectionHeader({ icon, title, theme }: { icon: string; title: string; theme: string }) {
-  // プールに映える「バブル見出し」。青系テーマだけ青バブル、それ以外はピンク系バブル。
-  const bubble = theme === 'blue' ? 'prof-bubble-blue' : 'prof-bubble';
-  return (
-    <div className="mb-3 mt-1 flex items-center justify-center gap-2">
-      <span className="text-lg drop-shadow-sm">{icon}</span>
-      <span className={`${bubble} text-2xl leading-none`}>{title}</span>
-      <span className="text-lg drop-shadow-sm">{icon}</span>
-    </div>
-  );
+function ProfSectionHeader({ icon, title }: { icon: string; title: string; theme?: string }) {
+  // プロフ帳の各コーナー見出し（印刷文字＋点線）。テーマ色は番号バッジ側で表現する。
+  return <PrintedHeading title={<><span aria-hidden className="mr-1">{icon}</span>{title}</>} />;
 }
 
 // ── 世界観背景：オリジナルSVGイラストがふわふわ浮かぶシーン ──
@@ -2409,7 +2402,6 @@ function ProfileBookContent({
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang, info.favoriteFood, info.dislikeFood]);
-  const medals = ['🥇', '🥈', '🥉'];
   const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
 
@@ -2419,8 +2411,13 @@ function ProfileBookContent({
   const showLikes = isSelf || has('favoriteFood', 'dislikeFood', 'favoriteColor', 'favoriteSubject', 'dislikeSubject', 'favoriteCharacter', 'favoriteMusic', 'favoriteTv', 'favoriteArtist', 'favoriteManga', 'favoriteGame');
   const showAbout = isSelf || has('hobby', 'specialty', 'personality', 'catchphrase', 'charmPoint', 'dream', 'wantToGo', 'collection', 'motto', 'holiday');
 
-  // デコシールはテーマ非依存の中立キュート（海には寄せない）。
-  const deco = ['🌸', '💗', '⭐', '✨', '🎀', '🍀'];
+  // 紙に貼ったシール（固定位置・3枚だけ。タップを妨げない）
+  const deco = ['🎀', '⭐', '🍀'];
+  const colorDots = swatchesOf(info.favoriteColor);
+  const hideEmptySlots = !isSelf;
+  // コーナー番号（01, 02, …）。表示されるコーナーだけに描画順で振る（他人のプロフ帳で番号が飛ばないように）
+  let cornerNo = 0;
+  const nextNo = () => String(++cornerNo).padStart(2, '0');
 
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
@@ -2432,17 +2429,12 @@ function ProfileBookContent({
         : <div className="pointer-events-none absolute inset-0 prof-paper" />)}
 
       <div className="relative z-10 space-y-4 px-4 pt-4 pb-32">
-      {/* ── デコシール（ふわふわ揺れる・タップ透過／テーマ非依存の中立キュート） ── */}
-      <span className="prof-deco text-3xl" style={{ top: 6, left: 8, ['--r' as any]: '-14deg', animationDelay: '0s' } as any}>{deco[0]}</span>
-      <span className="prof-deco text-2xl" style={{ top: 14, right: 10, ['--r' as any]: '10deg', animationDelay: '.8s' } as any}>{deco[1]}</span>
-      <span className="prof-deco text-xl" style={{ top: '34%', left: 2, ['--r' as any]: '-8deg', animationDelay: '1.4s' } as any}>{deco[2]}</span>
-      <span className="prof-deco text-2xl" style={{ top: '58%', right: 4, ['--r' as any]: '12deg', animationDelay: '.4s' } as any}>{deco[3]}</span>
-      <span className="prof-deco text-lg" style={{ top: '78%', left: 6, ['--r' as any]: '6deg', animationDelay: '1.1s' } as any}>{deco[4]}</span>
-      <span className="prof-deco text-xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>{deco[5]}</span>
+      <span className="prof-deco text-2xl" style={{ top: 8, right: 10, ['--r' as any]: '10deg', animationDelay: '.8s' } as any}>{deco[0]}</span>
+      <span className="prof-deco text-xl" style={{ top: '46%', left: 2, ['--r' as any]: '-8deg', animationDelay: '1.4s' } as any}>{deco[1]}</span>
+      <span className="prof-deco text-xl" style={{ bottom: 40, right: 12, ['--r' as any]: '-10deg', animationDelay: '.6s' } as any}>{deco[2]}</span>
 
-      {/* ── 表紙（わたしのプロフ帳）：ポラロイド写真＋マステ見出し＋シール ── */}
-      <PaperSheet variant="grid" className="relative overflow-hidden px-5 pb-5 pt-6">
-        {/* 上部：英字スタンプ＋日本語見出し（マステ） */}
+      {/* ── 表紙：ポラロイド写真＋マステ見出し＋なまえ（手書き）・ID（印刷） ── */}
+      <PaperSheet variant="grid" className="relative overflow-hidden px-4 pb-4 pt-5">
         <div className="mb-3 flex items-end justify-between">
           <div>
             <p className="pb-pop text-[11px] tracking-[.3em] text-muted">MY PROFILE</p>
@@ -2451,38 +2443,37 @@ function ProfileBookContent({
           <Sticker color="rgb(255 122 105 / .9)" rotate={8} size={38} className="text-white" title="PROFILE">✿</Sticker>
         </div>
 
-        <div className="relative flex items-start gap-4">
+        <div className="relative flex items-start gap-3.5">
           {/* 貼った写真（ポラロイド＋マステ留め） */}
           <div className="relative">
             <span className="pb-tape pb-tape-sax absolute -top-2 left-1/2 z-10 h-4 w-14 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(-4deg)' }} />
-            <PolaroidPhoto src={avatarUrl} emoji={avatarEmoji} rotate={-3} size={88} />
+            <PolaroidPhoto src={avatarUrl} emoji={avatarEmoji} rotate={-3} size={92} />
           </div>
 
-          {/* 名前・ID・ひとこと（印刷ラベル＋手書き） */}
-          <div className="min-w-0 flex-1 pt-1">
-            <div className="pb-fieldline">
-              <span className="pb-fieldline-label">なまえ</span>
-              <span className="pb-fieldline-value text-[21px] font-black leading-tight text-ink prof-hand">
-                {info.nickname || info.name || userId}
-              </span>
-            </div>
-            <div className="pb-fieldline">
-              <span className="pb-fieldline-label">ID</span>
-              <span className="pb-fieldline-value text-[13px] font-bold leading-tight text-muted">{userId}</span>
-            </div>
+          {/* なまえは大きく手書き、ID は小さく印刷、口ぐせは吹き出しで */}
+          <div className="min-w-0 flex-1">
+            <p className="pb-label">なまえ</p>
+            <p className="pb-writeline break-words text-[24px] leading-tight text-ink prof-hand">
+              {info.nickname || info.name || userId}
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5">
+              <span className="pb-label">ID</span>
+              <span className="break-all text-[12px] font-bold text-muted">{userId}</span>
+            </p>
             {info.catchphrase && (
-              <p className={`mt-2 inline-block -rotate-1 rounded-[10px] bg-cream px-3 py-1 text-xs font-black ${accent}`}>
-                ❝ {info.catchphrase} ❞
+              <p className="relative mt-2.5 inline-block max-w-full rounded-[14px] border-2 border-ink/15 bg-white px-3 py-1.5 text-[14px] leading-snug text-ink prof-hand">
+                <span aria-hidden className="absolute -top-[7px] left-4 h-3 w-3 rotate-45 border-l-2 border-t-2 border-ink/15 bg-white" />
+                <span className="relative">{info.catchphrase}</span>
               </p>
             )}
           </div>
         </div>
 
-        {/* ひとこと帯（未入力なら非表示）：付箋メモ風 */}
+        {/* ひとこと（未入力なら非表示）：便せんの1行メモ */}
         {(translatedInfo.message ?? info.message) && (
-          <div className="relative mt-4 rotate-[-0.5deg] rounded-[4px] bg-cream px-4 py-2.5 text-[13px] font-bold leading-relaxed text-ink shadow-sm prof-hand">
-            <span className="pb-sticker absolute -left-2 -top-2 text-[11px]" style={{ background: 'rgb(255 122 105)', width: 20, height: 20 }}>✎</span>
-            {translatedInfo.message ?? info.message}
+          <div className="pb-memo mt-4 rotate-[-0.4deg]">
+            <span className="pb-label absolute left-3 top-1.5">ひとこと</span>
+            <p className="pt-2 text-[15px] leading-relaxed text-ink prof-hand">{translatedInfo.message ?? info.message}</p>
           </div>
         )}
         {bgTheme && (
@@ -2492,184 +2483,217 @@ function ProfileBookContent({
         )}
       </PaperSheet>
 
-      {/* ── きほんじょうほう（ルーズリーフ記入欄） ── */}
+      {/* ── きほんじょうほう：項目ごとに記入欄の形を変える（名前は長い線、血液型は丸つけ、MBTIはマス） ── */}
       {showBasic && (
-      <PaperSheet variant="ruled" className="px-4 pb-4 pt-5">
-        <div className="mb-2 flex items-center gap-2">
-          <Sticker color="rgb(206 227 255)" rotate={-6} size={28}>☆</Sticker>
-          <TapeLabel tone="sax" rotate={-1}>{t('sec_basic', lang)}</TapeLabel>
-        </div>
-        <div className="space-y-0.5">
-        {canShow('name') && (isSelf || (info.name ?? '').trim()) && <PaperFieldLine label={t('field_name', lang)} value={info.name} />}
-        {(isSelf || (info.nickname ?? '').trim()) && <PaperFieldLine label={t('field_nickname', lang)} value={info.nickname} />}
-        {canShow('birthday') && (isSelf || (info.birthday ?? '').trim()) && <PaperFieldLine label={t('field_birthday', lang)} value={info.birthday} />}
-        {t('show_bloodType', lang) === 'true' && canShow('bloodType') && (isSelf || (info.bloodType ?? '').trim()) && <PaperFieldLine label={t('field_bloodType', lang)} value={info.bloodType} />}
-        {info.gender && canShow('gender') && <PaperFieldLine label={t('field_gender', lang)} value={info.gender} />}
-        {canShow('mbti') && (isSelf || (info.mbti ?? '').trim()) && <PaperFieldLine label={t('field_mbti', lang)} value={info.mbti} />}
-        {canShow('hometown') && (isSelf || (info.hometown ?? '').trim()) && <PaperFieldLine label={t('field_hometown', lang)} value={translatedInfo.hometown ?? info.hometown} />}
+      <PaperSheet className="px-4 pb-4 pt-4">
+        <PrintedHeading no={nextNo()} kicker="BASIC" title={t('sec_basic', lang)} />
+        <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
+          {canShow('name') && (isSelf || (info.name ?? '').trim()) && (
+            <div className="col-span-2">
+              <p className="pb-label">{t('field_name', lang)}</p>
+              <p className="pb-writeline text-[20px] leading-snug text-ink prof-hand">{info.name}</p>
+            </div>
+          )}
+          {(isSelf || (info.nickname ?? '').trim()) && (
+            <div className="col-span-2">
+              <p className="pb-label">{t('field_nickname', lang)}</p>
+              <p className="pb-writeline text-[18px] leading-snug text-ink prof-hand">{info.nickname}</p>
+            </div>
+          )}
+          {canShow('birthday') && (isSelf || (info.birthday ?? '').trim()) && (
+            <div className="pb-box">
+              <p className="pb-label">🎂 {t('field_birthday', lang)}</p>
+              <p className="mt-0.5 min-h-[1.5em] break-words text-[18px] leading-snug text-ink prof-hand">{info.birthday}</p>
+            </div>
+          )}
+          {t('show_bloodType', lang) === 'true' && canShow('bloodType') && (isSelf || (info.bloodType ?? '').trim()) && (
+            <div className="pb-box">
+              <p className="pb-label">{t('field_bloodType', lang)}</p>
+              <div className="mt-1"><CircleChoice options={['A', 'B', 'O', 'AB']} value={info.bloodType} /></div>
+            </div>
+          )}
+          {info.gender && canShow('gender') && (
+            <div className="pb-box">
+              <p className="pb-label">{t('field_gender', lang)}</p>
+              <p className="mt-0.5 break-words text-[17px] leading-snug text-ink prof-hand">{info.gender}</p>
+            </div>
+          )}
+          {canShow('mbti') && (isSelf || (info.mbti ?? '').trim()) && (
+            <div className="pb-box">
+              <p className="pb-label">{t('field_mbti', lang)}</p>
+              <div className="mt-1"><LetterBoxes value={info.mbti} pattern={/^[EI][NS][TF][JP](-[AT])?$/i} /></div>
+            </div>
+          )}
+          {canShow('hometown') && (isSelf || (info.hometown ?? '').trim()) && (
+            <div className="col-span-2 flex items-end gap-2 sm:col-span-4">
+              <p className="pb-label shrink-0 pb-1">📍 {t('field_hometown', lang)}</p>
+              <p className="pb-writeline min-w-0 flex-1 text-[17px] leading-snug text-ink prof-hand">{translatedInfo.hometown ?? info.hometown}</p>
+            </div>
+          )}
         </div>
       </PaperSheet>
       )}
 
-      {/* ── すきなもの（MY FAVORITE：バブル＋書き込み欄） ── */}
+      {/* ── すき・きらい：枠の形で「すき（ハート）／きらい（×）／色（パレット）／キャラ（星）」を描き分け ── */}
       {showLikes && (
-      <section className="pt-1">
-        <ProfSectionHeader icon="♡" title={t('sec_likes', lang)} theme={themeColor} />
-        {/* 定番のお気に入りは“丸バブルに手書き”で（プロフ帳の顔） */}
+      <PaperSheet className="px-4 pb-4 pt-4">
+        <PrintedHeading no={nextNo()} kicker="LIKE & DISLIKE" title={t('sec_likes', lang)} />
         {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
-        <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-4">
-          {canShow('favoriteFood') && <FavBubble label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />}
-          {canShow('dislikeFood') && <FavBubble label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />}
-          {canShow('favoriteColor') && <FavBubble label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor} />}
-          {canShow('favoriteCharacter') && <FavBubble label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />}
+        <div className="grid grid-cols-2 gap-3">
+          {canShow('favoriteFood') && <FavBubble shape="heart" mark="♥" label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />}
+          {canShow('dislikeFood') && <FavBubble shape="cross" mark="✕" label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />}
+          {canShow('favoriteColor') && (
+            <FavBubble shape="color" mark="🎨" label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor}>
+              {colorDots.length > 0 && (
+                <span aria-hidden className="mt-1.5 flex justify-center gap-1.5">
+                  {colorDots.map((c) => <span key={c} className="pb-swatch" style={{ background: c }} />)}
+                </span>
+              )}
+            </FavBubble>
+          )}
+          {canShow('favoriteCharacter') && <FavBubble shape="star" mark="★" label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />}
         </div>
-        {/* 残りは書き込み欄で */}
+        {/* 教科は時間割のマスで（すき／にがて） */}
         {(lifeStageDef?.showSubjectFields ?? true) && (
-          <div className="space-y-1">
-            {canShow('favoriteSubject') && <ProfileLine label={t('field_favoriteSubject', lang)} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />}
-            {canShow('dislikeSubject') && <ProfileLine label={t('field_dislikeSubject', lang)} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />}
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {canShow('favoriteSubject') && <SubjectCell label={`◎ ${t('field_favoriteSubject', lang)}`} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />}
+            {canShow('dislikeSubject') && <SubjectCell label={`△ ${t('field_dislikeSubject', lang)}`} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />}
           </div>
         )}
-      </section>
+      </PaperSheet>
       )}
 
-      {/* ── わたしのこと ── */}
+      {/* ── わたしのこと：基本は記入線。座右の銘と将来の夢はメモ用紙で目立たせる ── */}
       {showAbout && (
-      <section className="pt-1">
-        <ProfSectionHeader icon="✿" title={t('sec_about', lang)} theme={themeColor} />
-        <div className="space-y-2">
+      <PaperSheet className="px-4 pb-4 pt-4">
+        <PrintedHeading no={nextNo()} kicker="ABOUT ME" title={t('sec_about', lang)} />
+        <div className="space-y-1">
         {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />}
         {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />}
         {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />}
         {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />}
-        {canShow('motto') && <ProfileLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} />}
+        {canShow('motto') && <MemoLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} quote />}
         {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />}
-        {canShow('dream') && <ProfileLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} />}
+        {canShow('dream') && <MemoLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} tone="sax" />}
         </div>
-      </section>
+      </PaperSheet>
       )}
 
       {/* ── ライフステージ専用セクション ── */}
       {lifeStageDef && lifeStageDef.fields.some((f) => customFields[f.key]) && (
-        <section className="pt-1">
+        <PaperSheet variant="ruled" className="px-4 pb-4 pt-4">
           <ProfSectionHeader icon={lifeStageDef.emoji} title={lifeStageDef.sectionTitle} theme={themeColor} />
-          <div className="space-y-2">
+          <div className="space-y-1">
           {lifeStageDef.fields.map((f) =>
             customFields[f.key] ? (
               <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
             ) : null
           )}
           </div>
-        </section>
+        </PaperSheet>
       )}
 
       {/* ── 特技・活動セクション ── */}
       {activityDef && activityDef.fields.some((f) => customFields[f.key]) && (
-        <section className="pt-1">
+        <PaperSheet variant="ruled" className="px-4 pb-4 pt-4">
           <ProfSectionHeader icon={activityDef.emoji} title={activityDef.sectionTitle} theme={themeColor} />
-          <div className="space-y-2">
+          <div className="space-y-1">
           {activityDef.fields.map((f) =>
             customFields[f.key] ? (
               <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
             ) : null
           )}
           </div>
-        </section>
+        </PaperSheet>
       )}
 
-      {/* ── 今月のおだい（今月の1問＋BEST3・毎月切替） ── */}
+      {/* ── 今月のおだい（今月の1問＋BEST3・毎月切替）：付せんメモ ── */}
       {(() => {
         if (!monthlyBest3) return null;
         const hasEpisode = (monthlyBest3.episode ?? '').trim();
         const hasBest3 = monthlyBest3.items.some((v) => v.trim());
         if (!hasEpisode && !hasBest3 && !isSelf) return null;
         return (
-          <section className="space-y-4 rounded-[28px] border border-pink/20 bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-pink/15 px-3 py-1 text-[10px] font-black text-pink">🗓️ {monthlyBest3.label}のおだい</span>
-            </div>
+          <section className="pb-memo space-y-3 rotate-[0.3deg]">
+            <span className="pb-tape absolute -top-2.5 left-1/2 h-4 w-16 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(2deg)' }} aria-hidden />
+            <p className="pb-label">🗓️ {monthlyBest3.label}のおだい</p>
             {/* 今月のエピソード質問（今月の1問） */}
             {(monthlyBest3.episodeQ || hasEpisode) && (
               <div>
-                {monthlyBest3.episodeQ && <p className="mb-1 text-sm font-black text-ink">Q. {monthlyBest3.episodeQ}</p>}
+                {monthlyBest3.episodeQ && <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{monthlyBest3.episodeQ}</p>}
                 {hasEpisode ? (
-                  <p className="whitespace-pre-wrap text-[15px] text-ink prof-hand">{monthlyBest3.episode}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-[16px] leading-relaxed text-ink prof-hand">{monthlyBest3.episode}</p>
                 ) : isSelf ? (
-                  <p className="text-xs font-bold text-muted">まだ書かれていません。✏️ 編集から今月の質問に答えられます。</p>
+                  <p className="mt-1 text-xs font-bold text-muted">まだ書かれていません。✏️ 編集から今月の質問に答えられます。</p>
                 ) : null}
               </div>
             )}
             {/* 今月のBEST3 */}
             <div>
-              <p className="mb-1 text-sm font-black text-ink">Q. {monthlyBest3.theme} は？</p>
+              <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{monthlyBest3.theme} は？</p>
               {hasBest3 ? (
-                <div className="space-y-1 pl-1">
-                  {monthlyBest3.items.map((item, i) => item.trim() && (
-                    <p key={i} className="text-[15px] text-ink prof-hand">{medals[i]} {item}</p>
-                  ))}
-                </div>
+                <Best3Lines items={monthlyBest3.items} hideEmpty={hideEmptySlots} />
               ) : isSelf ? (
-                <p className="text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から今月のBEST3を書けます。</p>
+                <p className="mt-1 text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から今月のBEST3を書けます。</p>
               ) : null}
             </div>
           </section>
         );
       })()}
 
-      {/* ── BEST3 ── */}
+      {/* ── すきなもの BEST3：ランキングではなく ①②③ の記入欄 ── */}
       {(isSelf || BEST3_CATEGORIES.some((c) => (best3[c.key] ?? []).some((v) => v.trim()))) && (
-        <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <ProfSectionHeader icon="★" title="すきなもの BEST3" theme={themeColor} />
+        <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
+          <PrintedHeading no={nextNo()} kicker="MY BEST 3" title="すきなもの BEST3" />
           {(() => {
             const filled = BEST3_CATEGORIES.filter((c) => (best3[c.key] ?? []).some((v) => v.trim()));
             if (filled.length === 0) {
               return <p className="text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から好きなものを追加できます。</p>;
             }
-            return filled.map((cat) => {
-              const items = (best3[cat.key] ?? []).filter((v) => v.trim());
-              return (
-                <div key={cat.key} className="mb-3">
-                  <p className={`mb-1.5 text-xs font-black ${accent}`}>{cat.emoji} {cat.label}</p>
-                  <div className="space-y-1 pl-1">
-                    {items.map((item, i) => (
-                      <p key={i} className="text-[15px] text-ink prof-hand">{medals[i]} {item}</p>
-                    ))}
+            return (
+              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                {filled.map((cat) => (
+                  <div key={cat.key}>
+                    <p className="pb-label">{cat.emoji} すきな{cat.label}</p>
+                    <Best3Lines items={best3[cat.key] ?? []} hideEmpty={hideEmptySlots} />
                   </div>
-                </div>
-              );
-            });
+                ))}
+              </div>
+            );
           })()}
-        </section>
+        </PaperSheet>
       )}
 
-      {/* ── ひとことしつもん ──（他人のプロフ帳では未回答の質問は隠す） */}
+      {/* ── しつもんコーナー：Q は印刷、A は手書き（他人のプロフ帳では未回答の質問は隠す） ── */}
       {(() => {
         const qaSource = translatedQA ?? questions;
         // 他人が見るときは回答済み（a が空でない）だけを表示。自分は入力促進のため全部表示。
         const visibleQA = isSelf ? qaSource : qaSource.filter((item) => (item.a ?? '').trim());
         if (visibleQA.length === 0) return null; // 全部未回答なら section ごと非表示
         return (
-          <section className="rounded-[28px] bg-white p-5 shadow-card">
-            <ProfSectionHeader icon="💬" title={t('sec_qa', lang)} theme={themeColor} />
+          <PaperSheet className="px-4 pb-3 pt-4">
+            <PrintedHeading no={nextNo()} kicker="QUESTION CORNER" title={t('sec_qa', lang)} />
             {translatedQA === null && lang !== 'ja' && (
               <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
             )}
-            <div className="grid gap-4 pt-2">
+            <div className="grid sm:grid-cols-2 sm:gap-x-5">
               {visibleQA.map((item, i) => (
-                <div key={i} className="prof-qbox">
-                  <span className={`prof-qbox-head rounded-full bg-white px-2.5 py-0.5 text-[10px] font-black shadow-sm ring-1 ring-black/5 ${accent}`}>Q{i + 1}</span>
-                  <p className={`text-[12px] font-black leading-snug ${accent}`}>{item.q}</p>
-                  <p className="mt-1.5 text-[15px] text-ink leading-relaxed prof-hand">➜ {item.a || <span className="text-muted/40">…</span>}</p>
+                <div key={i} className="pb-q">
+                  <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q{i + 1}</span>{item.q}</p>
+                  <p className="mt-1.5 flex gap-1.5 text-[16px] leading-relaxed text-ink">
+                    <span aria-hidden className="pb-label pt-1">A.</span>
+                    <span className="pb-writeline min-w-0 flex-1 prof-hand">{item.a}</span>
+                  </p>
                 </div>
               ))}
             </div>
-          </section>
+          </PaperSheet>
         );
       })()}
 
       {/* ── お気に入り写真 ── */}
       {favoritePhotos && favoritePhotos.length > 0 && (
-        <section className="rounded-[28px] bg-white p-5 shadow-card">
+        <section className="pb-sheet px-4 pb-4 pt-4">
           <ProfSectionHeader icon="📷" title={t('sec_fav_photos', lang)} theme={themeColor} />
           <div className="grid grid-cols-3 gap-2">
             {favoritePhotos.map((photo, i) => (
@@ -2683,7 +2707,7 @@ function ProfileBookContent({
 
       {/* ── さいきんの回答 ── */}
       {answers.length > 0 && onGoDetail && (
-        <section className="rounded-[28px] bg-white p-5 shadow-card">
+        <section className="pb-sheet px-4 pb-4 pt-4">
           <ProfSectionHeader icon="📝" title={t('sec_recent_answers', lang)} theme={themeColor} />
           <div className="space-y-2">
             {answers.slice(0, 3).map((answer) => (
@@ -2753,13 +2777,13 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
     }
   };
   return (
-    <NotebookSection
-      variant="grid"
-      icon="💭"
-      title={`${targetName}さんって、どんな人？`}
-      right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>}
-    >
-      <p className="-mt-1 mb-2 text-[11px] font-bold text-muted">友達から見た{targetName}さんを、シールで教えてあげよう（もう一度押すと取り消し）</p>
+    <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
+      <PrintedHeading
+        kicker="FROM FRIENDS"
+        title={`友達から見た ${targetName}さん`}
+        right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>}
+      />
+      <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{targetName}さんって、どんな人？ あてはまるものを1つえらんで教えてね（もう一度押すと取り消し）</p>
       <div className="flex flex-wrap gap-1.5">
         {PERSONALITY_OPTIONS.map((opt) => {
           const c = summary.find((s) => s.value === opt)?.count ?? 0;
@@ -2775,9 +2799,9 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
         <p role="status" className="mt-2 rounded-lg bg-cream px-3 py-1.5 text-[12px] font-black text-ink">⚠️ {notice}</p>
       )}
       {summary[0] && summary[0].count > 0 && (
-        <p className="mt-3 text-[12px] font-black text-pink prof-hand">🏆 いちばん多いのは「{summary[0].value}」（{summary[0].count}票）</p>
+        <p className="mt-3 text-[13px] text-ink prof-hand">🏆 いちばん多いのは「{summary[0].value}」（{summary[0].count}票）</p>
       )}
-    </NotebookSection>
+    </PaperSheet>
   );
 }
 
@@ -2795,23 +2819,20 @@ function MyPerceptionCard() {
     return () => { cancelled = true; };
   }, []);
   if (!dbReady() || total === 0) return null;
-  const max = summary[0]?.count ?? 1;
   return (
-    <section className="mx-4 mt-3 rounded-[28px] bg-white/90 p-4 shadow-card">
-      <p className="text-sm font-black text-ink">💭 みんなが選ぶ「わたしの性格」</p>
-      <p className="mb-3 text-[11px] font-bold text-muted">友だちからの投票で決まります（{total}人）</p>
-      <div className="space-y-1.5">
-        {summary.slice(0, 5).map((s, i) => (
-          <div key={s.value} className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-[11px] font-black text-ink">{i === 0 ? '🏆 ' : ''}{s.value}</span>
-            <div className="relative h-4 flex-1 overflow-hidden rounded-full bg-pink/10">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-pink to-purple" style={{ width: `${(s.count / max) * 100}%` }} />
-            </div>
-            <span className="w-8 shrink-0 text-right text-[11px] font-black text-pink">{s.count}</span>
-          </div>
-        ))}
-      </div>
-    </section>
+    <div className="px-4 pt-3">
+      <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
+        <PrintedHeading kicker="FROM FRIENDS" title="友達から見たわたし" right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>} />
+        <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">友だちが「どんな人？」で選んでくれたシールです</p>
+        <ul className="flex flex-wrap gap-1.5">
+          {summary.slice(0, 5).map((s, i) => (
+            <li key={s.value}>
+              <CapsulePill active={i === 0}>{i === 0 ? '🏆 ' : ''}{s.value}<span className={i === 0 ? 'text-white' : 'text-ink'}>×{s.count}</span></CapsulePill>
+            </li>
+          ))}
+        </ul>
+      </PaperSheet>
+    </div>
   );
 }
 
@@ -2986,14 +3007,15 @@ function OtherProfileScreen({
       <div className="relative min-h-full">
       <div className="pointer-events-none absolute inset-0 prof-paper" />
       <div className="relative z-10">
-      {/* プロフ帳を交換（フォロー／なかよし） */}
+      {/* プロフ帳こうかんカード（フォロー／なかよし）。交換ずみはハンコと交換記録で見せる */}
       <div className="px-4 pt-2">
-        <PaperSheet variant="plain" className="flex items-center gap-2 p-2.5">
-          <StickerBadge tone="cream" rotate={-4} className="shrink-0">📖 交換</StickerBadge>
-          <div className="flex min-w-0 flex-1 gap-2">
+        <PaperSheet variant="plain" className="px-3 pb-3 pt-2.5">
+          <p className="pb-label">📖 プロフ帳こうかん</p>
+          <div className="mt-2 flex min-w-0 gap-2">
             <button
               onClick={toggleFollow}
-              className={`h-10 flex-1 rounded-full text-[13px] font-black shadow-sm active:scale-[0.98] transition ${
+              aria-pressed={isFollowing}
+              className={`min-h-[44px] flex-1 rounded-xl text-[13px] font-black shadow-[0_2px_0_rgba(0,0,0,.12)] active:translate-y-px active:shadow-none transition ${
                 isFollowing ? 'bg-base text-pink ring-2 ring-pink' : 'bg-pink text-white'
               }`}
             >
@@ -3001,24 +3023,48 @@ function OtherProfileScreen({
             </button>
             <button
               onClick={onFriendAction}
-              className={`h-10 flex-1 rounded-full text-[13px] font-black shadow-sm active:scale-[0.98] transition ${friendBtn.cls}`}
+              className={`min-h-[44px] flex-1 rounded-xl text-[13px] font-black shadow-[0_2px_0_rgba(0,0,0,.12)] active:translate-y-px active:shadow-none transition ${friendBtn.cls}`}
             >
               {friendBtn.label}
             </button>
           </div>
+          {friendStatus !== 'none' && (
+            <div className="mt-2 flex items-center gap-2 border-t-2 border-dotted border-ink/15 pt-1.5">
+              <p role="status" className="min-w-0 flex-1 text-[13px] text-ink prof-hand">
+                {friendStatus === 'friends' && `✎ ${profile.name}さんとプロフ帳を交換しました`}
+                {friendStatus === 'pending_out' && `✎ 交換の申請を送りました（${profile.name}さんの承認待ち）`}
+                {friendStatus === 'pending_in' && `✎ ${profile.name}さんから交換の申請がきています`}
+              </p>
+              {/* 交換記録のハンコ（装飾） */}
+              {isFriend && <span aria-hidden className="pb-stamp h-11 w-11 shrink-0 rotate-[-12deg] text-[10px]">交換<br />ずみ</span>}
+            </div>
+          )}
         </PaperSheet>
       </div>
 
-      {/* 一致率しんだん（診断チケット風） */}
+      {/* 相性チェック（昔のプロフ帳の相性占いコーナー風）→ 一致率しんだんへ */}
       <div className="px-4 pt-3">
-        <button
-          onClick={() => go('diagnosis', profile.id)}
-          className="relative w-full overflow-hidden rounded-[18px] pb-banner border-2 border-dashed border-white/70 py-3.5 text-sm font-black shadow-card active:scale-[0.99]"
-        >
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
-          💯 {profile.name}との一致率しんだん
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-base opacity-80">✦</span>
-        </button>
+        <PaperSheet variant="plain" className="border-2 border-dashed border-pink/30 px-4 pb-4 pt-4">
+          <PrintedHeading kicker="MATCH CHECK" title="相性チェック" right={<span aria-hidden className="text-xl">💘</span>} />
+          <div className="flex items-end justify-center gap-3">
+            <div className="min-w-0 flex-1 text-center">
+              <p className="pb-label">わたし</p>
+              <p className="pb-writeline truncate text-[17px] text-ink prof-hand">{myProfile?.nickname || myProfile?.name || 'わたし'}</p>
+            </div>
+            <span aria-hidden className="pb-1 text-2xl text-pink">♡</span>
+            <div className="min-w-0 flex-1 text-center">
+              <p className="pb-label">あいて</p>
+              <p className="pb-writeline truncate text-[17px] text-ink prof-hand">{profile.name}</p>
+            </div>
+          </div>
+          <p className="mt-2.5 text-center text-[12px] font-bold text-muted">二択の答えがどれだけ同じか、一致率でわかるよ</p>
+          <button
+            onClick={() => go('diagnosis', profile.id)}
+            className="relative mt-2.5 min-h-[48px] w-full overflow-hidden rounded-xl pb-banner border-2 border-dashed border-white/70 py-3 text-sm font-black shadow-[0_2px_0_rgba(0,0,0,.15)] active:translate-y-px active:shadow-none"
+          >
+            💯 {profile.name}との一致率しんだん
+          </button>
+        </PaperSheet>
       </div>
 
       {/* 他己紹介アンケート（性格をみんなで投票） */}
@@ -3030,33 +3076,37 @@ function OtherProfileScreen({
 
       {/* なかよし度 */}
       <div className="px-4 pt-3">
-        <NotebookSection
-          variant="ruled"
-          icon="🍀"
-          title="なかよし度"
-          right={<StickerBadge tone="coral" rotate={4}>{FRIEND_LEVEL_LABELS[friendLevel]}</StickerBadge>}
-        >
-          <HeartMeter level={friendLevel} />
+        <PaperSheet variant="plain" className="px-4 pb-4 pt-4">
+          <PrintedHeading
+            kicker="FRIENDSHIP"
+            title="なかよし度"
+            right={<StickerBadge tone="coral" rotate={4}>{FRIEND_LEVEL_LABELS[friendLevel]}</StickerBadge>}
+          />
+          {/* シール台紙：なかよしになるたびハートのシールが1枚ずつ貼られていく */}
+          <div className="rounded-xl border-2 border-dashed border-ink/15 bg-cream/60 px-3 py-2.5">
+            <p className="pb-label mb-1.5">なかよしシール台紙</p>
+            <HeartMeter level={friendLevel} />
+          </div>
           {/* なかよしアクションの内訳 */}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {commonPoints.map((c) => (
-              <span key={c.label} className="inline-flex items-center gap-1 rounded-full bg-pink/10 px-3 py-1.5 text-[11px] font-black text-pink ring-1 ring-pink/20">
+              <span key={c.label} className="inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1.5 text-[11px] font-black text-ink shadow-[0_2px_4px_rgba(0,0,0,.12)]">
                 ✨ {c.label}が一緒：{c.value}
               </span>
             ))}
             {friendActions.map((a) => (
               <span key={a.label}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black ${a.done ? 'bg-purple/10 text-purple ring-1 ring-purple/20' : 'border border-dashed border-black/15 bg-base text-muted'}`}>
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-black ${a.done ? 'bg-white text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.16)]' : 'border border-dashed border-ink/25 bg-transparent text-muted'}`}>
                 {a.done ? '✓' : '○'} {a.label}
               </span>
             ))}
           </div>
           {friendLevel < 5 && (
-            <p className="mt-3 text-[11px] font-bold text-muted prof-hand">
-              プロフ帳を交換したり、いっしょに日記を書いたりするとなかよし度が上がるよ 🌱
+            <p className="mt-3 text-[12px] font-bold text-muted">
+              プロフ帳を交換したり、いっしょに日記を書いたりするとシールがふえるよ 🌱
             </p>
           )}
-        </NotebookSection>
+        </PaperSheet>
       </div>
 
       {/* 称号バッジ */}
@@ -3070,13 +3120,13 @@ function OtherProfileScreen({
               {titles.map((t) => <TitleBadge key={t} type={t} userId={profile.id} />)}
             </div>
             {hasFounder && (
-              <div className="rounded-[20px] bg-zinc-900 p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-xs font-black text-amber-400 tracking-widest">激レア</span>
-                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-black text-amber-400">ULTRA RARE</span>
+              <PaperSheet variant="plain" className="border-2 border-double border-amber-500/60 px-4 pb-3.5 pt-3">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-xs font-black tracking-widest text-ink">🏅 激レア</span>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-900">ULTRA RARE</span>
                 </div>
-                <p className="text-xs font-bold leading-5 text-zinc-400">{TITLE_DEFS.founder.description}</p>
-              </div>
+                <p className="text-xs font-bold leading-5 text-ink">{TITLE_DEFS.founder.description}</p>
+              </PaperSheet>
             )}
           </div>
         );
@@ -3101,7 +3151,7 @@ function OtherProfileScreen({
       {/* 相手の公開ブログ */}
       {userBlogs.length > 0 && (
         <div className="px-4 pb-4">
-          <section className="rounded-[28px] bg-white p-5 shadow-card">
+          <section className="pb-sheet px-4 pb-4 pt-4">
             <ProfSectionHeader icon="📔" title="ブログ" theme={themeColor} />
             <div className="space-y-2">
               {userBlogs.slice(0, 5).map((p) => (
@@ -3236,6 +3286,8 @@ function ProfileScreen({
         </button>
         <button
           onClick={() => setShowShare(true)}
+          aria-label="プロフ帳をシェア"
+          title="プロフ帳をシェア"
           className="rounded-full bg-white px-4 py-3 text-sm font-black text-muted shadow-card active:scale-[0.99]"
         >
           <Share2 size={17} />
@@ -3244,6 +3296,7 @@ function ProfileScreen({
           onClick={() => go('diagnosis')}
           className="rounded-full bg-white px-4 py-3 text-sm font-black text-purple shadow-card active:scale-[0.99]"
           title="一致率しんだんに答える"
+          aria-label="一致率しんだんに答える"
         >
           💯
         </button>
@@ -5601,39 +5654,89 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
 
 function ProfileLine({ label, value }: { label: string; value: string }) {
   const hideEmpty = useContext(HideEmptyProfileContext);
-  const theme = useContext(ProfThemeContext);
   // 他人のプロフ帳では未入力（空欄）の項目は表示しない
   if (hideEmpty && !(value ?? '').trim()) return null;
-  const accent = THEME_ACCENT[theme] ?? THEME_ACCENT.pink;
-  // 平成プロフ帳の“書き込み欄”風：ラベルチップ → 点線アンダーラインに手書き回答。
+  // 平成プロフ帳の“書き込み欄”：印刷された項目名 → 点線の記入線に手書き回答。
   return (
-    <div className="prof-field">
-      <span className={`shrink-0 rounded-full bg-black/[.04] px-2.5 py-0.5 text-[11px] font-black leading-tight ${accent}`}>
-        {label}
-      </span>
-      <span className="prof-field-value text-[16px] leading-snug text-ink prof-hand">
-        {value || <span className="text-muted/40 font-medium">　　　　　</span>}
-      </span>
+    <div className="flex items-end gap-2.5 py-1.5">
+      <span className="pb-label max-w-[42%] shrink-0 pb-1">{label}</span>
+      <span className="pb-writeline min-w-0 flex-1 text-[16px] leading-snug text-ink prof-hand">{value}</span>
     </div>
   );
 }
 
-// MY FAVORITE バブル（ハート/丸に手書きで書き込むプロフ帳の定番パーツ）
-function FavBubble({ label, value }: { label: string; value: string }) {
+// メモ用紙に書く項目（座右の銘・将来の夢）。1行で終わらない回答も読みやすく。
+function MemoLine({ label, value, quote = false, tone = 'cream' }: { label: string; value: string; quote?: boolean; tone?: 'cream' | 'sax' }) {
   const hideEmpty = useContext(HideEmptyProfileContext);
-  const theme = useContext(ProfThemeContext);
   if (hideEmpty && !(value ?? '').trim()) return null;
-  const accent = THEME_ACCENT[theme] ?? THEME_ACCENT.pink;
+  const v = (value ?? '').trim();
   return (
-    <div className="prof-fav">
-      <span className={`prof-fav-label rounded-full bg-white px-2.5 py-0.5 text-[10px] font-black shadow-sm ring-1 ring-black/5 ${accent}`}>
-        ♡ {label}
-      </span>
-      <span className="break-words text-[16px] leading-snug text-ink prof-hand">
-        {value || <span className="text-muted/40 font-medium">…</span>}
-      </span>
+    <div className={`pb-memo my-2 ${tone === 'sax' ? 'pb-memo-sax rotate-[0.4deg]' : 'rotate-[-0.4deg]'}`}>
+      <p className="pb-label absolute left-3 top-1.5">{label}</p>
+      <p className="min-h-[1.6em] pt-2 text-[17px] leading-relaxed text-ink prof-hand">
+        {v && quote ? `「${v.replace(/^「|」$/g, '')}」` : v}
+      </p>
     </div>
   );
+}
+
+// すき・きらい：形の違う記入枠（ハート/×/パレット/星）に手書きで書き込む
+function FavBubble({ label, value, shape = 'heart', mark, children }: { label: string; value: string; shape?: 'heart' | 'cross' | 'color' | 'star'; mark?: string; children?: React.ReactNode }) {
+  const hideEmpty = useContext(HideEmptyProfileContext);
+  if (hideEmpty && !(value ?? '').trim()) return null;
+  return (
+    <ShapedFrame shape={shape} label={label} mark={mark}>
+      <span className="block min-h-[1.5em] break-words text-[17px] leading-snug text-ink prof-hand">{value}</span>
+      {children}
+    </ShapedFrame>
+  );
+}
+
+// 時間割のマス（すきな教科・にがてな教科）
+function SubjectCell({ label, value }: { label: string; value: string }) {
+  const hideEmpty = useContext(HideEmptyProfileContext);
+  if (hideEmpty && !(value ?? '').trim()) return null;
+  return (
+    <div className="pb-cell">
+      <p className="pb-cell-head pb-label">{label}</p>
+      <p className="min-h-[2.4em] break-words px-2.5 py-1.5 text-[16px] leading-snug text-ink prof-hand">{value}</p>
+    </div>
+  );
+}
+
+// BEST3 の記入欄（印刷の ①②③ ＋ 手書き）。他人のプロフ帳では空いている行は出さない。
+function Best3Lines({ items, hideEmpty }: { items: string[]; hideEmpty: boolean }) {
+  const rows = [0, 1, 2].map((i) => ({ i, v: (items[i] ?? '').trim() })).filter((r) => !hideEmpty || r.v);
+  return (
+    <ol className="mt-1 space-y-1">
+      {rows.map(({ i, v }) => (
+        <li key={i} className="flex items-end gap-2">
+          <span className="pb-num mb-1" aria-hidden>{i + 1}</span>
+          <span className="sr-only">{i + 1}位</span>
+          <span className="pb-writeline min-w-0 flex-1 text-[16px] leading-snug text-ink prof-hand">{v}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// 「すきな色」の文字から色見本を作る（わかる色だけ・最大3つ。わからなければ出さない）
+const COLOR_WORDS: Array<[RegExp, string]> = [
+  [/ピンク|桃|pink/i, '#F7A1C4'], [/ラベンダー|lavender/i, '#B9A3E3'], [/紫|むらさき|パープル|purple|violet/i, '#8E4EC6'],
+  [/水色|みずいろ|スカイ|sky|light ?blue/i, '#7CC7F2'], [/紺|ネイビー|navy/i, '#1F2C56'], [/青|あお|ブルー|blue/i, '#3E63DD'],
+  [/赤|あか|レッド|red/i, '#E5484D'], [/オレンジ|橙|orange/i, '#F59E42'], [/黄|きいろ|イエロー|yellow/i, '#F5D547'],
+  [/ミント|mint/i, '#9FE2C9'], [/緑|みどり|グリーン|green/i, '#46A758'], [/ベージュ|beige/i, '#E8D5B5'],
+  [/茶|ちゃいろ|ブラウン|brown/i, '#9A6B4A'], [/金|ゴールド|gold/i, '#D4AF37'], [/銀|シルバー|silver/i, '#C0C0C8'],
+  [/グレー|灰|gr[ae]y/i, '#9CA3AF'], [/白|しろ|ホワイト|white/i, '#FFFFFF'], [/黒|くろ|ブラック|black/i, '#222222'],
+];
+function swatchesOf(text: string): string[] {
+  const out: string[] = [];
+  for (const part of (text ?? '').split(/[\/／・,、&＆と]+/)) {
+    const hit = COLOR_WORDS.find(([re]) => re.test(part));
+    if (hit && !out.includes(hit[1])) out.push(hit[1]);
+    if (out.length >= 3) break;
+  }
+  return out;
 }
 
 // 関係性から「仲良し度」を算出（1〜3）。なかよし成立＞相互フォロー＞片方向。
