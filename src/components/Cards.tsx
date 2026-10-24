@@ -4,6 +4,7 @@ import type { answers, profiles, questions } from '@/lib/mock';
 import { RetroText, ReactionGlyph } from '@/components/RetroEmoji';
 // RetroText はレトロコード([♥]等)をピクセルアートに、それ以外はそのまま表示する
 import { getUserTitles, TITLE_DEFS, type TitleType } from '@/lib/titles';
+import { penAttrs, useUserPen } from '@/lib/pen';
 
 type Question = (typeof questions)[number];
 type Answer = (typeof answers)[number];
@@ -67,6 +68,8 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
 }
 
 export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions, onLike, onSticker }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }>; onLike?: () => void; onSticker?: () => void }) {
+  // 書いた人の「わたしのペン」（未設定なら従来の文字のまま）
+  const pen = useUserPen(answer?.user?.id);
   if (!answer) return null;
   const titles = getUserTitles(answer.user.id);
   // 絵文字スタンプ（like以外）を件数の多い順に。詳細画面はリアクションバーがあるので非表示。
@@ -89,7 +92,15 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
         <Sparkles size={18} className="text-pink" />
       </div>
       <p className="mb-2 text-xs font-bold text-muted">{answer.question?.title}</p>
-      <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
+      {pen ? (
+        <p
+          {...penAttrs(pen)}
+          style={{ ...penAttrs(pen).style, ['--pen-base' as any]: detail ? '20px' : '17px' }}
+          className={`${detail ? 'leading-9' : 'leading-7'} pen-text pen-size notebook-lines rounded-2xl px-2 py-1`}
+        ><RetroText text={translatedBody ?? answer.body} /></p>
+      ) : (
+        <p className={`${detail ? 'text-xl leading-9' : 'text-base leading-7'} notebook-lines rounded-2xl px-2 py-1 font-medium text-ink`}><RetroText text={translatedBody ?? answer.body} /></p>
+      )}
       {stickerChips.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {stickerChips.map(([emoji, info]) => (

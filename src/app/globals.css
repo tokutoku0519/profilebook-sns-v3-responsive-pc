@@ -675,3 +675,46 @@ button, input, textarea { font: inherit; }
 [data-theme="night"] .pb-stamp { background: transparent; color: #ff8a80; border-color: #ff8a80; }
 [data-theme="night"] .pb-polaroid { background: #e9e5f5; }
 [data-theme="night"] .pb-pop { text-shadow: 0 2px 4px rgba(0,0,0,.4); }
+
+/* ========================================================================
+   Unit 3：わたしのペン（書体・インク・大きさ）。値は src/lib/pen.ts のIDから。
+   ・[data-pen-ink] を付けた範囲の .prof-hand / .pen-text がその人の字になる
+   ・インクは紙（白〜クリーム）で 4.5:1 以上、夜テーマは明るいインクに切替
+   ===================================================================== */
+[data-pen-ink="navy"]   { --pen-ink: #1F2C56; }
+[data-pen-ink="pink"]   { --pen-ink: #BE185D; }
+[data-pen-ink="purple"] { --pen-ink: #6D28D9; }
+[data-pen-ink="blue"]   { --pen-ink: #1D4ED8; }
+[data-pen-ink="green"]  { --pen-ink: #136C33; }
+[data-pen-ink="red"]    { --pen-ink: #B91C1C; }
+[data-pen-ink="brown"]  { --pen-ink: #7C4A1E; }
+[data-pen-ink="orange"] { --pen-ink: #A44A06; }
+[data-theme="night"] [data-pen-ink="navy"]   { --pen-ink: #DCD7EB; }
+[data-theme="night"] [data-pen-ink="pink"]   { --pen-ink: #F9A8D4; }
+[data-theme="night"] [data-pen-ink="purple"] { --pen-ink: #C4B5FD; }
+[data-theme="night"] [data-pen-ink="blue"]   { --pen-ink: #93C5FD; }
+[data-theme="night"] [data-pen-ink="green"]  { --pen-ink: #86EFAC; }
+[data-theme="night"] [data-pen-ink="red"]    { --pen-ink: #FCA5A5; }
+[data-theme="night"] [data-pen-ink="brown"]  { --pen-ink: #E7C9A9; }
+[data-theme="night"] [data-pen-ink="orange"] { --pen-ink: #FDBA74; }
+/* 属性＋クラスの詳細度で text-ink などの色指定より優先させる */
+[data-pen-ink] .prof-hand,
+[data-pen-ink] .pen-text,
+[data-pen-ink].pen-text {
+  font-family: var(--pen-font);
+  font-weight: var(--pen-weight);
+  color: var(--pen-ink);
+}
+/* 夜テーマは入力欄の文字色を !important で固定しているため、便せん（ペンで書く入力欄）だけはインクの色を優先 */
+[data-theme="night"] [data-pen-ink] textarea.pen-text { color: var(--pen-ink) !important; }
+/* 回答の本文などペンの大きさを反映する場所（基準の大きさ × 小/中/大） */
+.pen-size { font-size: calc(var(--pen-base, 16px) * var(--pen-scale, 1)); }
+
+/* 文具ツールバー（ペンケース）：道具のタブ */
+.pb-toolcase { border-radius: 14px; background:
+  repeating-linear-gradient(90deg, rgb(var(--pb-line) / .05) 0 2px, transparent 2px 6px), rgb(var(--color-cream) / .7);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--pb-line) / .22); }
+.pb-tool { display: flex; min-height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 10px; font: 800 11px/1.2 "M PLUS Rounded 1c", system-ui, sans-serif; color: rgb(var(--color-ink) / .8); }
+.pb-tool[aria-selected="true"] { background: #fff; color: rgb(var(--color-ink)); box-shadow: 0 2px 0 rgb(0 0 0 / .1), 0 0 0 2px rgb(var(--color-pink) / .5); }
+[data-theme="night"] .pb-tool[aria-selected="true"] { background: rgb(var(--card-bg2)); }

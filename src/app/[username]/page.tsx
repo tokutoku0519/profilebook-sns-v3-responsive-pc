@@ -28,6 +28,8 @@ import { TapeLabel, PolaroidPhoto, Sticker, PaperSheet, PaperFieldLine, StickerB
 import { RetroEmojiPicker, RetroFlower, RetroHeart, RetroMiniStar, RetroNote, RetroRibbon, RetroStar, RetroText, ReactionGlyph, PIXEL_EMOJIS, PixelEmojiImg, isRetroCode, insertRetroCode } from '@/components/RetroEmoji';
 import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
+import { DEFAULT_PEN, normalizePen, penAttrs, setCachedPen, type Pen } from '@/lib/pen';
+import { DecoToolbar } from '@/components/DecoToolbar';
 import { getQuestionsForLang, getActiveQuestionsForLang } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
@@ -1871,6 +1873,8 @@ function CreateScreen({
   onCreateDiary,
   ownedPackIds,
   ownedGachaStickers,
+  pen = null,
+  onPenChange,
 }: {
   go: (s: Screen, payload?: any) => void;
   onPost: (draft: DraftAnswer) => string;
@@ -1879,8 +1883,13 @@ function CreateScreen({
   onCreateDiary: (caption: string, photoUrl: string, font: string, textColor: string, visibility: 'public' | 'followers' | 'mentioned', mentionedUserIds: string[]) => string;
   ownedPackIds: string[];
   ownedGachaStickers: string[];
+  /** わたしのペン（未設定なら null） */
+  pen?: Pen | null;
+  onPenChange?: (pen: Pen) => void;
 }) {
   const [createMode, setCreateMode] = useState<'question' | 'diary'>('question');
+  // 便せんに表示するペン（未設定の人には既定の手書きペンで書き心地を見せる）
+  const writingPen = pen ?? DEFAULT_PEN;
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   // --- お題モード ---
@@ -1927,6 +1936,8 @@ function CreateScreen({
 
   function submit() {
     if (!canPost) return;
+    // 便せんで見えていた字のまま回答が表示されるよう、未設定なら既定ペンを「わたしの字」にする
+    if (!pen && onPenChange) onPenChange(DEFAULT_PEN);
     const id = onPost(draft);
     setDraft({ questionId: question?.id || _fallbackQ.id, body: '', sticker: '🎀', visibility: 'public' });
     go('detail', id);
@@ -2010,18 +2021,19 @@ function CreateScreen({
               </section>
             )}
             <QuestionCard question={selectedQuestion} />
-            <section className="rounded-[28px] border border-purple-100 bg-white p-4 shadow-card">
-              <div className="mb-2 flex items-center justify-between">
-                <label className="block text-sm font-bold">あなたの回答</label>
-                {selectedQuestion?.answerType !== 'select' && (
-                  <span className="text-xs font-bold text-muted">{draft.body.length}/160</span>
-                )}
-              </div>
+            {/* 便せん：ここに書いた字（わたしのペン）がそのまま回答の字になる */}
+            <section className="pb-sheet px-4 pb-4 pt-4">
+              <PrintedHeading
+                kicker="WRITE"
+                title={<label htmlFor="answer-body">あなたの回答</label>}
+                right={selectedQuestion?.answerType !== 'select' ? <span className="pb-label pb-0.5">{draft.body.length}/160</span> : undefined}
+              />
               {selectedQuestion?.answerType === 'select' && Array.isArray(selectedQuestion?.answerOptions) && selectedQuestion.answerOptions.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2">
                   {selectedQuestion.answerOptions.map((opt: string) => (
                     <button key={opt} type="button"
                       onClick={() => setDraft({ ...draft, body: opt })}
+                      aria-pressed={draft.body === opt}
                       className={`rounded-2xl py-4 text-sm font-black transition ${draft.body === opt ? 'bg-pink text-white shadow-card' : 'bg-base text-ink hover:bg-pink/10'}`}>
                       {opt}
                     </button>
@@ -2029,31 +2041,59 @@ function CreateScreen({
                 </div>
               ) : (
                 <>
-                  <RetroEmojiPicker onInsert={(code) => insertRetroCode(bodyRef, code, (v) => setDraft((prev) => ({ ...prev, body: v })))} />
-                  <textarea ref={bodyRef} value={draft.body} maxLength={160} onChange={(e) => setDraft({ ...draft, body: e.target.value })} style={{ lineHeight: '34px', backgroundOrigin: 'content-box' }} className="notebook-lines mt-2 h-44 w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 outline-none focus:border-pink" placeholder="ここにプロフィール帳みたいに書いてね" />
-                  {draft.body && (
-                    <div className="mt-2 rounded-2xl border border-purple/20 bg-white px-4 py-3">
-                      <p className="mb-1 text-[10px] font-bold text-muted">プレビュー</p>
-                      <p className="notebook-lines min-h-[2rem] rounded-xl px-2 py-1 text-base font-medium leading-8 text-ink">
-                        <RetroText text={draft.body} />
+                  <div {...penAttrs(writingPen)} style={{ ...penAttrs(writingPen).style, ['--pen-base' as any]: '17px' }}>
+                    <textarea
+                      id="answer-body"
+                      ref={bodyRef}
+                      value={draft.body}
+                      maxLength={160}
+                      onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                      style={{ lineHeight: '34px', backgroundOrigin: 'content-box' }}
+                      className="pen-text pen-size notebook-lines h-44 w-full resize-none rounded-2xl border-2 border-dashed border-pink/25 bg-white p-4 outline-none focus:border-pink placeholder:font-sans placeholder:text-[14px] placeholder:text-muted"
+                      placeholder="ここにプロフィール帳みたいに書いてね"
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <DecoToolbar
+                      pen={writingPen}
+                      onPenChange={(p) => onPenChange?.(p)}
+                      sticker={draft.sticker}
+                      onOpenSticker={() => setShowStickerPicker(true)}
+                      onInsertDeco={(code) => insertRetroCode(bodyRef, code, (v) => setDraft((prev) => ({ ...prev, body: v })))}
+                    />
+                  </div>
+                  {/* できあがり：みんなのタイムラインでの見え方（デコ絵文字も絵で表示） */}
+                  <div className="mt-3 rounded-xl border-2 border-dotted border-ink/15 bg-white px-3 py-2.5" aria-live="polite">
+                    <p className="pb-label mb-1">できあがり</p>
+                    <div className="flex items-start gap-2">
+                      <p
+                        {...penAttrs(writingPen)}
+                        style={{ ...penAttrs(writingPen).style, ['--pen-base' as any]: '17px' }}
+                        className="pen-text pen-size notebook-lines min-h-[2rem] min-w-0 flex-1 rounded-xl px-2 py-1 leading-8"
+                      >
+                        {draft.body ? <RetroText text={draft.body} /> : <span className="font-sans text-[13px] font-bold text-muted">書くとここに表示されます</span>}
                       </p>
+                      <span aria-hidden className="grid h-10 w-10 shrink-0 rotate-6 place-items-center rounded-full bg-cream text-xl shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.15)]">{draft.sticker}</span>
                     </div>
-                  )}
+                  </div>
                 </>
               )}
             </section>
-            <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <SectionHeader title="スタンプ" />
-              <div className="flex items-center gap-3">
-                <span className="grid h-14 w-14 place-items-center rounded-2xl bg-pink/10 text-3xl">{draft.sticker}</span>
-                <button
-                  onClick={() => setShowStickerPicker(true)}
-                  className="flex-1 rounded-full border-2 border-dashed border-pink/30 py-3 text-sm font-black text-pink hover:bg-pink/5 active:scale-[0.98]"
-                >
-                  🎭 スタンプを変える
-                </button>
-              </div>
-            </section>
+            {/* 選択式のお題でもシールは貼れる（記述式はツールバーの「シール」から） */}
+            {selectedQuestion?.answerType === 'select' && (
+              <section className="pb-sheet px-4 pb-4 pt-4">
+                <PrintedHeading kicker="STICKER" title="シール" />
+                <div className="flex items-center gap-3">
+                  <span className="grid h-14 w-14 place-items-center rounded-2xl bg-pink/10 text-3xl">{draft.sticker}</span>
+                  <button
+                    onClick={() => setShowStickerPicker(true)}
+                    className="flex-1 rounded-full border-2 border-dashed border-pink/30 py-3 text-sm font-black text-pink hover:bg-pink/5 active:scale-[0.98]"
+                  >
+                    🎭 スタンプを変える
+                  </button>
+                </div>
+              </section>
+            )}
             {showStickerPicker && (
               <StickerPickerPanel
                 ownedPackIds={ownedPackIds}
@@ -2329,6 +2369,7 @@ function ProfileBookContent({
   bare = false,
   visibility = {},
   viewerIsFollower = false,
+  pen = null,
 }: {
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
@@ -2351,6 +2392,8 @@ function ProfileBookContent({
   visibility?: Record<string, FieldVisibility>;
   /** 閲覧者がこのプロフの持ち主をフォローしているか（followers限定の判定用）。 */
   viewerIsFollower?: boolean;
+  /** 持ち主の「わたしのペン」。手書きの回答（.prof-hand）がこの字で表示される。未設定なら従来の手書き風。 */
+  pen?: Pen | null;
 }) {
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   // 項目の公開判定：本人は常に表示。他人は 公開=常に / フォロワー限定=フォロワーのみ / 非公開=不可。
@@ -2422,7 +2465,7 @@ function ProfileBookContent({
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
     <ProfThemeContext.Provider value={themeColor}>
-    <div className="relative min-h-full" style={handFontVars(lang)}>
+    <div className="relative min-h-full" {...penAttrs(pen)} style={{ ...handFontVars(lang), ...penAttrs(pen).style }}>
       {/* ── 背景：テーマありなら世界観、なければ中立の紙地。bare のときは画面側が用意する ── */}
       {!bare && (bgTheme
         ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={bgTheme} subtle /></div>
@@ -2862,7 +2905,7 @@ function OtherProfileScreen({
   circles?: Circle[];
   exchanged?: boolean;
   onExchange?: (userId: string) => void;
-  supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility> } | null;
+  supabaseBook?: { info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility>; pen?: Pen | null } | null;
   targetUid?: string | null;
   onOpenBlog?: (post: BlogPost) => void;
   lang?: Lang;
@@ -3146,6 +3189,7 @@ function OtherProfileScreen({
         lang={lang}
         visibility={supabaseBook?.visibility ?? {}}
         viewerIsFollower={isFollowing}
+        pen={supabaseBook?.pen ?? null}
       />
 
       {/* 相手の公開ブログ */}
@@ -3255,6 +3299,7 @@ function ProfileScreen({
   customFields,
   equippedBg = null,
   lang = 'ja',
+  pen = null,
 }: {
   go: (s: Screen, answerId?: string) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -3266,6 +3311,7 @@ function ProfileScreen({
   customFields?: Record<string, string>;
   equippedBg?: BgTheme | null;
   lang?: Lang;
+  pen?: Pen | null;
 }) {
   const [showShare, setShowShare] = useState(false);
   return (
@@ -3340,6 +3386,7 @@ function ProfileScreen({
         favoritePhotos={favoritePhotos}
         customFields={customFields}
         lang={lang}
+        pen={pen}
       />
       </div>
       </div>
@@ -9119,7 +9166,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // モックに居ない（＝Supabase上の実ユーザー）を開いたときに読み込むプロフィール
   const [viewedProfile, setViewedProfile] = useState<Profile | null>(null);
   // 開いている他ユーザーの Supabase プロフ帳（info/BEST3/今月/しつもん）
-  const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility> } | null>(null);
+  const [viewedProfileBook, setViewedProfileBook] = useState<{ info?: Record<string, any>; best3?: Best3Data; monthly?: MonthlyBest3; questions?: { q: string; a: string }[]; visibility?: Record<string, FieldVisibility>; pen?: Pen | null } | null>(null);
   // 開いている他ユーザーの uuid（フォロー用）
   const [viewedProfileUid, setViewedProfileUid] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>(initialAnswers);
@@ -9195,6 +9242,23 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     persistBook(); // book.__visibility に保存
   }
 
+  // わたしのペン（書体・インク・大きさ）。未設定なら null＝従来の見た目。
+  const [myPen, setMyPen] = useState<Pen | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try { return normalizePen(JSON.parse(localStorage.getItem('miri_pen') || 'null')); } catch { return null; }
+  });
+  // 表示中の自分の回答・プロフ帳にもすぐ反映（ユーザーID確定後も追従）
+  useEffect(() => { setCachedPen(me.id, myPen); }, [myPen, me.id]);
+  const penSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function updateMyPen(next: Pen) {
+    profileDirtyRef.current = true;
+    setMyPen(next);
+    try { localStorage.setItem('miri_pen', JSON.stringify(next)); } catch {}
+    // 連続で選び直しても保存は最後の1回だけ（book.__pen）
+    if (penSaveTimer.current) clearTimeout(penSaveTimer.current);
+    penSaveTimer.current = setTimeout(() => { void persistBook(); }, 800);
+  }
+
   // ── ログインユーザーのSupabaseプロフィールを読み込み、me・プロフィール帳へ反映 ──
   // （production で Supabase が設定されているときのみ。dev/未設定では従来どおり）
   const [, setMeVersion] = useState(0);
@@ -9252,7 +9316,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       const overwriteFromServer = !profileDirtyRef.current;
       // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
-      const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, ...info } = book;
+      const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, __pen, ...info } = book;
       // 項目ごとの公開設定を復元（他端末でも引き継ぐ）。
       if (overwriteFromServer && __visibility && typeof __visibility === 'object') {
         setFieldVisibility(__visibility);
@@ -9279,6 +9343,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
       if (overwriteFromServer && Object.keys(book).length > 0) {
         // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
         if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
+        { const pen = normalizePen(__pen); if (pen) { setMyPen(pen); try { localStorage.setItem('miri_pen', JSON.stringify(pen)); } catch {} } }
         // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
         if (__monthly && __monthly.monthKey === currentMonthInfo().monthKey) {
           setMonthlyBest3(__monthly);
@@ -10029,6 +10094,8 @@ async function persistBookNow() {
       const vis = JSON.parse(localStorage.getItem('profileFieldVisibility') || '{}');
       if (vis && Object.keys(vis).length > 0) book.__visibility = vis;
     } catch {}
+    // わたしのペン（書体・インク・大きさ）
+    try { const pen = normalizePen(JSON.parse(localStorage.getItem('miri_pen') || 'null')); if (pen) book.__pen = pen; } catch {}
     // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
     book.__game = composeGameData();
     const ok = await saveProfileBook(book);
@@ -10399,8 +10466,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           // book(jsonb) を info / BEST3 / 今月 / しつもん に分解して保持
           const b: any = row.book;
           if (b && typeof b === 'object') {
-            const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, ...info } = b;
-            setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions, visibility: __visibility });
+            const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, __pen, ...info } = b;
+            setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions, visibility: __visibility, pen: normalizePen(__pen) });
           }
         }).catch(() => {});
       }
@@ -10913,6 +10980,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       }
       ownedPackIds={ownedPackIds}
       ownedGachaStickers={ownedGachaStickers}
+      pen={myPen}
+      onPenChange={updateMyPen}
     />
   );
     if (screen === 'profile') {
@@ -10938,6 +11007,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         customFields={profileCustomFields}
         equippedBg={getBgTheme(equippedBgId)}
         lang={lang}
+        pen={myPen}
       />;
     }
     if (screen === 'onboarding') return <OnboardingScreen onDone={completeOnboarding} />;
@@ -10996,8 +11066,10 @@ return <ProfileScreen
   avatarUrl={avatarUrl}
   favoritePhotos={favoritePhotos}
   equippedBg={getBgTheme(equippedBgId)}
+  pen={myPen}
 />;
  }, [
+  myPen,
   screen,
   answers,
   selectedAnswer,

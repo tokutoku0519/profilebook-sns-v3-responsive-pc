@@ -393,11 +393,29 @@ export async function getProfileByUsername(username: string): Promise<ProfileRow
 }
 
 /** プロフィール帳（book）を保存（self-only の profile_book へ） */
+// 画面側（localStorage から組み立てる book）が持っていない、別経路で書かれるキー。
+// プロフ保存で book を丸ごと書き換えるときに、サーバーにある値を引き継いで消さない。
+//   __choices   … 一致率しんだんの答え（saveMyChoices）
+//   __purchases … 購入の二重付与防止の記録（サーバー側の serverCoins）
+const SERVER_KEPT_KEYS = ['__choices', '__purchases'] as const;
+
 export async function saveProfileBook(book: Record<string, any>): Promise<boolean> {
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  return writeMyBook(uid, book);
+  const current = await readMyBook(uid);
+  const merged: Record<string, any> = { ...book };
+  for (const k of SERVER_KEPT_KEYS) {
+    if (merged[k] === undefined && current[k] !== undefined) merged[k] = current[k];
+  }
+  return writeMyBook(uid, merged);
+}
+
+/** ユーザー（'@username'）の「わたしのペン」の生データ（book.__pen）。検証は lib/pen の normalizePen で行う。 */
+export async function getUserPenRaw(userId: string): Promise<unknown> {
+  if (!supabase || !userId) return null;
+  const book = await readVisibleBook(userId);
+  return book?.__pen ?? null;
 }
 
 /**
