@@ -8,15 +8,15 @@
 //   （normalizePen で必ずホワイトリストに丸める＝不正な値が来ても既定に戻る）。
 // ・表示はプロフ帳・お題の回答で共通。日記・ブログ（Unit 4）にも同じ形で使える。
 //
-// フォントはすべて Google Fonts 配信・SIL Open Font License 1.1
-// （商用利用・Web 埋め込み可）。読み込みは layout.tsx の1本の CSS で、
+// フォントはすべて Google Fonts 配信。Kosugi Maru は Apache License 2.0、それ以外は
+// SIL Open Font License 1.1（どちらも商用利用・Web 埋め込み可）。読み込みは layout.tsx の1本の CSS で、
 // 実際のフォントファイルは「その書体で表示した文字」の分だけ取得される。
 // ============================================================
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { getUserPenRaw } from '@/lib/db';
 
-export type PenFontId = 'futsu' | 'maru' | 'tegaki' | 'yurufuwa' | 'pop' | 'retro';
+export type PenFontId = 'futsu' | 'garakei' | 'maru' | 'tegaki' | 'yurufuwa' | 'hime' | 'decome' | 'pop' | 'retro' | 'hoso';
 export type PenInkId = 'navy' | 'pink' | 'purple' | 'blue' | 'green' | 'red' | 'brown' | 'orange';
 export type PenSizeId = 's' | 'm' | 'l';
 export type Pen = { v: 1; font: PenFontId; ink: PenInkId; size: PenSizeId };
@@ -26,18 +26,28 @@ const FALLBACK = '"Hiragino Maru Gothic ProN", "Hiragino Sans", "Noto Sans JP", 
 
 export const PEN_FONTS: {
   id: PenFontId;
+  /** 雰囲気が分かる表示名 */
   label: string;
+  /** ひとことの説明 */
+  desc: string;
+  /** 向いている使い方（長い文章＝本文／タイトルや短いひとこと＝見出し） */
+  use: 'body' | 'title' | 'both';
   family: string;
   weight: number;
   /** 'free' = 最初から使える。将来ショップ/ガチャで手に入る書体はここに商品IDを入れる */
   source: 'free';
 }[] = [
-  { id: 'futsu',    label: 'ふつう',     family: FALLBACK,                                weight: 500, source: 'free' },
-  { id: 'maru',     label: 'まる文字',   family: `"M PLUS Rounded 1c", ${FALLBACK}`,      weight: 700, source: 'free' },
-  { id: 'tegaki',   label: '手書き',     family: `"Klee One", ${FALLBACK}`,               weight: 600, source: 'free' },
-  { id: 'yurufuwa', label: 'ゆるふわ',   family: `"Zen Kurenaido", ${FALLBACK}`,          weight: 400, source: 'free' },
-  { id: 'pop',      label: 'ポップ',     family: `"Yusei Magic", ${FALLBACK}`,            weight: 400, source: 'free' },
-  { id: 'retro',    label: '平成レトロ', family: `"DotGothic16", ${FALLBACK}`,            weight: 400, source: 'free' },
+  // id は保存データに使うので変えない（表示名・説明だけ変える）
+  { id: 'futsu',    label: 'ふつう',     desc: 'いちばん読みやすい標準の字',           use: 'body',  family: FALLBACK,                              weight: 500, source: 'free' },
+  { id: 'garakei',  label: 'ガラケー',   desc: '昔のケータイ画面みたいな丸ゴシック',   use: 'both',  family: `"Kosugi Maru", ${FALLBACK}`,          weight: 400, source: 'free' },
+  { id: 'maru',     label: 'まる文字',   desc: 'ころんと太めの丸い字',                 use: 'title', family: `"M PLUS Rounded 1c", ${FALLBACK}`,    weight: 700, source: 'free' },
+  { id: 'tegaki',   label: '交換ノート', desc: 'ノートに書いたきれいめの手書き',       use: 'both',  family: `"Klee One", ${FALLBACK}`,             weight: 600, source: 'free' },
+  { id: 'yurufuwa', label: 'ゆるふわ',   desc: 'ふんわり細い、やさしい手書き',         use: 'both',  family: `"Zen Kurenaido", ${FALLBACK}`,        weight: 400, source: 'free' },
+  { id: 'hime',     label: '姫かわ',     desc: '女児雑誌みたいなまんまる丸文字',       use: 'title', family: `"Hachi Maru Pop", ${FALLBACK}`,       weight: 400, source: 'free' },
+  { id: 'decome',   label: 'デコメ',     desc: 'ぷっくりポップなデコメの字',           use: 'title', family: `"Mochiy Pop One", ${FALLBACK}`,       weight: 400, source: 'free' },
+  { id: 'pop',      label: 'マジック',   desc: 'マジックペンで書いたような太字',       use: 'title', family: `"Yusei Magic", ${FALLBACK}`,          weight: 400, source: 'free' },
+  { id: 'retro',    label: 'ドット',     desc: 'ゲーム画面みたいなドット文字',         use: 'title', family: `"DotGothic16", ${FALLBACK}`,          weight: 400, source: 'free' },
+  { id: 'hoso',     label: 'ほそ字',     desc: '前略プロフみたいな細めの手書き',       use: 'both',  family: `"Yomogi", ${FALLBACK}`,               weight: 400, source: 'free' },
 ];
 
 // インクの色。紙（白〜クリーム）の上で 4.5:1 以上。夜テーマ用の明るい色は globals.css 側。

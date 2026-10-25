@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: any) { super(props); this.state = { error: null }; }
@@ -893,7 +893,6 @@ function applyTheme(id: AppThemeId) {
 }
 
 const BLOOD_TYPE_OPTIONS = ['A型', 'B型', 'O型', 'AB型', '不明'];
-const MBTI_OPTIONS = ['INTJ','INTP','ENTJ','ENTP','INFJ','INFP','ENFJ','ENFP','ISTJ','ISFJ','ESTJ','ESFJ','ISTP','ISFP','ESTP','ESFP'];
 const SUBJECT_OPTIONS = ['国語','数学','英語','理科','社会','体育','音楽','美術','家庭科','技術','現代文','古文','漢文','化学','物理','生物','地理','歴史','倫理','情報'];
 const PERSONALITY_OPTIONS = ['おっとり系','元気・明るい','クール・落ち着き','ちょっと不思議','真面目','天然','ふわふわ','ツンデレ','好奇心旺盛','マイペース','リーダー気質','聞き上手'];
 // 性格投票の集計は選択肢にある値だけを表示する（DB側の値チェックと合わせた二重の守り）
@@ -2479,7 +2478,7 @@ function ProfileBookContent({
         <div className="relative flex items-start gap-3.5">
           {/* 貼った写真（ポラロイド＋マステ留め） */}
           <div className="relative">
-            <span className="pb-tape pb-tape-sax absolute -top-2 left-1/2 z-10 h-4 w-14 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(-4deg)' }} />
+            <span aria-hidden className="pb-tape pb-tape-sax !absolute -top-2 left-1/2 z-10 h-4 w-14 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(-4deg)' }} />
             <PolaroidPhoto src={avatarUrl} emoji={avatarEmoji} rotate={-3} size={92} />
           </div>
 
@@ -2648,7 +2647,7 @@ function ProfileBookContent({
         if (!hasEpisode && !hasBest3 && !isSelf) return null;
         return (
           <section className="pb-memo space-y-3 rotate-[0.3deg]">
-            <span className="pb-tape absolute -top-2.5 left-1/2 h-4 w-16 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(2deg)' }} aria-hidden />
+            <span className="pb-tape !absolute -top-2.5 left-1/2 h-4 w-16 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(2deg)' }} aria-hidden />
             <p className="pb-label">🗓️ {monthlyBest3.label}のおだい</p>
             {/* 今月のエピソード質問（今月の1問） */}
             {(monthlyBest3.episodeQ || hasEpisode) && (
@@ -3530,6 +3529,32 @@ function ProfileEditScreen({
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  // 立場（ライフステージ）を選ぶ：その立場で使わない専用項目は消し、特技・活動の項目は残す（従来どおり）
+  function selectStage(id: string) {
+    update('attribute', id);
+    setLocalCustomFields((prev) => {
+      const next: Record<string, string> = {};
+      ACTIVITY_DEFS.find((a) => a.id === form.activity)?.fields.forEach((f) => {
+        if (prev[f.key]) next[f.key] = prev[f.key];
+      });
+      return next;
+    });
+  }
+  // 特技・活動を選ぶ（''＝なし）：立場の項目は残し、選んだ活動の項目だけ引き継ぐ（従来どおり）
+  function selectActivity(id: string) {
+    update('activity', id);
+    setLocalCustomFields((prev) => {
+      const next: Record<string, string> = {};
+      LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
+        if (prev[f.key]) next[f.key] = prev[f.key];
+      });
+      ACTIVITY_DEFS.find((a) => a.id === id)?.fields.forEach((f) => {
+        if (prev[f.key]) next[f.key] = prev[f.key];
+      });
+      return next;
+    });
+  }
+
   // 保存（下のボタンと、上のインデックスの「保存」で共通）
   function saveAll() {
     onSave(form);
@@ -3547,7 +3572,7 @@ function ProfileEditScreen({
 
   // インデックス（見出しタブ）：押すとその記入用紙までスクロール
   const INDEX: [string, string][] = [
-    ['pe-photo', '写真'], ['pe-stage', '立場'], ['pe-basic', 'きほん'], ['pe-likes', 'すき・きらい'],
+    ['pe-lang', 'ことば'], ['pe-photo', '写真'], ['pe-stage', '立場'], ['pe-basic', 'きほん'], ['pe-likes', 'すき・きらい'],
     ['pe-about', 'わたしのこと'], ['pe-monthly', '今月'], ['pe-best3', 'BEST3'], ['pe-qa', 'しつもん'],
     ['pe-pen', 'わたしの字'], ['pe-settings', 'せってい'],
   ];
@@ -3561,6 +3586,48 @@ function ProfileEditScreen({
 
         {/* ===== プロフィール完成度メーター（うめるほど楽しく） ===== */}
         <ProfileProgress info={form} />
+
+        {/* ===== ことば / Language（最上位の設定：見出しタブ・メニュー・項目名が切り替わる） ===== */}
+        <section id="pe-lang" className="pb-sheet scroll-mt-32 p-5">
+          <PrintedHeading kicker="LANGUAGE" title="ことば / Language" />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">えらぶと、このページの見出しタブ・下のメニュー・プロフ帳の項目名が切り替わります。</p>
+          {/* いまの言語でどう表示されるかの見本 */}
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border-2 border-dotted border-ink/15 bg-cream/50 px-3 py-2" aria-live="polite" data-noauto>
+            <span className="pb-label mr-0.5">いまの表示</span>
+            {['tab_home', 'tab_search', 'tab_mypage', 'field_nickname', 'field_birthday'].map((k) => (
+              <span key={k} className="rounded bg-white px-1.5 py-0.5 text-[12px] font-black text-ink shadow-[0_1px_2px_rgba(0,0,0,.12)]">{t(k, lang)}</span>
+            ))}
+          </div>
+          {(() => {
+            const MAIN: Lang[] = ['ja', 'en', 'ko', 'zh', 'zh-tw'];
+            const card = (l: (typeof LANG_LIST)[number], big: boolean) => {
+              const on = lang === l.id;
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => onChangeLang(l.id)}
+                  aria-pressed={on}
+                  className={`relative flex items-center gap-1.5 rounded-lg text-left transition ${big ? 'min-h-[48px] px-3' : 'min-h-[44px] px-2'} ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-ink/10 hover:bg-pink/5'}`}
+                >
+                  {/* 選んだ言語にはマステを貼って、チェックのシール */}
+                  {on && <span aria-hidden className="pb-tape !absolute -top-1.5 left-3 h-2.5 w-10 !p-0" style={{ transform: 'rotate(-3deg)' }} />}
+                  <span aria-hidden className={big ? 'text-base' : 'text-[13px]'}>{l.flag}</span>
+                  <span lang={l.id} className={`min-w-0 flex-1 truncate font-black text-ink ${big ? 'text-[14px]' : 'text-[12px]'}`}>{l.name}</span>
+                  {on && <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-pink text-[11px] font-black text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,.8)]">✓</span>}
+                </button>
+              );
+            };
+            return (
+              <>
+                <p className="pb-label mb-1.5">よく使う</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-noauto>{LANG_LIST.filter((l) => MAIN.includes(l.id)).map((l) => card(l, true))}</div>
+                <p className="pb-label mb-1.5 mt-3">そのほかの言語</p>
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5" data-noauto>{LANG_LIST.filter((l) => !MAIN.includes(l.id)).map((l) => card(l, false))}</div>
+              </>
+            );
+          })()}
+        </section>
 
         {/* ===== インデックス（見出しタブ）：記入用紙へ移動＋いつでも保存 ===== */}
         <nav aria-label="編集する項目" className="sticky top-16 z-10 -mx-4 bg-base/95 px-4 py-2 backdrop-blur">
@@ -3639,94 +3706,82 @@ function ProfileEditScreen({
 
         </div>
         <div id="pe-stage" className="scroll-mt-32 space-y-4">
-        {/* ===== ステップ1: 立場（ライフステージ）===== */}
+        {/* ===== 立場：ケータイのメニューのように番号つきの一覧から選ぶ ===== */}
         <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">① 立場を選んでね</p>
-          <p className="mb-4 text-xs font-bold text-muted">どれかひとつ（選ぶと表示項目が変わります）</p>
-          <div className="grid grid-cols-2 gap-2">
-            {LIFE_STAGE_DEFS.map((ls) => (
-              <button
-                key={ls.id}
-                type="button"
-                onClick={() => {
-                  update('attribute', ls.id);
-                  setLocalCustomFields((prev) => {
-                    const next: Record<string, string> = {};
-                    ACTIVITY_DEFS.find((a) => a.id === form.activity)?.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    return next;
-                  });
-                }}
-                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  form.attribute === ls.id
-                    ? 'bg-pink text-white shadow-card'
-                    : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
-                }`}
-              >
-                <span>{ls.emoji}</span>
-                <span className="text-left leading-tight">{ls.label}</span>
-              </button>
-            ))}
+          <PrintedHeading kicker="STATUS" title="いまのわたし" />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">ひとつえらんでね。えらぶと、書く項目が変わるよ</p>
+          <div role="radiogroup" aria-label="立場" className="overflow-hidden rounded-lg border-2 border-ink/10 bg-white">
+            {LIFE_STAGE_DEFS.map((ls, i) => {
+              const on = form.attribute === ls.id;
+              return (
+                <button
+                  key={ls.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => selectStage(ls.id)}
+                  className={`flex min-h-[50px] w-full items-center gap-3 px-3 text-left transition ${i > 0 ? 'border-t-2 border-dotted border-ink/10' : ''} ${on ? 'bg-pink/10' : 'hover:bg-pink/5'}`}
+                >
+                  {/* ケータイのボタン番号 */}
+                  <span aria-hidden className={`gk-font grid h-7 w-7 shrink-0 place-items-center rounded-md text-[13px] ${on ? 'bg-pink text-white' : 'bg-base text-ink ring-1 ring-ink/15'}`}>{i + 1}</span>
+                  <span aria-hidden className="text-lg">{ls.emoji}</span>
+                  <span className={`flex-1 text-[14px] ${on ? 'font-black text-ink' : 'font-bold text-ink/85'}`}>{ls.label}</span>
+                  {on && <span aria-hidden className="pb-stamp h-9 w-9 shrink-0 -rotate-12 text-[9px]">えらん<br />だ</span>}
+                </button>
+              );
+            })}
           </div>
         </section>
 
-        {/* ===== ステップ2: 特技・活動（任意）===== */}
+        {/* ===== 特技・活動：あてはまるシールを1枚はる（なくてもOK） ===== */}
         <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">② 特技・活動（あれば）</p>
-          <p className="mb-4 text-xs font-bold text-muted">ライフステージに関係なく選べます</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                update('activity', '');
-                setLocalCustomFields((prev) => {
-                  const next: Record<string, string> = {};
-                  LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
-                    if (prev[f.key]) next[f.key] = prev[f.key];
-                  });
-                  return next;
-                });
-              }}
-              className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                !form.activity
-                  ? 'bg-purple text-white shadow-card'
-                  : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
-              }`}
-            >
-              <span>✗</span>
-              <span>なし</span>
-            </button>
-            {ACTIVITY_DEFS.map((act) => (
-              <button
-                key={act.id}
-                type="button"
-                onClick={() => {
-                  update('activity', act.id);
-                  setLocalCustomFields((prev) => {
-                    const next: Record<string, string> = {};
-                    LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    act.fields.forEach((f) => {
-                      if (prev[f.key]) next[f.key] = prev[f.key];
-                    });
-                    return next;
-                  });
-                }}
-                className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  form.activity === act.id
-                    ? 'bg-purple text-white shadow-card'
-                    : 'bg-base text-muted hover:bg-purple/10 hover:text-ink'
-                }`}
-              >
-                <span>{act.emoji}</span>
-                <span className="text-left leading-tight">{act.label}</span>
-              </button>
-            ))}
-          </div>
+          <PrintedHeading kicker="MY THING" title="特技・活動" right={<span className="pb-label pb-0.5">あれば</span>} />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">あなたらしいシールを1枚はってね。はると専用の項目がふえるよ</p>
+          {(() => {
+            const GROUPS: { label: string; ids: string[] }[] = [
+              { label: '🏃 スポーツ', ids: ['baseball', 'soccer'] },
+              { label: '🎶 カルチャー', ids: ['musician', 'gamer', 'creator'] },
+            ];
+            const grouped = new Set(GROUPS.flatMap((g) => g.ids));
+            const others = ACTIVITY_DEFS.filter((a) => !grouped.has(a.id)).map((a) => a.id);
+            const groups = others.length ? [...GROUPS, { label: '✨ そのほか', ids: others }] : GROUPS;
+            return (
+              <div className="space-y-2.5">
+                {groups.map((g) => (
+                  <div key={g.label}>
+                    <p className="pb-label mb-1.5">{g.label}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ACTIVITY_DEFS.filter((a) => g.ids.includes(a.id)).map((act) => {
+                        const on = form.activity === act.id;
+                        return (
+                          <button
+                            key={act.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => selectActivity(on ? '' : act.id)}
+                            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-black transition ${on ? '-rotate-2 bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_5px_rgba(0,0,0,.18)]' : 'border-2 border-dashed border-ink/20 bg-white/70 text-ink/80 hover:bg-pink/5'}`}
+                          >
+                            <span aria-hidden className="text-base">{act.emoji}</span>{act.label}{on && <span aria-hidden className="text-pinkStrong">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-end pt-0.5">
+                  <button
+                    type="button"
+                    aria-pressed={!form.activity}
+                    onClick={() => selectActivity('')}
+                    className={`min-h-[40px] px-2 text-[12px] font-bold underline decoration-dotted underline-offset-4 ${!form.activity ? 'text-ink' : 'text-muted'}`}
+                  >
+                    {!form.activity ? '✓ とくになし' : 'とくになし にする'}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </section>
-
         </div>
         {/* ===== 記入用紙：きほんじょうほう／すき・きらい／わたしのこと（項目の順番は従来どおり） ===== */}
         <p className="rounded-xl bg-white/70 px-4 py-2.5 text-[12px] font-bold text-muted">
@@ -3737,9 +3792,9 @@ function ProfileEditScreen({
           <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
           <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
           <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
-          <SelectField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} columns={5} {...vprops('bloodType')} />
-          <SelectField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} columns={2} {...vprops('gender')} />
-          <SelectField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} options={MBTI_OPTIONS} columns={4} {...vprops('mbti')} />
+          <BloodTypeField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} {...vprops('bloodType')} />
+          <CheckListField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} {...vprops('gender')} />
+          <MbtiField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} {...vprops('mbti')} />
           <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
         </section>
         <section id="pe-likes" className="pb-sheet scroll-mt-32 space-y-3 p-5">
@@ -4015,25 +4070,6 @@ function ProfileEditScreen({
             ID・表示名を変更する →
           </button>
           <p className="mt-2 text-[10px] font-bold text-muted">ニックネームは下の「きほんじょうほう」で変更できます。</p>
-        </section>
-
-        {/* ===== 言語設定 ===== */}
-        <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">🌐 言語 / Language</p>
-          <p className="mb-4 text-xs font-bold text-muted">プロフィール項目名とタブが切り替わります（20言語対応）</p>
-          <div className="grid grid-cols-4 gap-2" data-noauto>
-            {LANG_LIST.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                onClick={() => onChangeLang(l.id)}
-                className={`flex flex-col items-center gap-1 rounded-2xl py-2.5 px-1 text-center transition ${lang === l.id ? 'bg-pink/10 ring-2 ring-pink' : 'bg-base hover:bg-pink/5'}`}
-              >
-                <span className="text-xl">{l.flag}</span>
-                <span className={`text-[9px] font-black leading-tight ${lang === l.id ? 'text-pink' : 'text-muted'}`}>{l.name}</span>
-              </button>
-            ))}
-          </div>
         </section>
 
         {/* ===== テーマカラー ===== */}
@@ -5093,20 +5129,22 @@ function OfficialQuestionCreateScreen({
 // 項目ごとの公開範囲チップ。タップで 公開→フォロワー→非公開 を巡回。
 function VisChip({ value = 'public', onChange }: { value?: FieldVisibility; onChange: (v: FieldVisibility) => void }) {
   const order: FieldVisibility[] = ['public', 'followers', 'private'];
-  const meta: Record<FieldVisibility, { t: string; c: string }> = {
-    public: { t: '🌐 公開', c: 'bg-base text-muted' },
-    followers: { t: '👥 フォロワー', c: 'bg-purple/15 text-purple' },
-    private: { t: '🔒 非公開', c: 'bg-red-500/15 text-red-500' },
+  // 見出しの横に貼る小さな「見せる相手」タグ（タップで みんな → フォロワー → ひみつ）
+  const meta: Record<FieldVisibility, { t: string; icon: string; c: string }> = {
+    public: { t: 'みんな', icon: '👀', c: 'border-ink/20 bg-white' },
+    followers: { t: 'フォロワー', icon: '👥', c: 'border-purple/50 bg-purple/15' },
+    private: { t: 'ひみつ', icon: '🔒', c: 'border-[#d9473f]/50 bg-[#d9473f]/15' },
   };
   const m = meta[value] ?? meta.public;
   return (
     <button
       type="button"
       onClick={() => onChange(order[(order.indexOf(value) + 1) % order.length])}
-      title="タップで公開範囲を切替（公開→フォロワー限定→非公開）"
-      className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black transition active:scale-95 ${m.c}`}
+      aria-label={`見せる相手：${m.t}（タップで切り替え）`}
+      title="タップで見せる相手を切り替え（みんな→フォロワー→ひみつ）"
+      className={`inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-md border border-dashed px-2 text-[11px] font-black text-ink transition active:scale-95 ${m.c}`}
     >
-      {m.t}
+      <span aria-hidden>{m.icon}</span>{m.t}
     </button>
   );
 }
@@ -5115,8 +5153,9 @@ function VisChip({ value = 'public', onChange }: { value?: FieldVisibility; onCh
 function FieldLabel({ label, vis, onVis }: { label: string; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
   // 記入用紙の印刷された項目名（入力した文字＝手書きと区別する）
   if (!onVis) return <span className="pb-label pb-label-md">{label}</span>;
+  // 見せる相手タグは項目名のすぐ横に（右端に離さない）
   return (
-    <span className="flex items-center justify-between gap-2">
+    <span className="flex flex-wrap items-center gap-2">
       <span className="pb-label pb-label-md">{label}</span>
       <VisChip value={vis} onChange={onVis} />
     </span>
@@ -5157,8 +5196,8 @@ function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; 
   // 選択肢そのものに「月／日」を含めて自己完結させ、選んだ値がひと目で分かるように。
   // 未選択はグレー、選択後はピンク枠＋濃い文字で区別する（固定ラベルは廃止）。
   const sel = (filled: boolean) =>
-    `mt-1 w-full appearance-none rounded-2xl border bg-cream/20 px-3 py-3 text-sm font-black outline-none focus:border-pink ${
-      filled ? 'border-pink/40 text-ink' : 'border-purple/15 text-muted'
+    `pen-text mt-1 w-full appearance-none rounded-xl border-2 bg-white px-3.5 py-2.5 text-[15px] font-black outline-none focus:border-pink ${
+      filled ? 'border-pink/40 text-ink' : 'border-ink/10 text-muted'
     }`;
   return (
     <div>
@@ -5174,8 +5213,8 @@ function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; 
         </select>
       </div>
       {(month || day) && (
-        <p className="mt-1.5 text-[11px] font-black text-pink">
-          選択中：{month ? `${month}月` : '—'}{day ? `${day}日` : ''}
+        <p className="pb-label mt-1.5">
+          ✎ {month ? `${month}月` : '—'}{day ? `${day}日` : ''} と書きます
         </p>
       )}
     </div>
@@ -5205,7 +5244,6 @@ function SelectField({
   value,
   onChange,
   options,
-  columns = 4,
   vis,
   onVis,
 }: {
@@ -5213,28 +5251,144 @@ function SelectField({
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  /** 互換のため残している（並びはチップの折り返しで決まる） */
   columns?: number;
   vis?: FieldVisibility;
   onVis?: (v: FieldVisibility) => void;
 }) {
+  // 選んだものは「貼ったシール」、まだのものは白い札。もう一度押すと外せる。
   return (
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
-      <div className={`mt-2 grid gap-2`} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
-        {options.map((opt) => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onChange(value === opt ? '' : opt)}
-            className={`rounded-2xl py-2 text-xs font-black transition ${
-              value === opt
-                ? 'bg-pink text-white shadow-card'
-                : 'bg-base text-muted hover:bg-pink/10 hover:text-ink'
-            }`}
-          >
-            {opt}
-          </button>
-        ))}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((opt) => {
+          const on = value === opt;
+          return (
+            <button
+              key={opt}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? '' : opt)}
+              className={`min-h-[40px] rounded-full px-3.5 text-[13px] font-black transition ${
+                on
+                  ? '-rotate-1 bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_5px_rgba(0,0,0,.18)]'
+                  : 'bg-white text-ink/80 ring-1 ring-ink/15 hover:bg-pink/5'
+              }`}
+            >
+              {on && <span aria-hidden className="mr-0.5 text-pinkStrong">✓</span>}{opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// 血液型：プロフ帳の「A・B・O・AB」に手書きの丸をつける
+function BloodTypeField({ label, value, onChange, options, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; options: string[]; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  return (
+    <div>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-1 rounded-lg bg-white px-2 py-1 ring-1 ring-ink/10">
+        {options.map((opt, i) => {
+          const on = value === opt;
+          const short = opt.replace(/型$/, '');
+          return (
+            <span key={opt} className="flex items-center">
+              {i > 0 && <span aria-hidden className="px-0.5 text-muted">{/型$/.test(options[i - 1]) && !/型$/.test(opt) ? '型 ・' : '・'}</span>}
+              <button
+                type="button"
+                aria-pressed={on}
+                aria-label={opt}
+                onClick={() => onChange(on ? '' : opt)}
+                className={`pb-choice min-h-[44px] min-w-[44px] !text-[17px] ${on ? 'pb-choice-on' : '!text-ink/75'}`}
+              >
+                {short}
+              </button>
+            </span>
+          );
+        })}
+        {options.length > 0 && /型$/.test(options[options.length - 1]) && <span aria-hidden className="ml-1 text-[12px] font-black text-muted">型</span>}
+      </div>
+    </div>
+  );
+}
+
+// せいべつ：アンケート用紙のチェック欄（☑）
+function CheckListField({ label, value, onChange, options, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; options: string[]; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  return (
+    <div>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
+      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+        {options.map((opt) => {
+          const on = value === opt;
+          return (
+            <button key={opt} type="button" role="checkbox" aria-checked={on} onClick={() => onChange(on ? '' : opt)}
+              className="flex min-h-[40px] items-center gap-1.5 text-[14px] font-bold text-ink">
+              <span aria-hidden className={`grid h-5 w-5 place-items-center rounded-[4px] border-2 ${on ? 'border-pinkStrong bg-pink/10 text-pinkStrong' : 'border-ink/35 bg-white'}`}>
+                {on && <span className="text-[13px] font-black leading-none">✓</span>}
+              </span>
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// MBTI：16個から探すのではなく、4つの軸を選んでいくと結果が決まる「診断カード」
+const MBTI_AXES: { a: string; b: string; la: string; lb: string }[] = [
+  { a: 'E', b: 'I', la: '外向', lb: '内向' },
+  { a: 'N', b: 'S', la: '直感', lb: '感覚' },
+  { a: 'T', b: 'F', la: '思考', lb: '感情' },
+  { a: 'J', b: 'P', la: '計画', lb: '柔軟' },
+];
+function MbtiField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  const valid = /^[EI][NS][TF][JP]$/.test(value ?? '');
+  const [picks, setPicks] = useState<(string | null)[]>(() => (valid ? value.split('') : [null, null, null, null]));
+  useEffect(() => { if (/^[EI][NS][TF][JP]$/.test(value ?? '')) setPicks(value.split('')); }, [value]);
+  const pick = (i: number, letter: string) => {
+    const next = [...picks];
+    next[i] = next[i] === letter ? null : letter;
+    setPicks(next);
+    // 4つそろったら結果として保存（そろうまでは未入力のまま）
+    onChange(next.every(Boolean) ? next.join('') : '');
+  };
+  const done = picks.every(Boolean);
+  return (
+    <div>
+      <FieldLabel label={label} vis={vis} onVis={onVis} />
+      <div className="mt-1.5 rounded-lg bg-white p-3 ring-1 ring-ink/10">
+        <div className="space-y-1.5">
+          {MBTI_AXES.map((ax, i) => (
+            <div key={ax.a} className="flex items-center gap-1.5" role="radiogroup" aria-label={`${ax.la}か${ax.lb}か`}>
+              {[[ax.a, ax.la], [ax.b, ax.lb]].map(([letter, word], j) => {
+                const on = picks[i] === letter;
+                return (
+                  <Fragment key={letter}>
+                    {j === 1 && <span aria-hidden className="text-[11px] font-black text-muted">or</span>}
+                    <button type="button" role="radio" aria-checked={on} onClick={() => pick(i, letter)}
+                      className={`flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-md text-[13px] font-black transition ${on ? 'bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.15)]' : 'text-ink/75 ring-1 ring-ink/15'}`}>
+                      <span className="gk-font text-[15px]">{letter}</span>{word}
+                    </button>
+                  </Fragment>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="mt-2.5 flex items-center gap-2 border-t-2 border-dotted border-ink/10 pt-2">
+          <span className="pb-label">けっか</span>
+          <span className="inline-flex gap-1" aria-live="polite">
+            {picks.map((c, i) => <span key={i} className="pb-letterbox gk-font">{c ?? '?'}</span>)}
+          </span>
+          {done && <span aria-hidden className="pb-stamp h-9 w-9 -rotate-12 text-[9px]">けって<br />い！</span>}
+          {(done || picks.some(Boolean)) && (
+            <button type="button" onClick={() => { setPicks([null, null, null, null]); onChange(''); }}
+              className="ml-auto min-h-[36px] px-1 text-[11px] font-bold text-muted underline decoration-dotted underline-offset-4">わからない・消す</button>
+          )}
+        </div>
       </div>
     </div>
   );

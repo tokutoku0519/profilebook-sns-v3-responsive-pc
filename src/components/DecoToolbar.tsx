@@ -94,6 +94,7 @@ export function PenFontPicker({ pen, onChange, hint = '書体' }: { pen: Pen; on
   return (
     <>
       <p className="pb-label mb-1.5">{hint}</p>
+      {/* 試し書き見本＋名前＋ひとこと説明＋向いている使い方 */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
         {PEN_FONTS.map((f) => {
           const on = pen.font === f.id;
@@ -103,10 +104,15 @@ export function PenFontPicker({ pen, onChange, hint = '書体' }: { pen: Pen; on
               type="button"
               aria-pressed={on}
               onClick={() => onChange({ ...pen, font: f.id })}
-              className={`min-h-[52px] rounded-lg px-2 py-1.5 text-left transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10 hover:bg-pink/5'}`}
+              className={`relative min-h-[84px] rounded-lg px-2.5 pb-2 pt-1.5 text-left transition ${on ? 'bg-pink/10 ring-2 ring-pink' : 'bg-white ring-1 ring-black/10 hover:bg-pink/5'}`}
             >
-              <span className="block text-[17px] leading-tight text-ink" style={{ fontFamily: f.family, fontWeight: f.weight }}>あいう Aa</span>
-              <span className="mt-0.5 block text-[10px] font-black text-muted">{on ? '✓ ' : ''}{f.label}</span>
+              {on && <span aria-hidden className="pb-stamp absolute -right-1.5 -top-1.5 h-7 w-7 rotate-12 text-[9px]">これ</span>}
+              <span className="block truncate text-[18px] leading-snug text-ink" style={{ fontFamily: f.family, fontWeight: f.weight }}>はじめまして♡</span>
+              <span className="mt-0.5 flex items-center gap-1">
+                <span className="text-[12px] font-black text-ink">{f.label}</span>
+                <span className="rounded bg-cream px-1 text-[9px] font-black text-ink/80">{f.use === 'body' ? '本文向き' : f.use === 'title' ? '見出し向き' : '本文・見出し'}</span>
+              </span>
+              <span className="mt-0.5 block text-[10px] font-bold leading-tight text-muted">{f.desc}</span>
             </button>
           );
         })}
