@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { translateText } from './translator';
 import type { Lang } from './i18n';
+import { findProperNames, onProperNamesChange, properNamesVersion } from './properNames';
 
 // 画面全体を一括で言語対応するためのフック。
 // アプリ内でハードコードされた日本語テキスト（t() を通していないUI文字列）を、
@@ -13,6 +14,8 @@ import type { Lang } from './i18n';
 //  - <input>/<textarea>/contentEditable/script/style、[data-noauto] 配下は除外。
 //  - ユーザーが書いた文章（.prof-hand / .pen-text / [data-user]）は翻訳しない。名前や回答を
 //    機械翻訳すると、ローマ字化（例：「きほん」→ Kihon）や意味の違う文になるため。
+//  - ユーザーの名前（properNames に集めた表示名・ニックネーム）は訳さない。名前だけの文字列はそのまま、
+//    文章の中の名前は目印に置きかえて訳し、元の名前に戻す（とっくん → Gekkun のような誤訳を防ぐ）。
 //  - 翻訳キー化した画面（プロフ帳・プロフィール編集）は data-noauto でまるごと除外している。
 //  - 自分で書き換えた結果（＝翻訳済み・非日本語）は再処理しない（無限ループ回避）。
 //  - MutationObserver で画面遷移後の新規ノードも追従。
@@ -22,12 +25,13 @@ const JA_RE = /[぀-ヿ㐀-鿿ｦ-ﾟ]/;
 // ひらがなだけの短い語は、翻訳APIが訳の代わりにローマ字を返すことがある（きほん→Kihon、すき・きらい→Suki-Kai）。
 // そういう結果は採用せず、元の日本語のまま残す（機械的なローマ字化を翻訳の代わりにしない）。
 const HIRAGANA_ONLY = /^[ぁ-ゖー・、。！？\s]+$/;
-const ROMAJI_LIKE = /^(?:(?:[kgsztdnhbpmyrwfjc]|sh|ch|ts|ky|gy|ny|hy|by|py|my|ry|j)?[aiueo]|n|[-\s'])+$/i;
+// 促音（っ）の重ね子音（tokkun, kitte など）もローマ字として扱う。
+const ROMAJI_LIKE = /^(?:[kgsztdhbpcfjr](?=[kgsztdhbpcfjr]))?(?:(?:(?:[kgsztdnhbpmyrwfjc]|sh|ch|ts|ky|gy|ny|hy|by|py|my|ry|j)?[aiueo]|n|[-\s'])(?:[kgsztdhbpcfjr](?=[kgsztdhbpcfjr]))?)+$/i;
 function looksLikeRomaji(orig: string, tr: string): boolean {
   return HIRAGANA_ONLY.test(orig.trim()) && ROMAJI_LIKE.test(tr.trim().replace(/[!?.,]/g, ''));
 }
 // テキストノード → { orig: 元の日本語, applied: 最後に自分で書き込んだ文字列 }
-const reg = new WeakMap<Text, { orig: string; applied: string }>();
+const reg = new WeakMap<Text, { orig: string; applied: string; names?: number }>();
 
 function isSkippable(node: Text): boolean {
   let el: HTMLElement | null = node.parentElement;
@@ -72,25 +76,45 @@ export function useAutoTranslateUI(lang: Lang) {
 
       if (isSkippable(node)) return;
 
+      // 名前の一覧が増えたあとに、名前を含む訳がすでに書き込まれていたら、元に戻して訳し直す
+      const nv = properNamesVersion();
+      const pre = reg.get(node)!;
+      if (pre.names !== nv) {
+        if (pre.applied && pre.applied !== orig && findProperNames(orig)) { node.nodeValue = orig; reg.set(node, { orig, applied: '', names: nv }); }
+        else reg.set(node, { ...pre, names: nv });
+      }
+
       if (lang === 'ja') {
         if (cur !== orig) { node.nodeValue = orig; reg.set(node, { orig, applied: orig }); }
         return;
       }
 
       const e = reg.get(node)!;
-      // すでに翻訳済み（自分の書き込み）ならスキップ
-      if (cur === e.applied && e.applied !== '' && !JA_RE.test(e.applied)) return;
+      // すでに翻訳済み（自分の書き込み）ならスキップ（名前を戻した訳は日本語を含むので orig との違いで判定）
+      if (cur === e.applied && e.applied !== '' && e.applied !== orig) return;
       if (inflight.has(node)) return;
       if (orig.length > 480) return; // API上限対策
 
+      // 名前だけの文字列は訳さない。文章の中の名前は目印に置きかえて訳す。
+      const names = findProperNames(orig);
+      if (names?.kind === 'only') { if (cur !== orig) node.nodeValue = orig; reg.set(node, { orig, applied: orig, names: e.names }); return; }
+      const source = names?.kind === 'mixed' ? names.masked : orig;
+
       inflight.add(node);
-      translateText(orig, lang).then((tr) => {
+      translateText(source, lang).then((tr) => {
         inflight.delete(node);
         if (disposed || !node.isConnected) return;
         if ((node.nodeValue ?? '') !== orig) return; // 間に内容が変わっていたら中断
-        if (!tr || tr === orig || JA_RE.test(tr) || looksLikeRomaji(orig, tr)) { reg.set(node, { orig, applied: orig }); return; }
-        node.nodeValue = tr;
-        reg.set(node, { orig, applied: tr });
+        const keep = () => reg.set(node, { orig, applied: orig, names: e.names });
+        if (!tr || tr === source || JA_RE.test(tr) || looksLikeRomaji(orig, tr)) { keep(); return; }
+        let out = tr;
+        if (names?.kind === 'mixed') {
+          // 目印がそのまま1回ずつ残っているときだけ採用し、元の名前に戻す（崩れていたら日本語のまま）
+          if (names.tokens.some((tk) => out.split(tk).length !== source.split(tk).length)) { keep(); return; }
+          names.tokens.forEach((tk, i) => { out = out.split(tk).join(names.values[i]); });
+        }
+        node.nodeValue = out;
+        reg.set(node, { orig, applied: out, names: e.names });
       }).catch(() => { inflight.delete(node); });
     }
 
@@ -103,6 +127,8 @@ export function useAutoTranslateUI(lang: Lang) {
     }
 
     walk(document.body);
+    // 名前が増えたら（Supabase から読み込んだ直後など）、画面を見直して名前の誤訳を戻す
+    const offNames = onProperNamesChange(() => { if (!disposed) walk(document.body); });
 
     // 画面遷移・再レンダリングで増えたテキストを追従（マイクロタスクでまとめる）
     let scheduled = false;
@@ -128,6 +154,6 @@ export function useAutoTranslateUI(lang: Lang) {
     });
     obs.observe(document.body, { childList: true, characterData: true, subtree: true });
 
-    return () => { disposed = true; obs.disconnect(); };
+    return () => { disposed = true; obs.disconnect(); offNames(); };
   }, [lang]);
 }

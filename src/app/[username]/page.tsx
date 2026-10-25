@@ -37,6 +37,7 @@ import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
+import { addProperNames } from '@/lib/properNames';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
 import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
@@ -10942,6 +10943,15 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   const [diaryPages, setDiaryPages] = useState<DiaryPage[]>(initialDiaryPages);
+  // 画面にある名前（自分・回答の著者・見ているプロフ帳の相手など）を、自動翻訳しない固有名詞として登録する。
+  // Supabase から読んだ名前は supabase.ts でまとめて登録される。
+  useEffect(() => {
+    addProperNames([
+      me.name, profileBookInfo?.nickname, profileBookInfo?.name, viewedProfile?.name,
+      ...answers.map((a) => a.user?.name),
+      ...followers.map((f) => f.name),
+    ]);
+  });
   const [selectedDiaryId, setSelectedDiaryId] = useState<string>(initialDiaryPages[0]?.id ?? '');
   const [selectedBlogId, setSelectedBlogId] = useState<string>('');
 
