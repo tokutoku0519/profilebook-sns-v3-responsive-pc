@@ -1,3 +1,5 @@
+import { UI_TEXT, VALUE_LABELS } from './i18nUi';
+
 export type Lang =
   | 'ja' | 'en' | 'ko' | 'zh' | 'zh-tw'
   | 'id' | 'th' | 'vi' | 'tl' | 'ms'
@@ -599,6 +601,33 @@ const dict: Record<Lang, Dict> = {
   },
 };
 
+/**
+ * UI の固定文言を取り出す。見つからないときのフォールバック：
+ *   選んだ言語 → 英語（日本語以外の画面に日本語を混ぜない）→ 日本語 → キー名
+ * 文言は dict（従来の辞書）と UI_TEXT（i18nUi.ts：キーごとに20言語）の2か所にある。
+ * ※ ユーザーが書いた文章（名前・回答・自作の質問など）はここを通さない＝翻訳しない。
+ */
 export function t(key: string, lang: Lang = 'ja'): string {
-  return dict[lang]?.[key] ?? dict.ja[key] ?? key;
+  const own = dict[lang]?.[key] ?? UI_TEXT[key]?.[lang];
+  if (own !== undefined) return own;
+  if (lang !== 'ja') {
+    const en = dict.en?.[key] ?? UI_TEXT[key]?.en;
+    if (en !== undefined) return en;
+  }
+  return dict.ja[key] ?? UI_TEXT[key]?.ja ?? key;
+}
+
+/** {name} のような差し込みつきの文言（例：tf('pe_photos_count', lang, { n: 3 })） */
+export function tf(key: string, lang: Lang, vars: Record<string, string | number>): string {
+  return t(key, lang).replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
+}
+
+/**
+ * 日本語のまま保存している「決まった選択肢の値」（教科・立場・性格など）を、表示だけその言語にする。
+ * 保存値は変えない。訳がなければ値をそのまま出す。
+ */
+export function tv(value: string, lang: Lang): string {
+  if (!value || lang === 'ja') return value;
+  const row = VALUE_LABELS[value];
+  return row?.[lang] ?? row?.en ?? value;
 }

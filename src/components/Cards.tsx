@@ -5,6 +5,7 @@ import { RetroText, ReactionGlyph } from '@/components/RetroEmoji';
 // RetroText はレトロコード([♥]等)をピクセルアートに、それ以外はそのまま表示する
 import { getUserTitles, TITLE_DEFS, type TitleType } from '@/lib/titles';
 import { penAttrs, useUserPen } from '@/lib/pen';
+import { t, type Lang } from '@/lib/i18n';
 
 type Question = (typeof questions)[number];
 type Answer = (typeof answers)[number];
@@ -39,7 +40,7 @@ const TITLE_STICKER: Record<TitleType, { bg: string; fg: string }> = {
   pioneer:  { bg: '#FFE0EC', fg: '#8A1C4A' }, // さくら地 × ベリー
 };
 
-export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
+export function TitleBadge({ type, lang = 'ja' }: { type: TitleType; userId?: string; lang?: Lang }) {
   const def = TITLE_DEFS[type];
   const c = TITLE_STICKER[type] ?? TITLE_STICKER.official;
   return (
@@ -47,7 +48,7 @@ export function TitleBadge({ type }: { type: TitleType; userId?: string }) {
       className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black leading-none tracking-wide"
       style={{ background: c.bg, color: c.fg, boxShadow: 'inset 0 0 0 2px rgba(255,255,255,.85), 0 1px 3px rgba(0,0,0,.18)' }}
     >
-      <span aria-hidden>{def.emoji}</span>{def.label}
+      <span aria-hidden>{def.emoji}</span>{lang === 'ja' ? def.label : t(`title_${type}`, lang)}
     </span>
   );
 }

@@ -11,11 +11,21 @@ import type { Lang } from './i18n';
 // 方針：
 //  - 日本語（ひら・カタ・漢字・半角カナ）を含むテキストノードだけを対象。
 //  - <input>/<textarea>/contentEditable/script/style、[data-noauto] 配下は除外。
+//  - ユーザーが書いた文章（.prof-hand / .pen-text / [data-user]）は翻訳しない。名前や回答を
+//    機械翻訳すると、ローマ字化（例：「きほん」→ Kihon）や意味の違う文になるため。
+//  - 翻訳キー化した画面（プロフ帳・プロフィール編集）は data-noauto でまるごと除外している。
 //  - 自分で書き換えた結果（＝翻訳済み・非日本語）は再処理しない（無限ループ回避）。
 //  - MutationObserver で画面遷移後の新規ノードも追従。
 //  - lang==='ja' のときは元の日本語へ戻す。
 
 const JA_RE = /[぀-ヿ㐀-鿿ｦ-ﾟ]/;
+// ひらがなだけの短い語は、翻訳APIが訳の代わりにローマ字を返すことがある（きほん→Kihon、すき・きらい→Suki-Kai）。
+// そういう結果は採用せず、元の日本語のまま残す（機械的なローマ字化を翻訳の代わりにしない）。
+const HIRAGANA_ONLY = /^[ぁ-ゖー・、。！？\s]+$/;
+const ROMAJI_LIKE = /^(?:(?:[kgsztdnhbpmyrwfjc]|sh|ch|ts|ky|gy|ny|hy|by|py|my|ry|j)?[aiueo]|n|[-\s'])+$/i;
+function looksLikeRomaji(orig: string, tr: string): boolean {
+  return HIRAGANA_ONLY.test(orig.trim()) && ROMAJI_LIKE.test(tr.trim().replace(/[!?.,]/g, ''));
+}
 // テキストノード → { orig: 元の日本語, applied: 最後に自分で書き込んだ文字列 }
 const reg = new WeakMap<Text, { orig: string; applied: string }>();
 
@@ -25,7 +35,8 @@ function isSkippable(node: Text): boolean {
     const tag = el.tagName;
     if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'OPTION') return true;
     if (el.isContentEditable) return true;
-    if (el.hasAttribute('data-noauto')) return true;
+    if (el.hasAttribute('data-noauto') || el.hasAttribute('data-user')) return true;
+    if (el.classList.contains('prof-hand') || el.classList.contains('pen-text')) return true;
     el = el.parentElement;
   }
   return false;
@@ -77,7 +88,7 @@ export function useAutoTranslateUI(lang: Lang) {
         inflight.delete(node);
         if (disposed || !node.isConnected) return;
         if ((node.nodeValue ?? '') !== orig) return; // 間に内容が変わっていたら中断
-        if (!tr || tr === orig || JA_RE.test(tr)) { reg.set(node, { orig, applied: orig }); return; }
+        if (!tr || tr === orig || JA_RE.test(tr) || looksLikeRomaji(orig, tr)) { reg.set(node, { orig, applied: orig }); return; }
         node.nodeValue = tr;
         reg.set(node, { orig, applied: tr });
       }).catch(() => { inflight.delete(node); });

@@ -35,7 +35,7 @@ import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
-import { t, LANG_LIST, type Lang } from '@/lib/i18n';
+import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
@@ -367,6 +367,57 @@ const MONTHLY_EPISODE_POOL: string[][] = [
   ],
 ];
 
+// 英語版（日本語以外の画面で表示。ほかの言語は英語にフォールバック）。順番は日本語のプールと同じ。
+const MONTHLY_EVENT_EN = [
+  'New Year, shrine visits, lucky bags, snow', 'Setsubun, Valentine\'s Day, exams, winter sports',
+  'Graduation, spring break, Hinamatsuri, cherry blossoms', 'New school year, new job, flower viewing',
+  'Golden Week, Children\'s Day, Mother\'s Day, fresh green', 'Rainy season, hydrangeas, Father\'s Day',
+  'Tanabata, summer festivals, beach, pool, fireworks', 'Obon, going home, summer festivals, travel',
+  'Sports day, moon viewing, long weekends, typhoons', 'Halloween, school festival, autumn flavors',
+  'Autumn leaves, Shichi-Go-San, hot pot season', 'Christmas, year-end parties, big cleaning, illuminations',
+];
+const MONTHLY_EPISODE_EN: string[][] = [
+  ['Your favorite New Year dish?', 'Toasted or plain mochi in your ozoni?', 'Something you always do at your New Year shrine visit?',
+   'Would you redraw your fortune until you get "great luck"?', 'Which lucky bag would you buy?', 'Do you have a New Year day when you never leave home?',
+   'When it snows: snowman or snowball fight?', 'What did you spend your New Year money on as a kid?'],
+  ['Do you eat exactly as many Setsubun beans as your age?', 'Can you finish a whole ehomaki roll?', 'Dark, milk or white chocolate?',
+   'The Valentine\'s treat that makes you happiest?', 'Have you ever made homemade chocolate?', 'Skiing or snowboarding?',
+   'A snack you always ate while studying for exams?', 'Something you always grab at the convenience store in winter?'],
+  ['Have you ever cried at a graduation ceremony?', 'Do you still look at your yearbook?', 'Do you struggle with what to write in farewell messages?',
+   'Where would you travel during spring break?', 'Cherry blossoms by day or by night?', 'Sakura-flavored sweets: love them or not?',
+   'If you moved, would you replace all your furniture?', 'A school place you didn\'t want to leave behind?'],
+  ['Window seat or hallway seat in class?', 'In a new class, do you talk first or wait?',
+   'Do you remember your entrance ceremony or first day at work?', 'Flower viewing: picnic party or a quiet walk?', 'The first thing you want to buy for a new life?',
+   'Are you the type whose notebook is neat only on the first page?', 'Something you always say when introducing yourself?',
+   'Something you feel like starting every spring?'],
+  ['Golden Week: packed plans or do nothing?', 'Could you survive a 3-hour traffic jam on a trip?', 'Did your family put up carp streamers?',
+   'Kashiwa-mochi or chimaki?', 'Do you give something on Mother\'s Day?', 'One thing you\'d bring to a picnic?',
+   'How do you spend the last night of a long holiday?', 'By May, are you used to your new life?'],
+  ['Plastic umbrella or a proper one?', 'Rainy days: hate going out or kind of love it?', 'Until what age did you wear rain boots?',
+   'Blue, purple or pink hydrangeas?', 'A song you want to hear on rainy days?', 'Does the smell of indoor-dried laundry bother you?',
+   'Do you struggle every year with Father\'s Day gifts?', 'Rainy season at home: movies, games or books?'],
+  ['Do you write a serious wish on your Tanabata paper?', 'The first food stall you visit at a summer festival?', 'Which shaved-ice flavor do you pick?',
+   'Can you put on a yukata by yourself?', 'Beach or pool?', 'Big fireworks or sparklers?',
+   'Summer homework: finish first or last-minute on Aug 31?', 'Can you catch cicadas?'],
+  ['A food you always eat when you go home for summer?', 'Did you like family gatherings during Obon?', 'Do you watch the high-school baseball tournament?',
+   'The festival stall that excites you most?', 'How many hours early would you go to save a spot for fireworks?',
+   'Summer trip: beach, mountains or city?', 'Did you really go to morning radio exercises in summer?', 'Do you like late-night summer walks to the convenience store?'],
+  ['Your favorite event at sports day?', 'Were you ever on the relay team?', 'Do you get surprisingly serious at the ball-toss game?',
+   'What do you want in your sports-day lunch box?', 'Have you eaten dumplings while viewing the moon?', 'Do you eat the moon-viewing burger every year?',
+   'A long weekend: travel or lazing at home?', 'Until which month do you wear summer clothes?', 'Did typhoon days secretly excite you?'],
+  ['What costume would you wear for Halloween?', 'Did you celebrate Halloween as a kid?',
+   'School festival: run a food stand or perform on stage?', 'What would you sell at a school festival stand?',
+   'Chestnuts, sweet potatoes or pumpkin?', 'Sticky or fluffy baked sweet potatoes?',
+   'Your favorite autumn clothing item?', 'Do you notice the smell of osmanthus?'],
+  ['Red or yellow autumn leaves?', 'Do you go out of your way to see autumn leaves?', 'Are your Shichi-Go-San photos displayed at home?',
+   'The first thing you take from a hot pot?', 'Hot pot finish: rice porridge, udon or ramen?', 'Once the kotatsu is out, can you never leave it?',
+   'Do you wear a scarf every year?', 'Your favorite way to spend long autumn nights?'],
+  ['Christmas cake: strawberry shortcake or chocolate?', 'Until what age did you believe in Santa?',
+   'The best Christmas present you ever got?', 'Do you go out of your way to see illuminations?',
+   'Year-end party afterparty: stay or go home?', 'The place that always gets cleaned last in your big cleaning?',
+   'What time do you eat your New Year\'s Eve soba?', 'New Year\'s Eve: TV, YouTube, games or going out?'],
+];
+
 // __monthly.episode は今月出題された1問への回答（文字列）。質問文は monthKey から決定的に選ぶ。
 type MonthlyBest3 = { monthKey: string; items: string[]; episode?: string };
 
@@ -383,12 +434,53 @@ function currentMonthInfo() {
   const d = new Date();
   const monthKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
   const pool = MONTHLY_EPISODE_POOL[d.getMonth()];
+  const episodeIndex = pickMonthlyEpisodeIndex(monthKey, pool.length);
   return {
     monthKey,
+    monthIndex: d.getMonth(),
+    episodeIndex,
     theme: MONTHLY_BEST3_THEMES[d.getMonth()],
     events: MONTHLY_EVENT_LABELS[d.getMonth()],
-    episodeQ: pool[pickMonthlyEpisodeIndex(monthKey, pool.length)],
+    episodeQ: pool[episodeIndex],
     label: `${d.getMonth() + 1}月`,
+  };
+}
+
+/** 保存されている「M月D日」を表示言語の書き方にする（保存形式は変えない） */
+function formatBirthday(value: string, lang: Lang): string {
+  const mo = Number(((value ?? '').match(/(\d{1,2})月/) || [])[1] || 0);
+  const da = Number(((value ?? '').match(/(\d{1,2})日/) || [])[1] || 0);
+  if (!mo && !da) return value ?? '';
+  if (lang === 'ja') return `${mo ? `${mo}月` : ''}${da ? `${da}日` : ''}`;
+  try {
+    if (mo && da) return new Intl.DateTimeFormat(INTL_LOCALE[lang] ?? lang, { month: 'long', day: 'numeric' }).format(new Date(2024, mo - 1, da));
+    if (mo) return monthName(mo - 1, lang);
+  } catch {}
+  return value;
+}
+
+// 言語ごとの月名（例：October / 10月 / 10월）
+const INTL_LOCALE: Partial<Record<Lang, string>> = { 'zh-tw': 'zh-TW', zh: 'zh-CN', tl: 'fil' };
+function monthName(monthIndex: number, lang: Lang): string {
+  if (lang === 'ja') return `${monthIndex + 1}月`;
+  try { return new Intl.DateTimeFormat(INTL_LOCALE[lang] ?? lang, { month: 'long' }).format(new Date(2026, monthIndex, 1)); }
+  catch { return String(monthIndex + 1); }
+}
+
+/**
+ * 今月のおだいを表示言語で返す。テーマ（BEST3）は20言語の翻訳キー、エピソード質問と季節の見出しは
+ * 日本語・英語の訳を持ち、ほかの言語は英語にフォールバックする（機械翻訳はしない）。
+ * 「◯◯ は？」のように日本語の文をつなげて訳すと不自然になるため、質問文は言語ごとの型で組み立てる。
+ */
+function localizedMonthInfo(info: { monthIndex: number; episodeIndex: number; theme: string; events: string; episodeQ: string }, lang: Lang) {
+  const m = info.monthIndex;
+  const theme = lang === 'ja' ? info.theme : t(`mtheme_${m}`, lang);
+  return {
+    title: tf('monthly_title', lang, { month: monthName(m, lang) }),
+    theme,
+    best3Q: tf('monthly_best3_q', lang, { theme }),
+    episodeQ: lang === 'ja' ? info.episodeQ : (MONTHLY_EPISODE_EN[m]?.[info.episodeIndex] ?? info.episodeQ),
+    events: lang === 'ja' ? info.events : (MONTHLY_EVENT_EN[m] ?? ''),
   };
 }
 
@@ -404,6 +496,13 @@ const demoProfileQuestions = [
   { q: '10年後の自分へひとこと？', a: 'あのときのワクワクを忘れないでね' },
   { q: '好きな季節とその理由は？', a: '秋。空気がいちばん好きな匂いがする' },
 ];
+// 公式の質問（最初から入っている10問）は、保存されている日本語の文と翻訳キーを対応させて表示だけ翻訳する。
+// ユーザーが書きかえた質問・自分で足した質問は、書いたままの文を表示する（翻訳しない）。
+const DEFAULT_PQ_KEY: Record<string, string> = Object.fromEntries(demoProfileQuestions.map((x, i) => [x.q, `pq_${i + 1}`]));
+function displayProfileQuestion(q: string, lang: Lang): string {
+  const key = DEFAULT_PQ_KEY[q];
+  return key && lang !== 'ja' ? t(key, lang) : q;
+}
 // 本番はお題（q）はそのまま・回答（a）だけ空にして新規ユーザーに埋めてもらう。
 const defaultProfileQuestions = isDev
   ? demoProfileQuestions
@@ -455,14 +554,14 @@ function profileCompletion(info: typeof defaultProfileBookInfo): { filled: numbe
 }
 
 // 編集画面の上部に出す完成度メーター（バーが伸び、節目のごほうびを予告する）
-function ProfileProgress({ info }: { info: typeof defaultProfileBookInfo }) {
+function ProfileProgress({ info, lang = 'ja' }: { info: typeof defaultProfileBookInfo; lang?: Lang }) {
   const { filled, total, pct } = profileCompletion(info);
   const next = PROFILE_MILESTONES.find((m) => pct < m.pct);
   const fieldsToNext = next ? Math.max(1, Math.ceil((next.pct / 100) * total) - filled) : 0;
   return (
     <section className="rounded-[32px] bg-gradient-to-br from-pink/10 via-white to-purple/10 p-5 shadow-card ring-1 ring-pink/15">
       <div className="mb-2 flex items-end justify-between">
-        <p className="text-base font-black text-ink">📔 プロフィール完成度</p>
+        <p className="text-base font-black text-ink">📔 {t('pe_progress_title', lang)}</p>
         <p className="text-2xl font-black text-pink leading-none">{pct}<span className="text-sm">%</span></p>
       </div>
       {/* バー本体＋節目ピン */}
@@ -489,14 +588,13 @@ function ProfileProgress({ info }: { info: typeof defaultProfileBookInfo }) {
       <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3">
         {next ? (
           <p className="text-xs font-black text-ink">
-            あと<span className="mx-1 text-base text-pink">{fieldsToNext}</span>項目で
-            <span className="mx-1">{next.emoji}</span>{next.pct}%達成！
-            <span className="ml-1 rounded-full bg-pink/15 px-2 py-0.5 text-[11px] text-pink">🎁 +{next.coins}コイン</span>
+            <span className="mr-1">{next.emoji}</span>{tf('pe_progress_next', lang, { n: fieldsToNext, pct: next.pct })}
+            <span className="ml-1 inline-block rounded-full bg-pink/15 px-2 py-0.5 text-[11px] text-pinkStrong">🎁 {tf('pe_progress_coins', lang, { n: next.coins })}</span>
           </p>
         ) : (
-          <p className="text-xs font-black text-pink">🏆 コンプリート！プロフィールマスター達成 🎉</p>
+          <p className="text-xs font-black text-pinkStrong">🏆 {t('pe_progress_complete', lang)}</p>
         )}
-        <p className="mt-1 text-[10px] font-bold text-muted">1項目うめるごとに +{REWARD_PER_FIELD}コイン。節目でボーナスがドカンと届くよ！</p>
+        <p className="mt-1 text-[10px] font-bold text-muted">{tf('pe_progress_rule', lang, { n: REWARD_PER_FIELD })}</p>
       </div>
     </section>
   );
@@ -1312,7 +1410,7 @@ function DesktopShell({ children, active, currentScreen, go, answers, avatarUrl,
   );
 }
 
-function AppHeader({ title = 'Miri', back = false, onBack, onBell, unread = 0 }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void; unread?: number }) {
+function AppHeader({ title = 'Miri', back = false, onBack, onBell, unread = 0, noAuto = false }: { title?: string; back?: boolean; onBack?: () => void; onBell?: () => void; unread?: number; /** 見出しが翻訳キー＋ユーザー名のとき true（自動翻訳でユーザー名をローマ字化させない） */ noAuto?: boolean }) {
   const chromeTheme = useContext(ChromeThemeContext);
   // ガチャ背景を装備中は、その背景グラデーションでヘッダーも色合わせ
   const headerBg = chromeTheme ? `bg-gradient-to-b ${chromeTheme.gradient}` : 'bg-base/90';
@@ -1321,7 +1419,7 @@ function AppHeader({ title = 'Miri', back = false, onBack, onBell, unread = 0 }:
       <button onClick={back ? onBack : undefined} className="grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
         {back ? <ArrowLeft size={20} /> : <img src="/icon.png" alt="Miri" className="h-8 w-8 rounded-xl object-cover" />}
       </button>
-      <h1 className="text-lg font-black tracking-tight">{title}</h1>
+      <h1 className="min-w-0 truncate px-2 text-lg font-black tracking-tight" data-noauto={noAuto || undefined}>{title}</h1>
       <button onClick={onBell} className="relative grid h-10 w-10 place-items-center rounded-full bg-white shadow-card">
         <Bell size={19} />
         {unread > 0 && (
@@ -2395,45 +2493,8 @@ function ProfileBookContent({
   };
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
 
-  const [translatedQA, setTranslatedQA] = useState<Array<{q:string;a:string}> | null>(null);
-  useEffect(() => {
-    if (lang === 'ja') { setTranslatedQA(null); return; }
-    let cancelled = false;
-    (async () => {
-      const pairs: Array<{q:string;a:string}> = [];
-      for (const item of questions) {
-        if (cancelled) break;
-        const q = await translateText(item.q, lang);
-        const a = await translateText(item.a, lang);
-        pairs.push({ q, a });
-      }
-      if (!cancelled) setTranslatedQA(pairs);
-    })();
-    return () => { cancelled = true; };
-  }, [lang, questions]);
-
-  const TRANSLATE_FIELDS = [
-    'favoriteFood','dislikeFood','favoriteColor','favoriteSubject','dislikeSubject',
-    'favoriteCharacter','favoriteMusic','favoriteTv','favoriteArtist','favoriteManga',
-    'favoriteGame','hobby','specialty','personality','catchphrase','charmPoint','dream',
-    'message','hometown','wantToGo','collection','motto','holiday',
-  ] as const;
-  const [translatedInfo, setTranslatedInfo] = useState<Partial<typeof info>>({});
-  useEffect(() => {
-    if (lang === 'ja') { setTranslatedInfo({}); return; }
-    let cancelled = false;
-    (async () => {
-      const result: Partial<typeof info> = {};
-      for (const key of TRANSLATE_FIELDS) {
-        if (cancelled) break;
-        const val = info[key as keyof typeof info] as string;
-        if (val) result[key as keyof typeof info] = await translateText(val, lang) as any;
-      }
-      if (!cancelled) setTranslatedInfo(result);
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang, info.favoriteFood, info.dislikeFood]);
+  // ユーザーが書いた内容（基本情報・回答・自作の質問）は機械翻訳しない＝書いたまま表示する。
+  // 公式の質問（最初から入っている10問）だけ、表示言語の訳に置き換える。
   const lifeStageDef = LIFE_STAGE_DEFS.find((a) => a.id === info.attribute);
   const activityDef  = ACTIVITY_DEFS.find((a) => a.id === info.activity);
 
@@ -2447,6 +2508,8 @@ function ProfileBookContent({
   const deco = ['🎀', '⭐', '🍀'];
   const colorDots = swatchesOf(info.favoriteColor);
   const hideEmptySlots = !isSelf;
+  // 今月のおだいを表示言語で（日本語の文をつなげて機械翻訳しない）
+  const mInfo = monthlyBest3 ? localizedMonthInfo(currentMonthInfo(), lang) : null;
   // コーナー番号（01, 02, …）。表示されるコーナーだけに描画順で振る（他人のプロフ帳で番号が飛ばないように）
   let cornerNo = 0;
   const nextNo = () => String(++cornerNo).padStart(2, '0');
@@ -2454,7 +2517,7 @@ function ProfileBookContent({
   return (
     <HideEmptyProfileContext.Provider value={!isSelf}>
     <ProfThemeContext.Provider value={themeColor}>
-    <div className="relative min-h-full" {...penAttrs(pen)} style={{ ...handFontVars(lang), ...penAttrs(pen).style }}>
+    <div className="relative min-h-full" {...penAttrs(pen)} style={{ ...handFontVars(lang), ...penAttrs(pen).style }} data-noauto>
       {/* ── 背景：テーマありなら世界観、なければ中立の紙地。bare のときは画面側が用意する ── */}
       {!bare && (bgTheme
         ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={bgTheme} subtle /></div>
@@ -2470,7 +2533,7 @@ function ProfileBookContent({
         <div className="mb-3 flex items-end justify-between">
           <div>
             <p className="pb-pop text-[11px] tracking-[.3em] text-muted">MY PROFILE</p>
-            <TapeLabel tone="cream" rotate={-2} className="mt-1 text-lg">わたしのプロフ帳</TapeLabel>
+            <TapeLabel tone="cream" rotate={-2} className="mt-1 text-lg">{t('pb_cover_title', lang)}</TapeLabel>
           </div>
           <Sticker color="rgb(255 122 105 / .9)" rotate={8} size={38} className="text-white" title="PROFILE">✿</Sticker>
         </div>
@@ -2484,7 +2547,7 @@ function ProfileBookContent({
 
           {/* なまえは大きく手書き、ID は小さく印刷、口ぐせは吹き出しで */}
           <div className="min-w-0 flex-1">
-            <p className="pb-label">なまえ</p>
+            <p className="pb-label">{t('field_name', lang)}</p>
             <p className="pb-writeline break-words text-[24px] leading-tight text-ink prof-hand">
               {info.nickname || info.name || userId}
             </p>
@@ -2502,10 +2565,10 @@ function ProfileBookContent({
         </div>
 
         {/* ひとこと（未入力なら非表示）：便せんの1行メモ */}
-        {(translatedInfo.message ?? info.message) && (
+        {(info.message) && (
           <div className="pb-memo mt-4 rotate-[-0.4deg]">
-            <span className="pb-label absolute left-3 top-1.5">ひとこと</span>
-            <p className="pt-2 text-[15px] leading-relaxed text-ink prof-hand">{translatedInfo.message ?? info.message}</p>
+            <span className="pb-label absolute left-3 top-1.5">{t('field_message', lang)}</span>
+            <p className="pt-2 text-[15px] leading-relaxed text-ink prof-hand">{info.message}</p>
           </div>
         )}
         {bgTheme && (
@@ -2535,13 +2598,13 @@ function ProfileBookContent({
           {canShow('birthday') && (isSelf || (info.birthday ?? '').trim()) && (
             <div className="pb-box">
               <p className="pb-label">🎂 {t('field_birthday', lang)}</p>
-              <p className="mt-0.5 min-h-[1.5em] break-words text-[18px] leading-snug text-ink prof-hand">{info.birthday}</p>
+              <p className="mt-0.5 min-h-[1.5em] break-words text-[18px] leading-snug text-ink prof-hand">{formatBirthday(info.birthday, lang)}</p>
             </div>
           )}
           {t('show_bloodType', lang) === 'true' && canShow('bloodType') && (isSelf || (info.bloodType ?? '').trim()) && (
             <div className="pb-box">
               <p className="pb-label">{t('field_bloodType', lang)}</p>
-              <div className="mt-1"><CircleChoice options={['A', 'B', 'O', 'AB']} value={info.bloodType} /></div>
+              <div className="mt-1"><CircleChoice options={['A', 'B', 'O', 'AB']} value={info.bloodType === '不明' ? tv('不明', lang) : info.bloodType} /></div>
             </div>
           )}
           {info.gender && canShow('gender') && (
@@ -2559,7 +2622,7 @@ function ProfileBookContent({
           {canShow('hometown') && (isSelf || (info.hometown ?? '').trim()) && (
             <div className="col-span-2 flex items-end gap-2 sm:col-span-4">
               <p className="pb-label shrink-0 pb-1">📍 {t('field_hometown', lang)}</p>
-              <p className="pb-writeline min-w-0 flex-1 text-[17px] leading-snug text-ink prof-hand">{translatedInfo.hometown ?? info.hometown}</p>
+              <p className="pb-writeline min-w-0 flex-1 text-[17px] leading-snug text-ink prof-hand">{info.hometown}</p>
             </div>
           )}
         </div>
@@ -2572,10 +2635,10 @@ function ProfileBookContent({
         <PrintedHeading no={nextNo()} kicker="LIKE & DISLIKE" title={t('sec_likes', lang)} />
         {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
         <div className="grid grid-cols-2 gap-3">
-          {canShow('favoriteFood') && <FavBubble shape="heart" mark="♥" label={t('field_favoriteFood', lang)} value={translatedInfo.favoriteFood ?? info.favoriteFood} />}
-          {canShow('dislikeFood') && <FavBubble shape="cross" mark="✕" label={t('field_dislikeFood', lang)} value={translatedInfo.dislikeFood ?? info.dislikeFood} />}
+          {canShow('favoriteFood') && <FavBubble shape="heart" mark="♥" label={t('field_favoriteFood', lang)} value={info.favoriteFood} />}
+          {canShow('dislikeFood') && <FavBubble shape="cross" mark="✕" label={t('field_dislikeFood', lang)} value={info.dislikeFood} />}
           {canShow('favoriteColor') && (
-            <FavBubble shape="color" mark="🎨" label={t('field_favoriteColor', lang)} value={translatedInfo.favoriteColor ?? info.favoriteColor}>
+            <FavBubble shape="color" mark="🎨" label={t('field_favoriteColor', lang)} value={info.favoriteColor}>
               {colorDots.length > 0 && (
                 <span aria-hidden className="mt-1.5 flex justify-center gap-1.5">
                   {colorDots.map((c) => <span key={c} className="pb-swatch" style={{ background: c }} />)}
@@ -2583,13 +2646,13 @@ function ProfileBookContent({
               )}
             </FavBubble>
           )}
-          {canShow('favoriteCharacter') && <FavBubble shape="star" mark="★" label={t('field_favoriteCharacter', lang)} value={translatedInfo.favoriteCharacter ?? info.favoriteCharacter} />}
+          {canShow('favoriteCharacter') && <FavBubble shape="star" mark="★" label={t('field_favoriteCharacter', lang)} value={info.favoriteCharacter} />}
         </div>
         {/* 教科は時間割のマスで（すき／にがて） */}
         {(lifeStageDef?.showSubjectFields ?? true) && (
           <div className="mt-3 grid grid-cols-2 gap-3">
-            {canShow('favoriteSubject') && <SubjectCell label={`◎ ${t('field_favoriteSubject', lang)}`} value={translatedInfo.favoriteSubject ?? info.favoriteSubject} />}
-            {canShow('dislikeSubject') && <SubjectCell label={`△ ${t('field_dislikeSubject', lang)}`} value={translatedInfo.dislikeSubject ?? info.dislikeSubject} />}
+            {canShow('favoriteSubject') && <SubjectCell label={`◎ ${t('field_favoriteSubject', lang)}`} value={tv(info.favoriteSubject, lang)} />}
+            {canShow('dislikeSubject') && <SubjectCell label={`△ ${t('field_dislikeSubject', lang)}`} value={tv(info.dislikeSubject, lang)} />}
           </div>
         )}
       </PaperSheet>
@@ -2600,13 +2663,13 @@ function ProfileBookContent({
       <PaperSheet className="px-4 pb-4 pt-4">
         <PrintedHeading no={nextNo()} kicker="ABOUT ME" title={t('sec_about', lang)} />
         <div className="space-y-1">
-        {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={translatedInfo.specialty ?? info.specialty} />}
-        {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={translatedInfo.holiday ?? info.holiday} />}
-        {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={translatedInfo.wantToGo ?? info.wantToGo} />}
-        {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={translatedInfo.collection ?? info.collection} />}
-        {canShow('motto') && <MemoLine label={t('field_motto', lang)} value={translatedInfo.motto ?? info.motto} quote />}
-        {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={translatedInfo.charmPoint ?? info.charmPoint} />}
-        {canShow('dream') && <MemoLine label={t('field_dream', lang)} value={translatedInfo.dream ?? info.dream} tone="sax" />}
+        {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={info.specialty} />}
+        {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={info.holiday} />}
+        {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={info.wantToGo} />}
+        {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={info.collection} />}
+        {canShow('motto') && <MemoLine label={t('field_motto', lang)} value={info.motto} quote />}
+        {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={info.charmPoint} />}
+        {canShow('dream') && <MemoLine label={t('field_dream', lang)} value={info.dream} tone="sax" />}
         </div>
       </PaperSheet>
       )}
@@ -2614,11 +2677,11 @@ function ProfileBookContent({
       {/* ── ライフステージ専用セクション ── */}
       {lifeStageDef && lifeStageDef.fields.some((f) => customFields[f.key]) && (
         <PaperSheet variant="ruled" className="px-4 pb-4 pt-4">
-          <ProfSectionHeader icon={lifeStageDef.emoji} title={lifeStageDef.sectionTitle} theme={themeColor} />
+          <ProfSectionHeader icon={lifeStageDef.emoji} title={tv(lifeStageDef.sectionTitle, lang)} theme={themeColor} />
           <div className="space-y-1">
           {lifeStageDef.fields.map((f) =>
             customFields[f.key] ? (
-              <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
+              <ProfileLine key={f.key} label={tv(f.label, lang)} value={customFields[f.key]} />
             ) : null
           )}
           </div>
@@ -2628,11 +2691,11 @@ function ProfileBookContent({
       {/* ── 特技・活動セクション ── */}
       {activityDef && activityDef.fields.some((f) => customFields[f.key]) && (
         <PaperSheet variant="ruled" className="px-4 pb-4 pt-4">
-          <ProfSectionHeader icon={activityDef.emoji} title={activityDef.sectionTitle} theme={themeColor} />
+          <ProfSectionHeader icon={activityDef.emoji} title={tv(activityDef.sectionTitle, lang)} theme={themeColor} />
           <div className="space-y-1">
           {activityDef.fields.map((f) =>
             customFields[f.key] ? (
-              <ProfileLine key={f.key} label={f.label} value={customFields[f.key]} />
+              <ProfileLine key={f.key} label={tv(f.label, lang)} value={customFields[f.key]} />
             ) : null
           )}
           </div>
@@ -2648,25 +2711,25 @@ function ProfileBookContent({
         return (
           <section className="pb-memo space-y-3 rotate-[0.3deg]">
             <span className="pb-tape !absolute -top-2.5 left-1/2 h-4 w-16 -translate-x-1/2" style={{ transform: 'translateX(-50%) rotate(2deg)' }} aria-hidden />
-            <p className="pb-label">🗓️ {monthlyBest3.label}のおだい</p>
+            <p className="pb-label">🗓️ {mInfo ? mInfo.title : monthlyBest3.label}</p>
             {/* 今月のエピソード質問（今月の1問） */}
             {(monthlyBest3.episodeQ || hasEpisode) && (
               <div>
-                {monthlyBest3.episodeQ && <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{monthlyBest3.episodeQ}</p>}
+                {monthlyBest3.episodeQ && <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo ? mInfo.episodeQ : monthlyBest3.episodeQ}</p>}
                 {hasEpisode ? (
                   <p className="mt-1 whitespace-pre-wrap text-[16px] leading-relaxed text-ink prof-hand">{monthlyBest3.episode}</p>
                 ) : isSelf ? (
-                  <p className="mt-1 text-xs font-bold text-muted">まだ書かれていません。✏️ 編集から今月の質問に答えられます。</p>
+                  <p className="mt-1 text-xs font-bold text-muted">{t('pb_monthly_ep_empty', lang)}</p>
                 ) : null}
               </div>
             )}
             {/* 今月のBEST3 */}
             <div>
-              <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{monthlyBest3.theme} は？</p>
+              <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo ? mInfo.best3Q : `${monthlyBest3.theme} は？`}</p>
               {hasBest3 ? (
                 <Best3Lines items={monthlyBest3.items} hideEmpty={hideEmptySlots} />
               ) : isSelf ? (
-                <p className="mt-1 text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から今月のBEST3を書けます。</p>
+                <p className="mt-1 text-xs font-bold text-muted">{t('pb_monthly_b3_empty', lang)}</p>
               ) : null}
             </div>
           </section>
@@ -2676,17 +2739,17 @@ function ProfileBookContent({
       {/* ── すきなもの BEST3：ランキングではなく ①②③ の記入欄 ── */}
       {(isSelf || BEST3_CATEGORIES.some((c) => (best3[c.key] ?? []).some((v) => v.trim()))) && (
         <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
-          <PrintedHeading no={nextNo()} kicker="MY BEST 3" title="すきなもの BEST3" />
+          <PrintedHeading no={nextNo()} kicker="MY BEST 3" title={t('best3_title', lang)} />
           {(() => {
             const filled = BEST3_CATEGORIES.filter((c) => (best3[c.key] ?? []).some((v) => v.trim()));
             if (filled.length === 0) {
-              return <p className="text-xs font-bold text-muted">まだ入力されていません。✏️ 編集から好きなものを追加できます。</p>;
+              return <p className="text-xs font-bold text-muted">{t('pb_best3_empty', lang)}</p>;
             }
             return (
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 {filled.map((cat) => (
                   <div key={cat.key}>
-                    <p className="pb-label">{cat.emoji} すきな{cat.label}</p>
+                    <p className="pb-label">{cat.emoji} {t(`best3_${cat.key}`, lang)}</p>
                     <Best3Lines items={best3[cat.key] ?? []} hideEmpty={hideEmptySlots} />
                   </div>
                 ))}
@@ -2698,16 +2761,13 @@ function ProfileBookContent({
 
       {/* ── しつもんコーナー：Q は印刷、A は手書き（他人のプロフ帳では未回答の質問は隠す） ── */}
       {(() => {
-        const qaSource = translatedQA ?? questions;
+        const qaSource = questions.map((item) => ({ q: displayProfileQuestion(item.q, lang), a: item.a }));
         // 他人が見るときは回答済み（a が空でない）だけを表示。自分は入力促進のため全部表示。
         const visibleQA = isSelf ? qaSource : qaSource.filter((item) => (item.a ?? '').trim());
         if (visibleQA.length === 0) return null; // 全部未回答なら section ごと非表示
         return (
           <PaperSheet className="px-4 pb-3 pt-4">
             <PrintedHeading no={nextNo()} kicker="QUESTION CORNER" title={t('sec_qa', lang)} />
-            {translatedQA === null && lang !== 'ja' && (
-              <p className="text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
-            )}
             <div className="grid sm:grid-cols-2 sm:gap-x-5">
               {visibleQA.map((item, i) => (
                 <div key={i} className="pb-q">
@@ -2767,7 +2827,7 @@ function ProfileBookContent({
 
 // 他己紹介アンケート：相手の性格を「みんなで投票」して教えてあげるカード。
 // 集計はその場で表示し、自分の票は付け替え・取り消しできる。
-function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targetName: string }) {
+function PerceptionVoteCard({ targetUid, targetName, lang = 'ja' }: { targetUid: string; targetName: string; lang?: Lang }) {
   const [summary, setSummary] = useState<PerceptionSummary>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
@@ -2779,11 +2839,11 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
   useEffect(() => { if (dbReady() && targetUid) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [targetUid]);
   if (!dbReady() || !targetUid) return null;
   const VOTE_FAIL_MESSAGE: Record<string, string> = {
-    not_logged_in: 'ログインすると投票できます',
-    self: '自分には投票できません',
-    not_configured: 'いまは投票できません（接続設定がありません）',
-    not_ready: '投票の準備ができていません。運営にお知らせください',
-    error: '投票できませんでした。時間をおいてもう一度ためしてね',
+    not_logged_in: t('vote_err_login', lang),
+    self: t('vote_err_self', lang),
+    not_configured: t('vote_err_config', lang),
+    not_ready: t('vote_err_ready', lang),
+    error: t('vote_err_generic', lang),
   };
   const vote = async (v: string) => {
     if (busy) return;
@@ -2812,17 +2872,17 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
     <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
       <PrintedHeading
         kicker="FROM FRIENDS"
-        title={`友達から見た ${targetName}さん`}
-        right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>}
+        title={tf('vote_title', lang, { name: targetName })}
+        right={<StickerBadge tone="sax" rotate={3}>{tf('count_people', lang, { n: total })}</StickerBadge>}
       />
-      <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{targetName}さんって、どんな人？ あてはまるものを1つえらんで教えてね（もう一度押すと取り消し）</p>
+      <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{tf('vote_desc', lang, { name: targetName })}</p>
       <div className="flex flex-wrap gap-1.5">
         {PERSONALITY_OPTIONS.map((opt) => {
           const c = summary.find((s) => s.value === opt)?.count ?? 0;
           const mine = myVote === opt;
           return (
-            <CapsulePill key={opt} active={mine} disabled={busy} onClick={() => vote(opt)} title={mine ? 'タップで取り消し' : 'タップで投票'}>
-              {mine && <span aria-hidden>✓</span>}{opt}{c > 0 ? <span className={mine ? 'text-white/90' : 'text-pink'}>{c}</span> : null}
+            <CapsulePill key={opt} active={mine} disabled={busy} onClick={() => vote(opt)} title={mine ? t('vote_tap_cancel', lang) : t('vote_tap_vote', lang)}>
+              {mine && <span aria-hidden>✓</span>}{tv(opt, lang)}{c > 0 ? <span className={mine ? 'text-white/90' : 'text-pink'}>{c}</span> : null}
             </CapsulePill>
           );
         })}
@@ -2831,14 +2891,14 @@ function PerceptionVoteCard({ targetUid, targetName }: { targetUid: string; targ
         <p role="status" className="mt-2 rounded-lg bg-cream px-3 py-1.5 text-[12px] font-black text-ink">⚠️ {notice}</p>
       )}
       {summary[0] && summary[0].count > 0 && (
-        <p className="mt-3 text-[13px] text-ink prof-hand">🏆 いちばん多いのは「{summary[0].value}」（{summary[0].count}票）</p>
+        <p className="mt-3 text-[13px] text-ink prof-hand">🏆 {tf('vote_top', lang, { v: tv(summary[0].value, lang), n: summary[0].count })}</p>
       )}
     </PaperSheet>
   );
 }
 
 // 自分のプロフィールで「みんなが選ぶわたしの性格」を表示するカード。
-function MyPerceptionCard() {
+function MyPerceptionCard({ lang = 'ja' }: { lang?: Lang }) {
   const [summary, setSummary] = useState<PerceptionSummary>([]);
   const [total, setTotal] = useState(0);
   useEffect(() => {
@@ -2854,12 +2914,12 @@ function MyPerceptionCard() {
   return (
     <div className="px-4 pt-3">
       <PaperSheet variant="grid" className="px-4 pb-4 pt-4">
-        <PrintedHeading kicker="FROM FRIENDS" title="友達から見たわたし" right={<StickerBadge tone="sax" rotate={3}>{total}人</StickerBadge>} />
-        <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">友だちが「どんな人？」で選んでくれたシールです</p>
+        <PrintedHeading kicker="FROM FRIENDS" title={t('vote_my_title', lang)} right={<StickerBadge tone="sax" rotate={3}>{tf('count_people', lang, { n: total })}</StickerBadge>} />
+        <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{t('vote_my_desc', lang)}</p>
         <ul className="flex flex-wrap gap-1.5">
           {summary.slice(0, 5).map((s, i) => (
             <li key={s.value}>
-              <CapsulePill active={i === 0}>{i === 0 ? '🏆 ' : ''}{s.value}<span className={i === 0 ? 'text-white' : 'text-ink'}>×{s.count}</span></CapsulePill>
+              <CapsulePill active={i === 0}>{i === 0 ? '🏆 ' : ''}{tv(s.value, lang)}<span className={i === 0 ? 'text-white' : 'text-ink'}>×{s.count}</span></CapsulePill>
             </li>
           ))}
         </ul>
@@ -2958,10 +3018,10 @@ function OtherProfileScreen({
     }
   }
   const friendBtn = {
-    none:        { label: '📖 なかよし申請', cls: 'bg-purple text-white' },
-    pending_out: { label: '⏳ 申請中', cls: 'bg-base text-purple ring-2 ring-purple/40' },
-    pending_in:  { label: '✅ 承認する', cls: 'bg-purple text-white' },
-    friends:     { label: '📖 なかよし（交換ずみ）', cls: 'bg-base text-purple ring-2 ring-purple/40' },
+    none:        { label: `📖 ${t('fr_request', lang)}`, cls: 'bg-purple text-white' },
+    pending_out: { label: `⏳ ${t('fr_pending', lang)}`, cls: 'bg-base text-purple ring-2 ring-purple/40' },
+    pending_in:  { label: `✅ ${t('fr_accept', lang)}`, cls: 'bg-purple text-white' },
+    friends:     { label: `📖 ${t('fr_friends', lang)}`, cls: 'bg-base text-purple ring-2 ring-purple/40' },
   }[friendStatus];
   const isFriend = friendStatus === 'friends';
 
@@ -3024,25 +3084,25 @@ function OtherProfileScreen({
   // 仲良し度は双方向で同じになるよう、対称な関係だけで算出する
   // （相互フォロー／なかよし／いっしょに日記／おなじサークル／プロフ帳の共通点）。
   const friendActions: { label: string; done: boolean }[] = [
-    { label: '🎀 相互フォロー', done: mutualFollow },
-    { label: '📖 プロフ帳を交換（なかよし）', done: isFriend },
-    { label: '📔 いっしょに日記を書いた', done: wroteDiaryTogether },
-    { label: '🔒 おなじサークル', done: inSameCircle },
+    { label: `🎀 ${t('fl_mutual', lang)}`, done: mutualFollow },
+    { label: `📖 ${t('fl_exchanged', lang)}`, done: isFriend },
+    { label: `📔 ${t('fl_diary', lang)}`, done: wroteDiaryTogether },
+    { label: `🔒 ${t('fl_circle', lang)}`, done: inSameCircle },
   ];
   const friendLevel = Math.min(5, commonPoints.length + friendActions.filter((a) => a.done).length);
-  const FRIEND_LEVEL_LABELS = ['はじめまして', 'かおみしり', 'ともだち', 'なかよし', 'だいのなかよし', 'しんゆう'];
+  const FRIEND_LEVEL_LABELS = [0, 1, 2, 3, 4, 5].map((n) => t(`fl_level_${n}`, lang));
 
   return (
     <>
-      <AppHeader title={`${profile.name}のプロフ帳`} back onBack={() => go('home')} onBell={() => go('notifications')} />
-      {/* 画面全体を1つの背景に統一（上のなかよし度〜下のプロフ帳まで同じトンマナ） */}
-      <div className="relative min-h-full">
+      <AppHeader noAuto title={tf('pb_header_other', lang, { name: profile.name })} back onBack={() => go('home')} onBell={() => go('notifications')} />
+      {/* 画面全体を1つの背景に統一（上のなかよし度〜下のプロフ帳まで同じトンマナ）。文言は翻訳キー、名前や回答は原文のまま（自動翻訳しない） */}
+      <div className="relative min-h-full" data-noauto>
       <div className="pointer-events-none absolute inset-0 prof-paper" />
       <div className="relative z-10">
       {/* プロフ帳こうかんカード（フォロー／なかよし）。交換ずみはハンコと交換記録で見せる */}
       <div className="px-4 pt-2">
         <PaperSheet variant="plain" className="px-3 pb-3 pt-2.5">
-          <p className="pb-label">📖 プロフ帳こうかん</p>
+          <p className="pb-label">📖 {t('fr_card_title', lang)}</p>
           <div className="mt-2 flex min-w-0 gap-2">
             <button
               onClick={toggleFollow}
@@ -3051,7 +3111,7 @@ function OtherProfileScreen({
                 isFollowing ? 'bg-base text-pink ring-2 ring-pink' : 'bg-pink text-white'
               }`}
             >
-              {isFollowing ? '🎀 フォロー中' : '🎀 フォロー'}
+              {isFollowing ? `🎀 ${t('btn_following', lang)}` : `🎀 ${t('btn_follow_short', lang)}`}
             </button>
             <button
               onClick={onFriendAction}
@@ -3063,12 +3123,12 @@ function OtherProfileScreen({
           {friendStatus !== 'none' && (
             <div className="mt-2 flex items-center gap-2 border-t-2 border-dotted border-ink/15 pt-1.5">
               <p role="status" className="min-w-0 flex-1 text-[13px] text-ink prof-hand">
-                {friendStatus === 'friends' && `✎ ${profile.name}さんとプロフ帳を交換しました`}
-                {friendStatus === 'pending_out' && `✎ 交換の申請を送りました（${profile.name}さんの承認待ち）`}
-                {friendStatus === 'pending_in' && `✎ ${profile.name}さんから交換の申請がきています`}
+                {friendStatus === 'friends' && `✎ ${tf('fr_log_friends', lang, { name: profile.name })}`}
+                {friendStatus === 'pending_out' && `✎ ${tf('fr_log_out', lang, { name: profile.name })}`}
+                {friendStatus === 'pending_in' && `✎ ${tf('fr_log_in', lang, { name: profile.name })}`}
               </p>
               {/* 交換記録のハンコ（装飾） */}
-              {isFriend && <span aria-hidden className="pb-stamp h-11 w-11 shrink-0 rotate-[-12deg] text-[10px]">交換<br />ずみ</span>}
+              {isFriend && <span aria-hidden className="pb-stamp h-11 w-11 shrink-0 rotate-[-12deg] px-0.5 text-[9px] leading-tight">{t('fr_stamp', lang)}</span>}
             </div>
           )}
         </PaperSheet>
@@ -3077,24 +3137,24 @@ function OtherProfileScreen({
       {/* 相性チェック（昔のプロフ帳の相性占いコーナー風）→ 一致率しんだんへ */}
       <div className="px-4 pt-3">
         <PaperSheet variant="plain" className="border-2 border-dashed border-pink/30 px-4 pb-4 pt-4">
-          <PrintedHeading kicker="MATCH CHECK" title="相性チェック" right={<span aria-hidden className="text-xl">💘</span>} />
+          <PrintedHeading kicker="MATCH CHECK" title={t('mc_title', lang)} right={<span aria-hidden className="text-xl">💘</span>} />
           <div className="flex items-end justify-center gap-3">
             <div className="min-w-0 flex-1 text-center">
-              <p className="pb-label">わたし</p>
-              <p className="pb-writeline truncate text-[17px] text-ink prof-hand">{myProfile?.nickname || myProfile?.name || 'わたし'}</p>
+              <p className="pb-label">{t('mc_me', lang)}</p>
+              <p className="pb-writeline truncate text-[17px] text-ink prof-hand">{myProfile?.nickname || myProfile?.name || t('mc_me', lang)}</p>
             </div>
             <span aria-hidden className="pb-1 text-2xl text-pink">♡</span>
             <div className="min-w-0 flex-1 text-center">
-              <p className="pb-label">あいて</p>
+              <p className="pb-label">{t('mc_them', lang)}</p>
               <p className="pb-writeline truncate text-[17px] text-ink prof-hand">{profile.name}</p>
             </div>
           </div>
-          <p className="mt-2.5 text-center text-[12px] font-bold text-muted">二択の答えがどれだけ同じか、一致率でわかるよ</p>
+          <p className="mt-2.5 text-center text-[12px] font-bold text-muted">{t('mc_desc', lang)}</p>
           <button
             onClick={() => go('diagnosis', profile.id)}
             className="relative mt-2.5 min-h-[48px] w-full overflow-hidden rounded-xl pb-banner border-2 border-dashed border-white/70 py-3 text-sm font-black shadow-[0_2px_0_rgba(0,0,0,.15)] active:translate-y-px active:shadow-none"
           >
-            💯 {profile.name}との一致率しんだん
+            💯 {tf('mc_btn', lang, { name: profile.name })}
           </button>
         </PaperSheet>
       </div>
@@ -3102,7 +3162,7 @@ function OtherProfileScreen({
       {/* 他己紹介アンケート（性格をみんなで投票） */}
       {targetUid && (
         <div className="px-4 pt-3">
-          <PerceptionVoteCard targetUid={targetUid} targetName={profile.name} />
+          <PerceptionVoteCard targetUid={targetUid} targetName={profile.name} lang={lang} />
         </div>
       )}
 
@@ -3111,19 +3171,19 @@ function OtherProfileScreen({
         <PaperSheet variant="plain" className="px-4 pb-4 pt-4">
           <PrintedHeading
             kicker="FRIENDSHIP"
-            title="なかよし度"
+            title={t('fl_title', lang)}
             right={<StickerBadge tone="coral" rotate={4}>{FRIEND_LEVEL_LABELS[friendLevel]}</StickerBadge>}
           />
           {/* シール台紙：なかよしになるたびハートのシールが1枚ずつ貼られていく */}
           <div className="rounded-xl border-2 border-dashed border-ink/15 bg-cream/60 px-3 py-2.5">
-            <p className="pb-label mb-1.5">なかよしシール台紙</p>
+            <p className="pb-label mb-1.5">{t('fl_sheet', lang)}</p>
             <HeartMeter level={friendLevel} />
           </div>
           {/* なかよしアクションの内訳 */}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {commonPoints.map((c) => (
               <span key={c.label} className="inline-flex items-center gap-1 rounded-full bg-cream px-3 py-1.5 text-[11px] font-black text-ink shadow-[0_2px_4px_rgba(0,0,0,.12)]">
-                ✨ {c.label}が一緒：{c.value}
+                ✨ {tf('fl_common', lang, { label: tv(c.label, lang), v: tv(c.value, lang) })}
               </span>
             ))}
             {friendActions.map((a) => (
@@ -3135,7 +3195,7 @@ function OtherProfileScreen({
           </div>
           {friendLevel < 5 && (
             <p className="mt-3 text-[12px] font-bold text-muted">
-              プロフ帳を交換したり、いっしょに日記を書いたりするとシールがふえるよ 🌱
+              {t('fl_hint', lang)} 🌱
             </p>
           )}
         </PaperSheet>
@@ -3149,15 +3209,15 @@ function OtherProfileScreen({
         return (
           <div className="space-y-2 px-4 pt-3">
             <div className="flex flex-wrap gap-2">
-              {titles.map((t) => <TitleBadge key={t} type={t} userId={profile.id} />)}
+              {titles.map((tt) => <TitleBadge key={tt} type={tt} userId={profile.id} lang={lang} />)}
             </div>
             {hasFounder && (
               <PaperSheet variant="plain" className="border-2 border-double border-amber-500/60 px-4 pb-3.5 pt-3">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-xs font-black tracking-widest text-ink">🏅 激レア</span>
+                  <span className="text-xs font-black tracking-widest text-ink">🏅 {t('title_ultra_rare', lang)}</span>
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-900">ULTRA RARE</span>
                 </div>
-                <p className="text-xs font-bold leading-5 text-ink">{TITLE_DEFS.founder.description}</p>
+                <p className="text-xs font-bold leading-5 text-ink">{lang === 'ja' ? TITLE_DEFS.founder.description : t('title_founder_desc', lang)}</p>
               </PaperSheet>
             )}
           </div>
@@ -3185,12 +3245,12 @@ function OtherProfileScreen({
       {userBlogs.length > 0 && (
         <div className="px-4 pb-4">
           <section className="pb-sheet px-4 pb-4 pt-4">
-            <ProfSectionHeader icon="📔" title="ブログ" theme={themeColor} />
+            <ProfSectionHeader icon="📔" title={t('pb_blog', lang)} theme={themeColor} />
             <div className="space-y-2">
               {userBlogs.slice(0, 5).map((p) => (
                 <button key={p.id} onClick={() => onOpenBlog?.(p)}
                   className="block w-full rounded-2xl bg-base p-3 text-left transition active:scale-[0.99]">
-                  <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</span></p>
+                  <p className="text-sm">{p.weather}{p.mood} <span className="font-black text-ink" style={{ color: p.textColor || undefined }}>{p.title || t('pb_blog_untitled', lang)}</span></p>
                   <p className="mt-1 line-clamp-1 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                   <p className="mt-1 text-[10px] font-black text-pink">♡ {p.likes}　💬 {p.comments.length}</p>
                 </button>
@@ -3208,14 +3268,14 @@ function OtherProfileScreen({
             <div className="bg-gradient-to-r from-amber-400 to-orange-400 p-5">
               <div className="mb-1 flex items-center gap-2">
                 <span className="text-xl">✨</span>
-                <p className="font-black text-white">プレミアムコンテンツ</p>
+                <p className="font-black text-white">{t('pm_title', lang)}</p>
                 {isSubscribed && (
-                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-black text-white">購入済み</span>
+                  <span className="rounded-full bg-white/25 px-2 py-0.5 text-[10px] font-black text-white">{t('pm_purchased', lang)}</span>
                 )}
               </div>
               <p className="text-xs font-bold text-white/80">{premium.description}</p>
               {!isSubscribed && (
-                <p className="mt-1 text-[10px] font-bold text-white/60"><CoinIcon size={12} /> 200コイン · 一度解除すればずっと読めます</p>
+                <p className="mt-1 text-[10px] font-bold text-white/80"><CoinIcon size={12} /> {tf('pm_coins', lang, { n: 200 })} · {t('pm_forever', lang)}</p>
               )}
             </div>
 
@@ -3235,13 +3295,13 @@ function OtherProfileScreen({
                 </div>
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 backdrop-blur-[3px]">
                   <span className="mb-2 text-4xl">🔒</span>
-                  <p className="mb-1 text-base font-black text-ink"><CoinIcon size={15} /> 200コインで解除</p>
-                  <p className="mb-5 text-xs font-bold text-muted">一度解除すればずっと読めます</p>
+                  <p className="mb-1 text-base font-black text-ink"><CoinIcon size={15} /> {tf('pm_unlock_with', lang, { n: 200 })}</p>
+                  <p className="mb-5 text-xs font-bold text-muted">{t('pm_forever', lang)}</p>
                   <button
                     onClick={() => onToggleSubscription(profile.id)}
                     className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-8 py-3 text-sm font-black text-white shadow-floating active:scale-[0.98] transition"
                   >
-                    <CoinIcon size={14} /> コインで解除する
+                    <CoinIcon size={14} /> {t('pm_unlock_btn', lang)}
                   </button>
                 </div>
               </div>
@@ -3256,7 +3316,7 @@ function OtherProfileScreen({
                 ))}
                 {premium.note && (
                   <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-4">
-                    <p className="mb-2 text-xs font-black text-amber-600">✉ {profile.name}からのメッセージ</p>
+                    <p className="mb-2 text-xs font-black text-amber-700">✉ {tf('pm_message_from', lang, { name: profile.name })}</p>
                     <p className="text-sm font-bold text-ink leading-6">{premium.note}</p>
                   </div>
                 )}
@@ -3264,7 +3324,7 @@ function OtherProfileScreen({
                   onClick={() => onToggleSubscription(profile.id)}
                   className="text-xs font-bold text-muted underline"
                 >
-                  購入を取り消す
+                  {t('pm_cancel', lang)}
                 </button>
               </div>
             )}
@@ -3305,9 +3365,9 @@ function ProfileScreen({
   const [showShare, setShowShare] = useState(false);
   return (
     <>
-      <AppHeader title={t('header_profile', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader noAuto title={t('header_profile', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       {/* 画面全体を1つの背景に統一（上のボタン〜下のプロフ帳まで同じトンマナ） */}
-      <div className="relative min-h-full">
+      <div className="relative min-h-full" data-noauto>
       {equippedBg
         ? <div className="pointer-events-none absolute inset-0"><SceneBackground theme={equippedBg} subtle /></div>
         : <div className="pointer-events-none absolute inset-0 prof-paper" />}
@@ -3317,12 +3377,12 @@ function ProfileScreen({
           onClick={() => go('settings')}
           className="flex-1 rounded-full bg-white py-3 text-sm font-black text-pink shadow-card active:scale-[0.99]"
         >
-          ✏️ 編集する
+          ✏️ {t('btn_edit_profile', lang)}
         </button>
         <button
           onClick={() => setShowShare(true)}
-          aria-label="プロフ帳をシェア"
-          title="プロフ帳をシェア"
+          aria-label={t('pb_share', lang)}
+          title={t('pb_share', lang)}
           className="rounded-full bg-white px-4 py-3 text-sm font-black text-muted shadow-card active:scale-[0.99]"
         >
           <Share2 size={17} />
@@ -3330,8 +3390,8 @@ function ProfileScreen({
         <button
           onClick={() => go('diagnosis')}
           className="rounded-full bg-white px-4 py-3 text-sm font-black text-purple shadow-card active:scale-[0.99]"
-          title="一致率しんだんに答える"
-          aria-label="一致率しんだんに答える"
+          title={t('pb_answer_match', lang)}
+          aria-label={t('pb_answer_match', lang)}
         >
           💯
         </button>
@@ -3340,7 +3400,7 @@ function ProfileScreen({
             onClick={() => go('official-question-create')}
             className="flex-1 rounded-full bg-blue-50 py-3 text-sm font-black text-blue-500 shadow-card active:scale-[0.99]"
           >
-            ✓ お題を作る
+            ✓ {t('pb_create_topic', lang)}
           </button>
         )}
       </div>
@@ -3351,13 +3411,13 @@ function ProfileScreen({
         if (titles.length === 0) return null;
         return (
           <div className="flex flex-wrap gap-2 px-4 pt-3">
-            {titles.map((t) => <TitleBadge key={t} type={t} userId={me.id} />)}
+            {titles.map((tt) => <TitleBadge key={tt} type={tt} userId={me.id} lang={lang} />)}
           </div>
         );
       })()}
 
       {/* みんなが選ぶ「わたしの性格」（友だちの投票がある時だけ表示） */}
-      <MyPerceptionCard />
+      <MyPerceptionCard lang={lang} />
 
       <ProfileBookContent
         bare
@@ -3570,30 +3630,42 @@ function ProfileEditScreen({
     go('profile');
   }
 
+  const L = (k: string) => t(k, lang);
   // インデックス（見出しタブ）：押すとその記入用紙までスクロール
   const INDEX: [string, string][] = [
-    ['pe-lang', 'ことば'], ['pe-photo', '写真'], ['pe-stage', '立場'], ['pe-basic', 'きほん'], ['pe-likes', 'すき・きらい'],
-    ['pe-about', 'わたしのこと'], ['pe-monthly', '今月'], ['pe-best3', 'BEST3'], ['pe-qa', 'しつもん'],
-    ['pe-pen', 'わたしの字'], ['pe-settings', 'せってい'],
+    ['pe-lang', L('idx_lang')], ['pe-photo', L('idx_photo')], ['pe-stage', L('idx_stage')], ['pe-basic', L('idx_basic')],
+    ['pe-likes', L('idx_likes')], ['pe-about', L('idx_about')], ['pe-monthly', L('idx_monthly')], ['pe-best3', L('idx_best3')],
+    ['pe-qa', L('idx_qa')], ['pe-pen', L('idx_pen')], ['pe-theme', L('idx_theme')], ['pe-settings', L('idx_settings')],
   ];
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const mInfo = localizedMonthInfo(monthInfo, lang);
+
+  // ひとこと質問：変更は form の中だけ（保存ボタンで保存）。元の配列・オブジェクトは書き換えない。
+  const [editingQ, setEditingQ] = useState<number | null>(null);
+  const [confirmDelQ, setConfirmDelQ] = useState<number | null>(null);
+  const setQA = (i: number, patch: Partial<{ q: string; a: string }>) =>
+    setQuestionsForm((prev) => prev.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const growArea = (el: HTMLTextAreaElement | null) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
+  // ID・表示名の変更ページへ移る前の確認（保存していない入力が消えるため）
+  const [confirmIdPage, setConfirmIdPage] = useState(false);
 
   return (
-    <>
-      <AppHeader title="プロフィール編集" back onBack={() => go('profile')} onBell={() => go('notifications')} />
+    <EditLangContext.Provider value={lang}>
+      <AppHeader noAuto title={L('header_settings')} back onBack={() => go('profile')} onBell={() => go('notifications')} />
 
-      <div className="space-y-4 px-4 pt-3 pb-32" {...penAttrs(penForm)} style={penAttrs(penForm).style}>
+      {/* 固定文言はすべて翻訳キー。ユーザーの入力内容は自動翻訳しない（data-noauto） */}
+      <div className="space-y-4 px-4 pt-3 pb-32" {...penAttrs(penForm)} style={penAttrs(penForm).style} data-noauto>
 
         {/* ===== プロフィール完成度メーター（うめるほど楽しく） ===== */}
-        <ProfileProgress info={form} />
+        <ProfileProgress info={form} lang={lang} />
 
         {/* ===== ことば / Language（最上位の設定：見出しタブ・メニュー・項目名が切り替わる） ===== */}
         <section id="pe-lang" className="pb-sheet scroll-mt-32 p-5">
-          <PrintedHeading kicker="LANGUAGE" title="ことば / Language" />
-          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">えらぶと、このページの見出しタブ・下のメニュー・プロフ帳の項目名が切り替わります。</p>
+          <PrintedHeading kicker="LANGUAGE" title={lang === 'ja' ? 'ことば / Language' : lang === 'en' ? 'Language' : `${L('idx_lang')} / Language`} />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{L('pe_lang_desc')}</p>
           {/* いまの言語でどう表示されるかの見本 */}
-          <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border-2 border-dotted border-ink/15 bg-cream/50 px-3 py-2" aria-live="polite" data-noauto>
-            <span className="pb-label mr-0.5">いまの表示</span>
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg border-2 border-dotted border-ink/15 bg-cream/50 px-3 py-2" aria-live="polite">
+            <span className="pb-label mr-0.5">{L('pe_lang_now')}</span>
             {['tab_home', 'tab_search', 'tab_mypage', 'field_nickname', 'field_birthday'].map((k) => (
               <span key={k} className="rounded bg-white px-1.5 py-0.5 text-[12px] font-black text-ink shadow-[0_1px_2px_rgba(0,0,0,.12)]">{t(k, lang)}</span>
             ))}
@@ -3620,97 +3692,113 @@ function ProfileEditScreen({
             };
             return (
               <>
-                <p className="pb-label mb-1.5">よく使う</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-noauto>{LANG_LIST.filter((l) => MAIN.includes(l.id)).map((l) => card(l, true))}</div>
-                <p className="pb-label mb-1.5 mt-3">そのほかの言語</p>
-                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5" data-noauto>{LANG_LIST.filter((l) => !MAIN.includes(l.id)).map((l) => card(l, false))}</div>
+                <p className="pb-label mb-1.5">{L('pe_lang_main')}</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{LANG_LIST.filter((l) => MAIN.includes(l.id)).map((l) => card(l, true))}</div>
+                <p className="pb-label mb-1.5 mt-3">{L('pe_lang_other')}</p>
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">{LANG_LIST.filter((l) => !MAIN.includes(l.id)).map((l) => card(l, false))}</div>
               </>
             );
           })()}
         </section>
 
         {/* ===== インデックス（見出しタブ）：記入用紙へ移動＋いつでも保存 ===== */}
-        <nav aria-label="編集する項目" className="sticky top-16 z-10 -mx-4 bg-base/95 px-4 py-2 backdrop-blur">
+        <nav aria-label={L('pe_index_aria')} className="sticky top-16 z-10 -mx-4 bg-base/95 px-4 py-2 backdrop-blur">
           <div className="flex gap-1.5 overflow-x-auto pb-0.5">
             {INDEX.map(([id, label]) => (
               <button key={id} type="button" onClick={() => jump(id)}
-                className="shrink-0 rounded-t-lg border-b-2 border-pink/40 bg-white px-3 py-2 text-[12px] font-black text-ink shadow-[0_-1px_3px_rgba(0,0,0,.06)] active:translate-y-px">
+                className="shrink-0 whitespace-nowrap rounded-t-lg border-b-2 border-pink/40 bg-white px-3 py-2 text-[12px] font-black text-ink shadow-[0_-1px_3px_rgba(0,0,0,.06)] active:translate-y-px">
                 {label}
               </button>
             ))}
             <button type="button" onClick={saveAll}
-              className="shrink-0 rounded-lg bg-pink px-3 py-2 text-[12px] font-black text-white shadow-card active:scale-[0.98]">
-              ✓ 保存
+              className="shrink-0 whitespace-nowrap rounded-lg bg-pink px-3 py-2 text-[12px] font-black text-white shadow-card active:scale-[0.98]">
+              ✓ {L('btn_save')}
             </button>
           </div>
         </nav>
-        {/* ===== 写真（アイコン・お気に入り写真） ===== */}
-        <div id="pe-photo" className="scroll-mt-32 space-y-4">
-          <PrintedHeading no="01" kicker="PHOTO" title="写真をはる" />
-        <section className="pb-sheet p-5">
-          <p className="mb-3 text-sm font-black text-muted">アイコン画像</p>
-          <div className="flex items-center gap-4">
-            <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-full bg-pink/20 text-4xl shadow-inner">
-              {localAvatarUrl ? (
-                <img src={localAvatarUrl} alt="avatar" className="h-full w-full object-cover" />
-              ) : (
-                me.avatar
-              )}
-            </div>
-            <label className="cursor-pointer rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]">
-              画像を選ぶ
-              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-            </label>
-            {localAvatarUrl && (
-              <button type="button" onClick={() => setLocalAvatarUrl('')} className="text-xs font-black text-muted">
-                削除
-              </button>
-            )}
-          </div>
-        </section>
 
-        <section className="pb-sheet p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-sm font-black text-muted">お気に入り写真（{localPhotos.length}/10）</p>
-            {localPhotos.length < 10 && (
-              <label className="cursor-pointer rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink active:scale-[0.99]">
-                ＋ 追加
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
-              </label>
-            )}
-          </div>
-          {localPhotos.length === 0 ? (
-            <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-pink/30 bg-pink/5 p-8 text-xs font-bold text-muted">
-              タップして写真を追加（最大10枚）
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
-            </label>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {localPhotos.map((photo, index) => (
-                <div key={index} className="relative aspect-square overflow-hidden rounded-2xl">
-                  <img src={photo} alt={`photo-${index}`} className="h-full w-full object-cover" />
-                  <div className="absolute bottom-0 left-0 right-0 flex gap-1 p-1">
-                    <label className="flex-1 cursor-pointer rounded-lg bg-white/80 py-1 text-center text-[10px] font-black text-ink backdrop-blur-sm">
-                      差替
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReplacePhoto(index, e)} />
-                    </label>
-                    <button type="button" onClick={() => handleDeletePhoto(index)} className="flex-1 rounded-lg bg-pink/80 py-1 text-[10px] font-black text-white backdrop-blur-sm">
-                      削除
-                    </button>
+        {/* ===== 写真と名札（アイコン・表示名・ID） ===== */}
+        <div id="pe-photo" className="scroll-mt-32 space-y-4">
+          <PrintedHeading no="01" kicker="PHOTO & NAME TAG" title={L('pe_photo_title')} />
+          <section className="pb-sheet p-4">
+            <div className="flex items-start gap-4">
+              {/* ポラロイドに貼った写真 */}
+              <div className="shrink-0 text-center">
+                <div className="pb-polaroid relative -rotate-2">
+                  <span aria-hidden className="pb-tape pb-tape-sax !absolute -top-2 left-1/2 z-10 h-3.5 w-12 -translate-x-1/2 !p-0" style={{ transform: 'translateX(-50%) rotate(-4deg)' }} />
+                  <div className="grid h-20 w-20 place-items-center overflow-hidden bg-cream text-4xl">
+                    {localAvatarUrl ? <img src={localAvatarUrl} alt={L('pe_avatar')} className="h-full w-full object-cover" /> : me.avatar}
                   </div>
                 </div>
-              ))}
+                <div className="mt-2 flex items-center justify-center gap-2">
+                  <label className="min-h-[36px] cursor-pointer px-1 py-2 text-[12px] font-black text-pinkStrong underline decoration-dotted underline-offset-4">
+                    {L('btn_pick_image')}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                  </label>
+                  {localAvatarUrl && (
+                    <button type="button" onClick={() => setLocalAvatarUrl('')} className="min-h-[36px] px-1 text-[12px] font-bold text-muted underline decoration-dotted underline-offset-4">{L('btn_delete')}</button>
+                  )}
+                </div>
+              </div>
+              {/* 名札：表示名と ID（変更は小さな「編集」から。移る前に確認） */}
+              <div className="min-w-0 flex-1 overflow-hidden rounded-lg border-2 border-ink/15 bg-white">
+                <p className="gk-font flex items-center justify-between bg-pink/15 px-3 py-1 text-[11px] text-ink">
+                  <span>NAME TAG</span>
+                  <button type="button" onClick={() => setConfirmIdPage(true)} className="-my-1 min-h-[32px] px-1 text-[12px] font-black text-pinkStrong" aria-label={L('pe_id_edit_aria')}>✎ {L('btn_edit')}</button>
+                </p>
+                <div className="px-3 pb-2.5 pt-2">
+                  <p className="pb-label">{L('pe_display_name')}</p>
+                  <p className="pb-writeline truncate text-[17px] leading-snug text-ink prof-hand">{me.name}</p>
+                  <p className="pb-label mt-2">{L('pe_user_id')}</p>
+                  <p className="gk-font truncate text-[14px] text-ink">{me.id}</p>
+                </div>
+              </div>
             </div>
-          )}
-        </section>
+            <p className="mt-3 text-[11px] font-bold leading-relaxed text-muted">{L('pe_id_note')}</p>
+          </section>
 
+          <section className="pb-sheet p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="pb-label pb-label-md">{tf('pe_photos_count', lang, { n: localPhotos.length })}</p>
+              {localPhotos.length < 10 && (
+                <label className="min-h-[36px] cursor-pointer rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pinkStrong active:scale-[0.99]">
+                  ＋ {L('btn_add')}
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
+                </label>
+              )}
+            </div>
+            {localPhotos.length === 0 ? (
+              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-pink/30 bg-pink/5 p-8 text-xs font-bold text-muted">
+                {L('pe_photos_empty')}
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleAddPhotos} />
+              </label>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {localPhotos.map((photo, index) => (
+                  <div key={index} className="relative aspect-square overflow-hidden rounded-2xl">
+                    <img src={photo} alt={`photo-${index}`} className="h-full w-full object-cover" />
+                    <div className="absolute bottom-0 left-0 right-0 flex gap-1 p-1">
+                      <label className="flex-1 cursor-pointer rounded-lg bg-white/80 py-1 text-center text-[10px] font-black text-ink backdrop-blur-sm">
+                        {L('btn_replace')}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleReplacePhoto(index, e)} />
+                      </label>
+                      <button type="button" onClick={() => handleDeletePhoto(index)} className="flex-1 rounded-lg bg-pink/80 py-1 text-[10px] font-black text-white backdrop-blur-sm">
+                        {L('btn_delete')}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
+
         <div id="pe-stage" className="scroll-mt-32 space-y-4">
         {/* ===== 立場：ケータイのメニューのように番号つきの一覧から選ぶ ===== */}
         <section className="pb-sheet p-5">
-          <PrintedHeading kicker="STATUS" title="いまのわたし" />
-          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">ひとつえらんでね。えらぶと、書く項目が変わるよ</p>
-          <div role="radiogroup" aria-label="立場" className="overflow-hidden rounded-lg border-2 border-ink/10 bg-white">
+          <PrintedHeading kicker="STATUS" title={L('pe_stage_title')} />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{L('pe_stage_desc')}</p>
+          <div role="radiogroup" aria-label={L('idx_stage')} className="overflow-hidden rounded-lg border-2 border-ink/10 bg-white">
             {LIFE_STAGE_DEFS.map((ls, i) => {
               const on = form.attribute === ls.id;
               return (
@@ -3725,8 +3813,8 @@ function ProfileEditScreen({
                   {/* ケータイのボタン番号 */}
                   <span aria-hidden className={`gk-font grid h-7 w-7 shrink-0 place-items-center rounded-md text-[13px] ${on ? 'bg-pink text-white' : 'bg-base text-ink ring-1 ring-ink/15'}`}>{i + 1}</span>
                   <span aria-hidden className="text-lg">{ls.emoji}</span>
-                  <span className={`flex-1 text-[14px] ${on ? 'font-black text-ink' : 'font-bold text-ink/85'}`}>{ls.label}</span>
-                  {on && <span aria-hidden className="pb-stamp h-9 w-9 shrink-0 -rotate-12 text-[9px]">えらん<br />だ</span>}
+                  <span className={`flex-1 text-[14px] ${on ? 'font-black text-ink' : 'font-bold text-ink/85'}`}>{tv(ls.label, lang)}</span>
+                  {on && <span aria-hidden className="pb-stamp h-9 w-9 shrink-0 -rotate-12 text-[9px] leading-tight">{L('stamp_chosen')}</span>}
                 </button>
               );
             })}
@@ -3735,16 +3823,16 @@ function ProfileEditScreen({
 
         {/* ===== 特技・活動：あてはまるシールを1枚はる（なくてもOK） ===== */}
         <section className="pb-sheet p-5">
-          <PrintedHeading kicker="MY THING" title="特技・活動" right={<span className="pb-label pb-0.5">あれば</span>} />
-          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">あなたらしいシールを1枚はってね。はると専用の項目がふえるよ</p>
+          <PrintedHeading kicker="MY THING" title={L('pe_activity_title')} right={<span className="pb-label pb-0.5">{L('pe_if_any')}</span>} />
+          <p className="-mt-1 mb-2.5 text-[12px] font-bold text-muted">{L('pe_activity_desc')}</p>
           {(() => {
             const GROUPS: { label: string; ids: string[] }[] = [
-              { label: '🏃 スポーツ', ids: ['baseball', 'soccer'] },
-              { label: '🎶 カルチャー', ids: ['musician', 'gamer', 'creator'] },
+              { label: `🏃 ${L('grp_sports')}`, ids: ['baseball', 'soccer'] },
+              { label: `🎶 ${L('grp_culture')}`, ids: ['musician', 'gamer', 'creator'] },
             ];
             const grouped = new Set(GROUPS.flatMap((g) => g.ids));
             const others = ACTIVITY_DEFS.filter((a) => !grouped.has(a.id)).map((a) => a.id);
-            const groups = others.length ? [...GROUPS, { label: '✨ そのほか', ids: others }] : GROUPS;
+            const groups = others.length ? [...GROUPS, { label: `✨ ${L('grp_other')}`, ids: others }] : GROUPS;
             return (
               <div className="space-y-2.5">
                 {groups.map((g) => (
@@ -3761,7 +3849,7 @@ function ProfileEditScreen({
                             onClick={() => selectActivity(on ? '' : act.id)}
                             className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-black transition ${on ? '-rotate-2 bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_5px_rgba(0,0,0,.18)]' : 'border-2 border-dashed border-ink/20 bg-white/70 text-ink/80 hover:bg-pink/5'}`}
                           >
-                            <span aria-hidden className="text-base">{act.emoji}</span>{act.label}{on && <span aria-hidden className="text-pinkStrong">✓</span>}
+                            <span aria-hidden className="text-base">{act.emoji}</span>{tv(act.label, lang)}{on && <span aria-hidden className="text-pinkStrong">✓</span>}
                           </button>
                         );
                       })}
@@ -3775,7 +3863,7 @@ function ProfileEditScreen({
                     onClick={() => selectActivity('')}
                     className={`min-h-[40px] px-2 text-[12px] font-bold underline decoration-dotted underline-offset-4 ${!form.activity ? 'text-ink' : 'text-muted'}`}
                   >
-                    {!form.activity ? '✓ とくになし' : 'とくになし にする'}
+                    {!form.activity ? `✓ ${L('act_none')}` : L('act_none_set')}
                   </button>
                 </div>
               </div>
@@ -3783,366 +3871,243 @@ function ProfileEditScreen({
           })()}
         </section>
         </div>
+
         {/* ===== 記入用紙：きほんじょうほう／すき・きらい／わたしのこと（項目の順番は従来どおり） ===== */}
-        <p className="rounded-xl bg-white/70 px-4 py-2.5 text-[12px] font-bold text-muted">
-          保存するとプロフィール帳に反映されます。各項目の右のチップ（🌐公開／👥フォロワー／🔒非公開）で見せる相手を選べます。
-        </p>
+        <p className="rounded-xl bg-white/70 px-4 py-2.5 text-[12px] font-bold text-muted">{L('pe_save_note')}</p>
         <section id="pe-basic" className="pb-sheet scroll-mt-32 space-y-3 p-5">
-          <PrintedHeading no="02" kicker="BASIC" title="きほんじょうほう" />
-          <NameField label="なまえ" value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
-          <EditField label="ニックネーム" value={form.nickname} onChange={(v) => update('nickname', v)} />
-          <BirthdayField label="たん生日" value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
-          <BloodTypeField label="血液型" value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} {...vprops('bloodType')} />
-          <CheckListField label={t('field_gender', lang)} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} {...vprops('gender')} />
+          <PrintedHeading no="02" kicker="BASIC" title={L('sec_basic')} />
+          <NameField label={L('field_name')} value={form.name} onChange={(v) => update('name', v)} {...vprops('name')} />
+          <EditField label={L('field_nickname')} value={form.nickname} onChange={(v) => update('nickname', v)} />
+          <BirthdayField label={L('field_birthday')} value={form.birthday} onChange={(v) => update('birthday', v)} {...vprops('birthday')} />
+          {/* 血液型はプロフ帳と同じく、その言語で一般的なときだけ見せる（保存値はそのまま） */}
+          {L('show_bloodType') === 'true' && <BloodTypeField label={L('field_bloodType')} value={form.bloodType} onChange={(v) => update('bloodType', v)} options={BLOOD_TYPE_OPTIONS} {...vprops('bloodType')} />}
+          <CheckListField label={L('field_gender')} value={form.gender ?? ''} onChange={(v) => update('gender' as any, v)} options={getGenderOptions(lang)} {...vprops('gender')} />
           <MbtiField label="MBTI" value={form.mbti} onChange={(v) => update('mbti', v)} {...vprops('mbti')} />
-          <EditField label="出身地" value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
+          <EditField label={L('field_hometown')} value={form.hometown} onChange={(v) => update('hometown', v)} {...vprops('hometown')} />
         </section>
         <section id="pe-likes" className="pb-sheet scroll-mt-32 space-y-3 p-5">
-          <PrintedHeading no="03" kicker="LIKE & DISLIKE" title="すき・きらい" />
-          <EditField label="好きな食べ物" value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} {...vprops('favoriteFood')} />
-          <EditField label="きらいな食べ物" value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} {...vprops('dislikeFood')} />
-          <EditField label="好きな色" value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} {...vprops('favoriteColor')} />
+          <PrintedHeading no="03" kicker="LIKE & DISLIKE" title={L('sec_likes')} />
+          <EditField label={L('field_favoriteFood')} value={form.favoriteFood} onChange={(v) => update('favoriteFood', v)} {...vprops('favoriteFood')} />
+          <EditField label={L('field_dislikeFood')} value={form.dislikeFood} onChange={(v) => update('dislikeFood', v)} {...vprops('dislikeFood')} />
+          <EditField label={L('field_favoriteColor')} value={form.favoriteColor} onChange={(v) => update('favoriteColor', v)} {...vprops('favoriteColor')} />
           {(LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute)?.showSubjectFields ?? true) && (
             <>
-              <SelectField label="好きな教科" value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('favoriteSubject')} />
-              <SelectField label="苦手な教科" value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('dislikeSubject')} />
+              <SelectField label={L('field_favoriteSubject')} value={form.favoriteSubject} onChange={(v) => update('favoriteSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('favoriteSubject')} />
+              <SelectField label={L('field_dislikeSubject')} value={form.dislikeSubject} onChange={(v) => update('dislikeSubject', v)} options={SUBJECT_OPTIONS} columns={3} {...vprops('dislikeSubject')} />
             </>
           )}
-          <EditField label="好きなキャラクター" value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} {...vprops('favoriteCharacter')} />
-          <p className="rounded-xl bg-cream/60 px-4 py-2.5 text-[11px] font-bold text-muted">
-            📺 テレビ・🎵 音楽・📖 漫画・🎮 ゲーム・🎨 趣味は、下の「すきなもの BEST3」で入力できます
-          </p>
+          <EditField label={L('field_favoriteCharacter')} value={form.favoriteCharacter} onChange={(v) => update('favoriteCharacter', v)} {...vprops('favoriteCharacter')} />
+          <p className="rounded-xl bg-cream/60 px-4 py-2.5 text-[11px] font-bold text-muted">{L('pe_best3_note')}</p>
         </section>
         <section id="pe-about" className="pb-sheet scroll-mt-32 space-y-3 p-5">
-          <PrintedHeading no="04" kicker="ABOUT ME" title="わたしのこと" />
-          <EditField label="特技" value={form.specialty} onChange={(v) => update('specialty', v)} {...vprops('specialty')} />
-          <EditField label="休日の過ごし方" value={form.holiday} onChange={(v) => update('holiday', v)} {...vprops('holiday')} />
-          <EditField label="行ってみたい場所" value={form.wantToGo} onChange={(v) => update('wantToGo', v)} {...vprops('wantToGo')} />
-          <EditField label="集めているもの" value={form.collection} onChange={(v) => update('collection', v)} {...vprops('collection')} />
-          <EditField label="好きな言葉・座右の銘" value={form.motto} onChange={(v) => update('motto', v)} {...vprops('motto')} />
-          <EditField label="チャームポイント" value={form.charmPoint} onChange={(v) => update('charmPoint', v)} {...vprops('charmPoint')} />
-          <EditField label="将来の夢" value={form.dream} onChange={(v) => update('dream', v)} {...vprops('dream')} />
-          <EditField label="ひとこと" value={form.message} onChange={(v) => update('message', v)} />
+          <PrintedHeading no="04" kicker="ABOUT ME" title={L('sec_about')} />
+          <EditField label={L('field_specialty')} value={form.specialty} onChange={(v) => update('specialty', v)} {...vprops('specialty')} />
+          <EditField label={L('field_holiday')} value={form.holiday} onChange={(v) => update('holiday', v)} {...vprops('holiday')} />
+          <EditField label={L('field_wantToGo')} value={form.wantToGo} onChange={(v) => update('wantToGo', v)} {...vprops('wantToGo')} />
+          <EditField label={L('field_collection')} value={form.collection} onChange={(v) => update('collection', v)} {...vprops('collection')} />
+          <EditField label={L('field_motto')} value={form.motto} onChange={(v) => update('motto', v)} {...vprops('motto')} />
+          <EditField label={L('field_charmPoint')} value={form.charmPoint} onChange={(v) => update('charmPoint', v)} {...vprops('charmPoint')} />
+          <EditField label={L('field_dream')} value={form.dream} onChange={(v) => update('dream', v)} {...vprops('dream')} />
+          <EditField label={L('field_message')} value={form.message} onChange={(v) => update('message', v)} />
         </section>
-        {/* ===== ライフステージ専用フィールド ===== */}
-        {(() => {
-          const lsDef = LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute);
-          if (!lsDef || lsDef.fields.length === 0) return null;
+
+        {/* ===== ライフステージ／特技・活動の専用項目 ===== */}
+        {[LIFE_STAGE_DEFS.find((ls) => ls.id === form.attribute), ACTIVITY_DEFS.find((a) => a.id === form.activity)].map((def) => {
+          if (!def || def.fields.length === 0) return null;
           return (
-            <section className="space-y-3 pb-sheet p-5">
-              <p className="text-base font-black text-ink">{lsDef.emoji} {lsDef.sectionTitle}</p>
-              {lsDef.fields.map((f) =>
+            <section key={def.id} className="pb-sheet space-y-3 p-5">
+              <PrintedHeading title={<><span aria-hidden className="mr-1">{def.emoji}</span>{tv(def.sectionTitle, lang)}</>} />
+              {def.fields.map((f) =>
                 f.type === 'select' && f.options ? (
-                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
+                  <SelectField key={f.key} label={tv(f.label, lang)} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} />
                 ) : (
-                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
+                  <EditField key={f.key} label={tv(f.label, lang)} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
                 )
               )}
             </section>
           );
-        })()}
+        })}
 
-        {/* ===== 特技・活動専用フィールド ===== */}
-        {(() => {
-          const actDef = ACTIVITY_DEFS.find((a) => a.id === form.activity);
-          if (!actDef) return null;
-          return (
-            <section className="space-y-3 pb-sheet p-5">
-              <p className="text-base font-black text-ink">{actDef.emoji} {actDef.sectionTitle}</p>
-              {actDef.fields.map((f) =>
-                f.type === 'select' && f.options ? (
-                  <SelectField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} options={f.options} columns={f.options.length <= 4 ? f.options.length : 3} />
-                ) : (
-                  <EditField key={f.key} label={f.label} value={localCustomFields[f.key] ?? ''} onChange={(v) => setLocalCustomFields((prev) => ({ ...prev, [f.key]: v }))} />
-                )
-              )}
-            </section>
-          );
-        })()}
-<section id="pe-monthly" className="pb-memo scroll-mt-32 space-y-4 p-5">
-  <div>
-    <PrintedHeading no="05" kicker="THIS MONTH" title="🗓️ 今月のおだい" className="mb-1" />
-    <p className="mt-1 text-xs font-bold text-muted">お題は毎月かわります。エピソードとBEST3、どちらか片方だけでもOK！</p>
-  </div>
-  {/* 今月のエピソード質問（今月の1問・自由記述） */}
-  <div className="rounded-[20px] bg-white/70 p-4">
-    <p className="text-[11px] font-black text-muted">🍂 {monthInfo.events}</p>
-    <p className="mt-1 text-sm font-black text-pinkStrong">Q. {monthInfo.episodeQ}</p>
-    <textarea
-      value={monthlyEpisodeForm}
-      onChange={(e) => setMonthlyEpisodeForm(e.target.value)}
-      rows={3}
-      maxLength={300}
-      placeholder="エピソードを自由に書いてみよう"
-      className="mt-2 w-full resize-none rounded-2xl border border-pink/20 bg-white p-3 text-sm font-bold text-ink outline-none focus:border-pink"
-    />
-  </div>
-  {/* 今月のBEST3 */}
-  <div className="rounded-[20px] bg-white/70 p-4">
-    <p className="text-sm font-black text-pinkStrong">Q. {monthInfo.theme} は？</p>
-    <p className="mt-0.5 mb-2 text-xs font-bold text-muted">あなたのBEST3を教えて！</p>
-    <Best3EditBlock
-      title={monthInfo.theme}
-      items={monthlyForm}
-      onChange={(next) => setMonthlyForm(next)}
-    />
-  </div>
-</section>
-
-<section id="pe-best3" className="pb-sheet pb-grid scroll-mt-32 space-y-5 p-5">
-  <PrintedHeading no="06" kicker="MY BEST 3" title="すきなもの BEST3" />
-
-  {BEST3_CATEGORIES.map((cat) => (
-    <Best3EditBlock
-      key={cat.key}
-      title={`${cat.emoji} ${cat.label}`}
-      items={best3Form[cat.key] ?? ['', '', '']}
-      onChange={(next) =>
-        setBest3Form((prev) => ({ ...prev, [cat.key]: next }))
-      }
-    />
-  ))}
-</section>
-<section id="pe-qa" className="pb-sheet scroll-mt-32 space-y-4 p-5">
-  <PrintedHeading no="07" kicker="QUESTION CORNER" title="ひとことしつもん" />
-
-  {questionsForm.map((item, index) => (
-
-    
-    
-    
-    <div key={index} className="space-y-2 rounded-2xl bg-cream/20 p-4">
-      <EditField
-        label={`質問 ${index + 1}`}
-        value={item.q}
-        onChange={(v) => {
-          const next = [...questionsForm];
-          next[index].q = v;
-          setQuestionsForm(next);
-        }}
-      />
-
-      <EditField
-        label="回答"
-        value={item.a}
-        onChange={(v) => {
-          const next = [...questionsForm];
-          next[index].a = v;
-          setQuestionsForm(next);
-        }}
-      />
-
-      <div className="flex items-center justify-between">
-  <p className="text-sm font-black text-ink">質問 {index + 1}</p>
-  <button
-    type="button"
-    onClick={() =>
-      setQuestionsForm((prev) => prev.filter((_, i) => i !== index))
-    }
-    className="text-xs font-black text-pink"
-  >
-    削除
-  </button>
-</div>
-    </div>
-  ))}
-
-  <button
-  type="button"
-  onClick={() =>
-    setQuestionsForm((prev) => [
-      ...prev,
-      { q: '新しい質問', a: '' },
-    ])
-  }
-  className="w-full rounded-2xl border border-dashed border-pink/40 bg-pink/5 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]"
->
-  ＋ 質問を追加する
-</button>
-</section>
-        {/* ===== わたしの字：書体・インク・大きさ（文字プレビューつき。保存ボタンで保存） ===== */}
-        <section id="pe-pen" className="pb-sheet scroll-mt-32 space-y-3 p-5">
-          <PrintedHeading no="08" kicker="MY PEN" title="わたしの字" />
-          <p className="-mt-1 text-[12px] font-bold text-muted">プロフ帳とお題の回答が、この字で表示されます。上の記入欄もこの字になります。</p>
-          <div {...penAttrs(penForm)} style={{ ...penAttrs(penForm).style, ['--pen-base' as any]: '18px' }} className="rounded-xl border-2 border-dashed border-ink/15 bg-white px-4 py-3" aria-live="polite">
-            <p className="pb-label">文字プレビュー</p>
-            <p className="pen-text pen-size mt-1 break-words leading-relaxed">{form.nickname || form.name || 'なまえ'}</p>
-            <p className="pen-text mt-0.5 break-words text-[15px] leading-relaxed">{form.message || 'よろしくね！ありがとう♡ ABC 123'}</p>
+        {/* ===== 今月のおだい ===== */}
+        <section id="pe-monthly" className="pb-memo scroll-mt-32 space-y-4 p-5">
+          <div>
+            <PrintedHeading no="05" kicker="THIS MONTH" title={`🗓️ ${mInfo.title}`} className="mb-1" />
+            <p className="mt-1 text-xs font-bold text-muted">{L('pe_monthly_desc')}</p>
           </div>
-          <PenFontPicker pen={penForm} onChange={(p) => { penTouched.current = true; setPenForm(p); }} />
-          <div className="pt-1"><PenInkPicker pen={penForm} onChange={(p) => { penTouched.current = true; setPenForm(p); }} /></div>
-        </section>
-        {/* ===== プレミアム設定（公認ユーザーのみ） ===== */}
-        {me.isOfficial && (
-          <section className="space-y-4 rounded-[32px] border-2 border-amber-100 bg-white p-5 shadow-card">
-            <div>
-              <p className="text-base font-black text-ink">✨ プレミアム設定</p>
-              <p className="mt-1 text-xs font-bold text-muted">購入者だけが見られる特別コンテンツを設定できます（買い切り）</p>
-            </div>
-            <EditField
-              label="紹介文（購入ページに表示）"
-              value={premiumForm.description}
-              onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))}
+          <div className="rounded-lg bg-white/80 p-4">
+            {mInfo.events && <p className="text-[11px] font-black text-muted">🍂 {mInfo.events}</p>}
+            <p className="mt-1 text-[14px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo.episodeQ}</p>
+            <textarea
+              value={monthlyEpisodeForm}
+              onChange={(e) => { setMonthlyEpisodeForm(e.target.value); growArea(e.target); }}
+              ref={growArea}
+              rows={2}
+              maxLength={300}
+              aria-label={mInfo.episodeQ}
+              placeholder={L('ph_episode')}
+              className="pen-text pb-ruled pb-ruled-rows mt-2 w-full resize-none bg-transparent text-[16px] leading-7 outline-none"
             />
-            <div className="flex items-center gap-3">
-              <label className="shrink-0 text-xs font-bold text-muted">販売価格（円）</label>
-              <input
-                type="number"
-                min={0}
-                value={premiumForm.price}
-                onChange={(e) => setPremiumForm((p) => ({ ...p, price: Number(e.target.value) || 480 }))}
-                className="w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-4 py-2 text-sm font-bold outline-none focus:border-amber-400"
-              />
+          </div>
+          <div className="rounded-lg bg-white/80 p-4">
+            <p className="text-[14px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo.best3Q}</p>
+            <div className="mt-2">
+              <Best3EditBlock title={mInfo.theme} items={monthlyForm} onChange={(next) => setMonthlyForm(next)} hideTitle />
             </div>
+          </div>
+        </section>
 
-            <div>
-              <p className="mb-2 text-sm font-black text-ink">プレミアムQ&A</p>
-              {premiumForm.questions.map((item, i) => (
-                <div key={i} className="mb-3 space-y-2 rounded-2xl bg-amber-50 p-4">
-                  <EditField
-                    label={`質問 ${i + 1}`}
-                    value={item.q}
-                    onChange={(v) => {
-                      const next = [...premiumForm.questions];
-                      next[i] = { ...next[i], q: v };
-                      setPremiumForm((p) => ({ ...p, questions: next }));
-                    }}
-                  />
-                  <EditField
-                    label="回答"
-                    value={item.a}
-                    onChange={(v) => {
-                      const next = [...premiumForm.questions];
-                      next[i] = { ...next[i], a: v };
-                      setPremiumForm((p) => ({ ...p, questions: next }));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPremiumForm((p) => ({ ...p, questions: p.questions.filter((_, j) => j !== i) }))}
-                    className="text-xs font-black text-pink"
-                  >
-                    削除
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPremiumForm((p) => ({ ...p, questions: [...p.questions, { q: '', a: '' }] }))}
-                className="w-full rounded-2xl border border-dashed border-amber-300 bg-amber-50 py-3 text-sm font-black text-amber-500 active:scale-[0.99]"
-              >
-                ＋ 質問を追加する
-              </button>
-            </div>
+        {/* ===== すきなもの BEST3 ===== */}
+        <section id="pe-best3" className="pb-sheet pb-grid scroll-mt-32 space-y-4 p-5">
+          <PrintedHeading no="06" kicker="MY BEST 3" title={L('best3_title')} />
+          {BEST3_CATEGORIES.map((cat) => (
+            <Best3EditBlock
+              key={cat.key}
+              title={`${cat.emoji} ${L(`best3_${cat.key}`)}`}
+              items={best3Form[cat.key] ?? ['', '', '']}
+              onChange={(next) => setBest3Form((prev) => ({ ...prev, [cat.key]: next }))}
+            />
+          ))}
+        </section>
 
-            <div>
-              <label className="mb-1 block text-xs font-bold text-muted">購入者へのメッセージ</label>
-              <textarea
-                value={premiumForm.note}
-                onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))}
-                rows={3}
-                maxLength={300}
-                className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
-                placeholder="購入してくれた人へひとこと..."
-              />
-            </div>
-          </section>
-        )}
-
-        <button
-          onClick={saveAll}
-          className="w-full rounded-[24px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]"
-        >
-          保存してプロフィール帳に反映
-        </button>
-        {/* ===== せってい（すぐ反映される項目） ===== */}
-        <div id="pe-settings" className="scroll-mt-32 space-y-4 pt-2">
-          <PrintedHeading no="09" kicker="SETTINGS" title="せってい" />
-        {/* ===== ID・表示名（アカウント） ===== */}
-        <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">🆔 ID・表示名</p>
-          <p className="mb-3 text-xs font-bold text-muted">現在のID：<span className="font-black text-ink">{me.id}</span></p>
+        {/* ===== ひとことしつもん：1枚の「質問コーナー」に Q（印刷）と A（手書きの罫線）が続く ===== */}
+        <section id="pe-qa" className="pb-sheet scroll-mt-32 p-5">
+          <PrintedHeading no="07" kicker="QUESTION CORNER" title={L('sec_qa')} right={<span className="pb-label pb-0.5">{tf('pe_qa_count', lang, { n: questionsForm.length })}</span>} />
+          <p className="-mt-1 mb-1 text-[12px] font-bold text-muted">{L('pe_qa_desc')}</p>
+          <ol>
+            {questionsForm.map((item, index) => {
+              const shownQ = displayProfileQuestion(item.q, lang);
+              return (
+                <li key={index} className="border-b-2 border-dotted border-ink/10 py-3 last:border-b-0">
+                  <div className="flex items-start gap-2">
+                    <span className="pb-q-no mt-0.5 shrink-0">Q{index + 1}</span>
+                    {editingQ === index ? (
+                      <input
+                        autoFocus
+                        value={item.q}
+                        onChange={(e) => setQA(index, { q: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingQ(null); }}
+                        aria-label={tf('pe_qa_q_aria', lang, { n: index + 1 })}
+                        placeholder={L('ph_question')}
+                        maxLength={60}
+                        className="min-w-0 flex-1 border-b-2 border-pink/50 bg-transparent pb-1 text-[14px] font-black text-ink outline-none"
+                      />
+                    ) : (
+                      <p className="min-w-0 flex-1 break-words text-[14px] font-black leading-snug text-ink">{shownQ || <span className="text-muted">{L('ph_question')}</span>}</p>
+                    )}
+                    {/* 質問の操作：文字を変える／消す（消す前に確認） */}
+                    <div className="-mt-1 flex shrink-0 items-center">
+                      <button type="button" onClick={() => {
+                        if (editingQ === index) { setEditingQ(null); return; }
+                        // 公式の質問を書きかえるときは、いま表示されている言語の文から書きはじめる
+                        if (shownQ !== item.q) setQA(index, { q: shownQ });
+                        setEditingQ(index);
+                      }}
+                        className="min-h-[36px] px-1.5 text-[12px] font-black text-pinkStrong" aria-label={tf('pe_qa_edit_aria', lang, { n: index + 1 })}>
+                        {editingQ === index ? `✓ ${L('btn_done')}` : `✎ ${L('btn_edit')}`}
+                      </button>
+                      <button type="button" onClick={() => setConfirmDelQ(index)}
+                        className="min-h-[36px] px-1.5 text-[12px] font-bold text-muted" aria-label={tf('pe_qa_del_aria', lang, { n: index + 1 })}>
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                  {confirmDelQ === index && (
+                    <div role="alertdialog" aria-label={L('pe_qa_del_confirm')} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-[#d9473f]/10 px-3 py-2">
+                      <p className="flex-1 text-[12px] font-black text-ink">{L('pe_qa_del_confirm')}</p>
+                      <button type="button" onClick={() => setConfirmDelQ(null)} className="min-h-[36px] rounded-md bg-white px-3 text-[12px] font-black text-ink ring-1 ring-ink/15">{L('btn_cancel')}</button>
+                      <button type="button" onClick={() => {
+                        setQuestionsForm((prev) => prev.filter((_, i) => i !== index));
+                        setConfirmDelQ(null);
+                        // 消した行より下を編集中なら、番号がひとつ繰り上がる
+                        setEditingQ((cur) => (cur === null || cur === index ? null : cur > index ? cur - 1 : cur));
+                      }} className="min-h-[36px] rounded-md bg-[#c23a33] px-3 text-[12px] font-black text-white">{L('btn_delete')}</button>
+                    </div>
+                  )}
+                  <div className="mt-1.5 flex gap-1.5">
+                    <span aria-hidden className="pb-label shrink-0 pt-1.5">A.</span>
+                    <textarea
+                      value={item.a}
+                      onChange={(e) => { setQA(index, { a: e.target.value }); growArea(e.target); }}
+                      ref={growArea}
+                      rows={1}
+                      maxLength={200}
+                      aria-label={tf('pe_qa_a_aria', lang, { n: index + 1 })}
+                      placeholder={L('ph_answer')}
+                      className="pen-text pb-ruled pb-ruled-rows min-h-[28px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-[16px] leading-7 outline-none"
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
           <button
             type="button"
-            onClick={() => { window.location.href = '/setup'; }}
-            className="w-full rounded-2xl bg-pink/10 px-4 py-3 text-sm font-black text-pink active:scale-[0.99]"
+            onClick={() => { setQuestionsForm((prev) => [...prev, { q: '', a: '' }]); setEditingQ(questionsForm.length); }}
+            className="mt-2 min-h-[44px] w-full rounded-lg border-2 border-dashed border-pink/40 text-[13px] font-black text-pinkStrong active:scale-[0.99]"
           >
-            ID・表示名を変更する →
+            ＋ {L('pe_qa_add')}
           </button>
-          <p className="mt-2 text-[10px] font-bold text-muted">ニックネームは下の「きほんじょうほう」で変更できます。</p>
         </section>
 
-        {/* ===== テーマカラー ===== */}
-        <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">🎨 テーマカラー</p>
-          <p className="mb-4 text-xs font-bold text-muted">アプリ全体の色と背景を変えられます</p>
-          <div className="grid grid-cols-4 gap-3">
-            {APP_THEMES.map((t) => {
-              const isActive = appTheme === t.id;
+        {/* ===== わたしの字：書体・インク・大きさ（文字プレビューつき。保存ボタンで保存） ===== */}
+        <section id="pe-pen" className="pb-sheet scroll-mt-32 space-y-3 p-5">
+          <PrintedHeading no="08" kicker="MY PEN" title={L('pe_pen_title')} />
+          <p className="-mt-1 text-[12px] font-bold text-muted">{L('pe_pen_desc')}</p>
+          <div {...penAttrs(penForm)} style={{ ...penAttrs(penForm).style, ['--pen-base' as any]: '18px' }} className="rounded-xl border-2 border-dashed border-ink/15 bg-white px-4 py-3" aria-live="polite">
+            <p className="pb-label">{L('pen_preview')}</p>
+            <p className="pen-text pen-size mt-1 break-words leading-relaxed">{form.nickname || form.name || L('field_name')}</p>
+            <p className="pen-text mt-0.5 break-words text-[15px] leading-relaxed">{form.message || L('pen_preview_sample')}</p>
+          </div>
+          <PenFontPicker pen={penForm} lang={lang} onChange={(p) => { penTouched.current = true; setPenForm(p); }} />
+          <div className="pt-1"><PenInkPicker pen={penForm} lang={lang} onChange={(p) => { penTouched.current = true; setPenForm(p); }} /></div>
+        </section>
+
+        {/* ===== きせかえ：小さなプロフ帳の表紙で選ぶ（テーマIDと適用ロジックは従来どおり） ===== */}
+        <section id="pe-theme" className="pb-sheet scroll-mt-32 p-5">
+          <PrintedHeading no="09" kicker="DRESS UP" title={L('pe_theme_title')} />
+          <p className="-mt-1 mb-3 text-[12px] font-bold text-muted">{L('pe_theme_desc')}</p>
+          <div className="grid grid-cols-4 gap-x-2 gap-y-3 sm:grid-cols-8">
+            {APP_THEMES.map((th) => {
+              const on = appTheme === th.id;
               return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => onChangeTheme(t.id)}
-                  className={`flex flex-col items-center gap-1 rounded-2xl p-2 transition ${isActive ? 'bg-pink/10 ring-2 ring-pink' : 'hover:bg-base'}`}
-                >
-                  <span
-                    className="h-10 w-10 rounded-full shadow-inner"
-                    style={{ background: t.preview }}
-                  />
-                  <span className="text-[10px] font-black text-ink leading-tight">{t.emoji}</span>
-                  <span className="text-[10px] font-bold text-muted leading-tight">{t.name}</span>
+                <button key={th.id} type="button" onClick={() => onChangeTheme(th.id)} aria-pressed={on}
+                  className="group flex flex-col items-center gap-1 text-center">
+                  <MiniBookCover themeId={th.id} emoji={th.emoji} selected={on} />
+                  <span className={`block w-full line-clamp-2 break-words text-[11px] leading-tight ${on ? 'font-black text-ink' : 'font-bold text-ink/75'}`}>{L(`theme_${th.id}`)}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* ── 手に入れた背景テーマ（ガチャ・ショップ購入分） ── */}
-          <div className="mt-6 border-t border-dashed border-pink/20 pt-5">
-            <p className="mb-1 text-sm font-black text-ink">🖼 手に入れた背景テーマ</p>
-            <p className="mb-3 text-[11px] font-bold text-muted">ガチャ・ショップでゲットしたテーマ。アプリ全体の背景に反映されます</p>
+          {/* 手に入れた背景（ガチャ・ショップ）も同じ「表紙」で着せ替え */}
+          <div className="mt-5 border-t-2 border-dotted border-ink/10 pt-4">
+            <p className="pb-label pb-label-md">🖼 {L('pe_owned_bg_title')}</p>
+            <p className="mb-3 mt-0.5 text-[11px] font-bold text-muted">{L('pe_owned_bg_desc')}</p>
             {(() => {
               const ownedThemes = [
-                ...BG_THEMES.filter((t) => ownedBgIds.includes(t.id)),
-                ...COLOR_THEMES.filter((t) => ownedThemeIds.includes(t.id)),
+                ...BG_THEMES.filter((bg) => ownedBgIds.includes(bg.id)),
+                ...COLOR_THEMES.filter((bg) => ownedThemeIds.includes(bg.id)),
               ];
               if (ownedThemes.length === 0) {
                 return (
-                  <button
-                    type="button"
-                    onClick={() => go('shop')}
-                    className="w-full rounded-2xl border-2 border-dashed border-pink/30 py-4 text-xs font-black text-pink hover:bg-pink/5"
-                  >
-                    まだ持っていないよ。ショップでゲットしよう！ →
+                  <button type="button" onClick={() => go('shop')}
+                    className="min-h-[44px] w-full rounded-lg border-2 border-dashed border-pink/30 px-3 text-xs font-black text-pinkStrong hover:bg-pink/5">
+                    {L('pe_owned_bg_empty')} →
                   </button>
                 );
               }
               return (
-                <div className="grid grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => onEquipBg(null)}
-                    className={`overflow-hidden rounded-2xl text-left transition ${!equippedBgId ? 'ring-2 ring-pink' : 'opacity-80 hover:opacity-100'}`}
-                  >
-                    <div className="grid h-16 place-items-center bg-base text-[10px] font-black text-muted">なし</div>
-                    <p className="bg-white px-2 py-1.5 text-[10px] font-black text-ink">ノーマル</p>
+                <div className="grid grid-cols-4 gap-x-2 gap-y-3 sm:grid-cols-8">
+                  <button type="button" onClick={() => onEquipBg(null)} aria-pressed={!equippedBgId} className="flex flex-col items-center gap-1">
+                    <MiniBookCover themeId="default" emoji="📔" selected={!equippedBgId} plain />
+                    <span className="block w-full line-clamp-2 break-words text-[11px] font-bold leading-tight text-ink/80">{L('pe_bg_none')}</span>
                   </button>
-                  {ownedThemes.map((t) => {
-                    const equipped = equippedBgId === t.id;
+                  {ownedThemes.map((bg) => {
+                    const equipped = equippedBgId === bg.id;
                     return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => onEquipBg(equipped ? null : t.id)}
-                        className={`overflow-hidden rounded-2xl text-left transition ${equipped ? 'ring-2 ring-pink' : 'opacity-80 hover:opacity-100'}`}
-                      >
-                        <div className="relative h-16 overflow-hidden">
-                          <SceneBackground theme={t} scale={0.55} />
-                          {equipped && (
-                            <span className="absolute right-1 top-1 rounded-full bg-pink px-1.5 py-0.5 text-[8px] font-black text-white">使用中</span>
-                          )}
-                        </div>
-                        <p className="truncate bg-white px-2 py-1.5 text-[10px] font-black text-ink">{t.name}</p>
+                      <button key={bg.id} type="button" onClick={() => onEquipBg(equipped ? null : bg.id)} aria-pressed={equipped} className="flex flex-col items-center gap-1">
+                        <MiniBookCover themeId="default" emoji={bg.emoji} selected={equipped} scene={bg} />
+                        <span className="block w-full line-clamp-2 break-words text-[11px] font-bold leading-tight text-ink/80">{bg.name}</span>
                       </button>
                     );
                   })}
@@ -4152,59 +4117,109 @@ function ProfileEditScreen({
           </div>
         </section>
 
-        {/* ── 通知設定 ── */}
-        <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">🔔 通知設定</p>
-          <p className="mb-4 text-xs font-bold text-muted">ブラウザ通知の許可が必要です</p>
-          <label className="flex cursor-pointer items-center justify-between rounded-2xl bg-base px-4 py-3.5">
+        {/* ===== プレミアム設定（公認ユーザーのみ） ===== */}
+        {me.isOfficial && (
+          <section className="space-y-4 rounded-[24px] border-2 border-amber-100 bg-white p-5 shadow-card">
             <div>
-              <p className="text-sm font-black text-ink">今日のお題を通知</p>
-              <p className="text-xs font-bold text-muted">毎日お題が届いたら即お知らせ</p>
+              <p className="text-base font-black text-ink">✨ {L('pe_premium_title')}</p>
+              <p className="mt-1 text-xs font-bold text-muted">{L('pe_premium_desc')}</p>
             </div>
-            <div
-              onClick={() => onToggleNotifyOdai(!notifyOdai)}
-              className={`relative h-7 w-12 rounded-full transition-colors ${notifyOdai ? 'bg-pink' : 'bg-zinc-200'}`}
-            >
-              <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${notifyOdai ? 'translate-x-6' : 'translate-x-1'}`} />
+            <EditField label={L('pe_premium_intro')} value={premiumForm.description} onChange={(v) => setPremiumForm((p) => ({ ...p, description: v }))} />
+            <div className="flex items-center gap-3">
+              <label className="shrink-0 text-xs font-bold text-muted">{L('pe_premium_price')}</label>
+              <input type="number" min={0} value={premiumForm.price}
+                onChange={(e) => setPremiumForm((p) => ({ ...p, price: Number(e.target.value) || 480 }))}
+                className="w-full rounded-2xl border border-amber-200 bg-amber-50/40 px-4 py-2 text-sm font-bold outline-none focus:border-amber-400" />
             </div>
-          </label>
-          {notifyOdai && (
-            <p className="mt-2 text-center text-[11px] font-bold text-pink">✓ 通知オン — 毎日のお題をお知らせします</p>
-          )}
-        </section>
+            <div>
+              <p className="mb-2 text-sm font-black text-ink">{L('pe_premium_qa')}</p>
+              {premiumForm.questions.map((item, i) => (
+                <div key={i} className="mb-3 space-y-2 rounded-2xl bg-amber-50 p-4">
+                  <EditField label={`Q${i + 1}`} value={item.q} onChange={(v) => {
+                    const next = [...premiumForm.questions]; next[i] = { ...next[i], q: v }; setPremiumForm((p) => ({ ...p, questions: next }));
+                  }} />
+                  <EditField label={`A${i + 1}`} value={item.a} onChange={(v) => {
+                    const next = [...premiumForm.questions]; next[i] = { ...next[i], a: v }; setPremiumForm((p) => ({ ...p, questions: next }));
+                  }} />
+                  <button type="button" onClick={() => setPremiumForm((p) => ({ ...p, questions: p.questions.filter((_, j) => j !== i) }))}
+                    className="text-xs font-black text-pink">{L('btn_delete')}</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setPremiumForm((p) => ({ ...p, questions: [...p.questions, { q: '', a: '' }] }))}
+                className="w-full rounded-2xl border border-dashed border-amber-300 bg-amber-50 py-3 text-sm font-black text-amber-700 active:scale-[0.99]">
+                ＋ {L('pe_qa_add')}
+              </button>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold text-muted">{L('pe_premium_note')}</label>
+              <textarea value={premiumForm.note} onChange={(e) => setPremiumForm((p) => ({ ...p, note: e.target.value }))} rows={3} maxLength={300}
+                className="w-full resize-none rounded-3xl border border-amber-200 bg-amber-50/40 p-4 text-sm font-bold outline-none focus:border-amber-400 leading-6"
+                placeholder={L('ph_premium_note')} />
+            </div>
+          </section>
+        )}
 
-        {/* ── シェア ── */}
-        <section className="pb-sheet p-5">
-          <p className="mb-1 text-base font-black text-ink">📤 プロフィールをシェア</p>
-          <p className="mb-4 text-xs font-bold text-muted">QRコードや画像でプロフィールを友達にシェアできます</p>
-          <button
-            onClick={() => setShowShare(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink to-purple py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]"
-          >
-            <Share2 size={16} />シェア・QRコードを表示
-          </button>
-        </section>
-
-        </div>
-        {/* ご意見・不具合を送る（テスター用の窓口） */}
-        <section className="rounded-[32px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-base font-black text-ink">💬 ご意見・不具合を送る</p>
-          <p className="mb-4 text-xs font-bold text-muted">テスト中の気づき・要望・バグを運営に直接送れます</p>
-          <button type="button" onClick={() => setShowFeedback(true)}
-            className="w-full rounded-2xl bg-blue-400 px-5 py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]">
-            フィードバックを送る
-          </button>
-        </section>
-
-        <button
-          type="button"
-          onClick={onLogout}
-          className="mt-2 w-full rounded-[24px] border-2 border-red-200 bg-white px-5 py-4 text-base font-black text-red-500 active:scale-[0.99]"
-        >
-          ログアウト
+        <button onClick={saveAll} className="min-h-[56px] w-full rounded-[20px] bg-pink px-5 py-4 text-base font-black text-white shadow-card active:scale-[0.99]">
+          {L('btn_save_reflect')}
         </button>
+
+        {/* ===== せってい（すぐ反映される項目） ===== */}
+        <div id="pe-settings" className="scroll-mt-32 space-y-4 pt-2">
+          <PrintedHeading no="10" kicker="SETTINGS" title={L('idx_settings')} />
+          {/* 通知 */}
+          <section className="pb-sheet p-5">
+            <p className="mb-1 text-base font-black text-ink">🔔 {L('pe_notify_title')}</p>
+            <p className="mb-4 text-xs font-bold text-muted">{L('pe_notify_desc')}</p>
+            <button type="button" role="switch" aria-checked={notifyOdai} onClick={() => onToggleNotifyOdai(!notifyOdai)}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-base px-4 py-3.5 text-left">
+              <span>
+                <span className="block text-sm font-black text-ink">{L('pe_notify_daily')}</span>
+                <span className="block text-xs font-bold text-muted">{L('pe_notify_daily_desc')}</span>
+              </span>
+              <span aria-hidden className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${notifyOdai ? 'bg-pink' : 'bg-zinc-300'}`}>
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${notifyOdai ? 'translate-x-6' : 'translate-x-1'}`} />
+              </span>
+            </button>
+            {notifyOdai && <p className="mt-2 text-center text-[11px] font-bold text-pinkStrong">✓ {L('pe_notify_on')}</p>}
+          </section>
+          {/* シェア */}
+          <section className="pb-sheet p-5">
+            <p className="mb-1 text-base font-black text-ink">📤 {L('pe_share_title')}</p>
+            <p className="mb-4 text-xs font-bold text-muted">{L('pe_share_desc')}</p>
+            <button onClick={() => setShowShare(true)}
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-pink to-purple py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]">
+              <Share2 size={16} />{L('pe_share_btn')}
+            </button>
+          </section>
+          {/* ご意見・不具合 */}
+          <section className="pb-sheet p-5">
+            <p className="mb-1 text-base font-black text-ink">💬 {L('pe_feedback_title')}</p>
+            <p className="mb-4 text-xs font-bold text-muted">{L('pe_feedback_desc')}</p>
+            <button type="button" onClick={() => setShowFeedback(true)}
+              className="min-h-[48px] w-full rounded-2xl bg-blue-500 px-5 py-3.5 text-sm font-black text-white shadow-card active:scale-[0.98]">
+              {L('pe_feedback_btn')}
+            </button>
+          </section>
+          <button type="button" onClick={onLogout}
+            className="min-h-[52px] w-full rounded-[20px] border-2 border-red-200 bg-white px-5 py-4 text-base font-black text-red-600 active:scale-[0.99]">
+            {L('btn_logout')}
+          </button>
+        </div>
       </div>
 
+      {/* ID・表示名の変更ページへ移る前の確認 */}
+      {confirmIdPage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-6" onClick={() => setConfirmIdPage(false)}>
+          <div role="dialog" aria-modal="true" aria-label={L('pe_id_confirm_title')} className="w-full max-w-xs rounded-[24px] bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-center text-sm font-black text-ink">{L('pe_id_confirm_title')}</p>
+            <p className="mt-2 text-center text-[12px] font-bold leading-relaxed text-muted">{L('pe_id_confirm_desc')}</p>
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={() => setConfirmIdPage(false)} className="min-h-[44px] flex-1 rounded-full border border-ink/15 text-sm font-black text-ink">{L('btn_cancel')}</button>
+              <button type="button" onClick={() => { window.location.href = '/setup'; }} className="min-h-[44px] flex-1 rounded-full bg-pink text-sm font-black text-white">{L('btn_go')}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showShare && (
         <ProfileShareModal
           userId={me.id}
@@ -4216,7 +4231,7 @@ function ProfileEditScreen({
         />
       )}
       {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
-    </>
+    </EditLangContext.Provider>
   );
 }
 
@@ -5127,21 +5142,61 @@ function OfficialQuestionCreateScreen({
   );
 }
 // 項目ごとの公開範囲チップ。タップで 公開→フォロワー→非公開 を巡回。
+// 編集画面の表示言語（項目の部品がプレースホルダーや選択肢の表示に使う）
+const EditLangContext = createContext<Lang>('ja');
+
+// きせかえ用：テーマごとの表紙の色（globals.css の各テーマの色トークンと同じ値）
+const THEME_SWATCH: Record<string, { cover: string; accent: string; paper: string }> = {
+  default:    { cover: '#4F73E8', accent: '#A47BFF', paper: '#FFF8EE' },
+  lavender:   { cover: '#B79AEF', accent: '#F58DB2', paper: '#F8F5FF' },
+  soda:       { cover: '#60A5FA', accent: '#A78BFA', paper: '#F0F9FF' },
+  herb:       { cover: '#34D399', accent: '#60A5FA', paper: '#F0FDF4' },
+  peach:      { cover: '#FB923C', accent: '#F58DB2', paper: '#FFF7ED' },
+  strawberry: { cover: '#F87171', accent: '#F58DB2', paper: '#FFF1F2' },
+  banana:     { cover: '#EAB308', accent: '#FB923C', paper: '#FEFCE8' },
+  night:      { cover: '#2A2350', accent: '#D8B4FE', paper: '#201B3C' },
+};
+/** 小さなプロフ帳の表紙（背表紙・ラベル・シール）。選んだものはマステと ✓ で「いまの表紙」 */
+function MiniBookCover({ themeId, emoji, selected, plain = false, scene }: { themeId: string; emoji: string; selected: boolean; plain?: boolean; scene?: BgTheme }) {
+  const sw = THEME_SWATCH[themeId] ?? THEME_SWATCH.default;
+  return (
+    <span className={`relative block aspect-[3/4] w-full max-w-[76px] transition ${selected ? '-translate-y-1' : 'group-hover:-translate-y-0.5'}`}>
+      {selected && <span aria-hidden className="pb-tape !absolute -top-1.5 left-1/2 z-20 h-3 w-9 -translate-x-1/2 !p-0" style={{ transform: 'translateX(-50%) rotate(-5deg)' }} />}
+      <span className={`absolute inset-0 overflow-hidden rounded-r-md rounded-l-sm shadow-[0_3px_6px_rgba(0,0,0,.18)] ${selected ? 'ring-2 ring-pink ring-offset-2 ring-offset-white' : ''}`}
+        style={{ background: plain ? '#f3f0ea' : sw.cover }}>
+        {scene && <span className="absolute inset-0"><SceneBackground theme={scene} scale={0.4} /></span>}
+        {/* 背表紙 */}
+        <span aria-hidden className="absolute inset-y-0 left-0 w-[14%] bg-black/15" />
+        {/* 表紙のラベル（紙） */}
+        <span aria-hidden className="absolute left-[24%] right-[10%] top-[22%] rounded-sm px-1 py-[3px]" style={{ background: sw.paper }}>
+          <span className="block h-[3px] rounded-full" style={{ background: sw.accent, opacity: 0.8 }} />
+          <span className="mt-[3px] block h-[2px] w-2/3 rounded-full bg-black/15" />
+          <span className="mt-[3px] block h-[2px] w-1/2 rounded-full bg-black/15" />
+        </span>
+        {/* シール */}
+        <span aria-hidden className="absolute bottom-[10%] right-[10%] grid h-[30%] w-[38%] place-items-center rounded-full bg-white text-[13px] shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_1px_3px_rgba(0,0,0,.2)]">{emoji}</span>
+      </span>
+      {selected && <span aria-hidden className="absolute -right-1.5 -top-1.5 z-20 grid h-5 w-5 place-items-center rounded-full bg-pink text-[11px] font-black text-white shadow-[inset_0_0_0_2px_rgba(255,255,255,.85)]">✓</span>}
+    </span>
+  );
+}
+
 function VisChip({ value = 'public', onChange }: { value?: FieldVisibility; onChange: (v: FieldVisibility) => void }) {
   const order: FieldVisibility[] = ['public', 'followers', 'private'];
   // 見出しの横に貼る小さな「見せる相手」タグ（タップで みんな → フォロワー → ひみつ）
+  const lang = useContext(EditLangContext);
   const meta: Record<FieldVisibility, { t: string; icon: string; c: string }> = {
-    public: { t: 'みんな', icon: '👀', c: 'border-ink/20 bg-white' },
-    followers: { t: 'フォロワー', icon: '👥', c: 'border-purple/50 bg-purple/15' },
-    private: { t: 'ひみつ', icon: '🔒', c: 'border-[#d9473f]/50 bg-[#d9473f]/15' },
+    public: { t: t('vis_public', lang), icon: '👀', c: 'border-ink/20 bg-white' },
+    followers: { t: t('vis_followers', lang), icon: '👥', c: 'border-purple/50 bg-purple/15' },
+    private: { t: t('vis_private', lang), icon: '🔒', c: 'border-[#d9473f]/50 bg-[#d9473f]/15' },
   };
   const m = meta[value] ?? meta.public;
   return (
     <button
       type="button"
       onClick={() => onChange(order[(order.indexOf(value) + 1) % order.length])}
-      aria-label={`見せる相手：${m.t}（タップで切り替え）`}
-      title="タップで見せる相手を切り替え（みんな→フォロワー→ひみつ）"
+      aria-label={tf('vis_aria', lang, { v: m.t })}
+      title={t('vis_hint', lang)}
       className={`inline-flex min-h-[30px] shrink-0 items-center gap-1 rounded-md border border-dashed px-2 text-[11px] font-black text-ink transition active:scale-95 ${m.c}`}
     >
       <span aria-hidden>{m.icon}</span>{m.t}
@@ -5189,6 +5244,7 @@ function EditField({
 
 // 誕生日：月・日のプルダウン（値は "M月D日" 形式で保存し既存表示と互換）
 function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  const lang = useContext(EditLangContext);
   // 月・日を独立して読み取る（「3月」だけ／「15日」だけの途中状態も保持・表示できる）。
   const month = ((value ?? '').match(/(\d{1,2})月/) || [])[1] || '';
   const day = ((value ?? '').match(/(\d{1,2})日/) || [])[1] || '';
@@ -5203,19 +5259,17 @@ function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; 
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className="mt-1 grid grid-cols-2 gap-2">
-        <select value={month} onChange={(e) => set(e.target.value, day)} className={sel(!!month)}>
-          <option value="">月を選ぶ</option>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => <option key={mo} value={mo}>{mo}月</option>)}
+        <select value={month} aria-label={`${label} ${t('ph_month', lang)}`} onChange={(e) => set(e.target.value, day)} className={sel(!!month)}>
+          <option value="">{t('ph_month', lang)}</option>
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((mo) => <option key={mo} value={mo}>{monthName(mo - 1, lang)}</option>)}
         </select>
-        <select value={day} onChange={(e) => set(month, e.target.value)} className={sel(!!day)}>
-          <option value="">日を選ぶ</option>
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((da) => <option key={da} value={da}>{da}日</option>)}
+        <select value={day} aria-label={`${label} ${t('ph_day', lang)}`} onChange={(e) => set(month, e.target.value)} className={sel(!!day)}>
+          <option value="">{t('ph_day', lang)}</option>
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((da) => <option key={da} value={da}>{lang === 'ja' ? `${da}日` : da}</option>)}
         </select>
       </div>
       {(month || day) && (
-        <p className="pb-label mt-1.5">
-          ✎ {month ? `${month}月` : '—'}{day ? `${day}日` : ''} と書きます
-        </p>
+        <p className="pb-label mt-1.5">✎ {formatBirthday(value, lang)}</p>
       )}
     </div>
   );
@@ -5223,6 +5277,7 @@ function BirthdayField({ label, value, onChange, vis, onVis }: { label: string; 
 
 // なまえ：姓・名を分けて入力（値は "姓 名" のスペース区切りで保存）
 function NameField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  const lang = useContext(EditLangContext);
   const parts = (value ?? '').split(/\s+/);
   const last = parts[0] ?? '';
   const first = parts.slice(1).join(' ');
@@ -5232,8 +5287,8 @@ function NameField({ label, value, onChange, vis, onVis }: { label: string; valu
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className="mt-1 flex gap-2">
-        <input value={last} onChange={(e) => set(e.target.value, first)} placeholder="姓" className={inp} />
-        <input value={first} onChange={(e) => set(last, e.target.value)} placeholder="名" className={inp} />
+        <input value={last} onChange={(e) => set(e.target.value, first)} placeholder={t('ph_last_name', lang)} aria-label={`${label} ${t('ph_last_name', lang)}`} className={inp} />
+        <input value={first} onChange={(e) => set(last, e.target.value)} placeholder={t('ph_first_name', lang)} aria-label={`${label} ${t('ph_first_name', lang)}`} className={inp} />
       </div>
     </div>
   );
@@ -5257,6 +5312,7 @@ function SelectField({
   onVis?: (v: FieldVisibility) => void;
 }) {
   // 選んだものは「貼ったシール」、まだのものは白い札。もう一度押すと外せる。
+  const lang = useContext(EditLangContext);
   return (
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
@@ -5275,7 +5331,7 @@ function SelectField({
                   : 'bg-white text-ink/80 ring-1 ring-ink/15 hover:bg-pink/5'
               }`}
             >
-              {on && <span aria-hidden className="mr-0.5 text-pinkStrong">✓</span>}{opt}
+              {on && <span aria-hidden className="mr-0.5 text-pinkStrong">✓</span>}{tv(opt, lang)}
             </button>
           );
         })}
@@ -5286,20 +5342,22 @@ function SelectField({
 
 // 血液型：プロフ帳の「A・B・O・AB」に手書きの丸をつける
 function BloodTypeField({ label, value, onChange, options, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; options: string[]; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  const lang = useContext(EditLangContext);
+  const suffix = t('blood_suffix', lang); // 「型」（英語などは空）
   return (
     <div>
       <FieldLabel label={label} vis={vis} onVis={onVis} />
       <div className="mt-1.5 flex flex-wrap items-center gap-x-1 rounded-lg bg-white px-2 py-1 ring-1 ring-ink/10">
         {options.map((opt, i) => {
           const on = value === opt;
-          const short = opt.replace(/型$/, '');
+          const short = /型$/.test(opt) ? opt.replace(/型$/, '') : tv(opt, lang);
           return (
             <span key={opt} className="flex items-center">
-              {i > 0 && <span aria-hidden className="px-0.5 text-muted">{/型$/.test(options[i - 1]) && !/型$/.test(opt) ? '型 ・' : '・'}</span>}
+              {i > 0 && <span aria-hidden className="px-0.5 text-muted">{/型$/.test(options[i - 1]) && !/型$/.test(opt) && suffix ? `${suffix} ・` : '・'}</span>}
               <button
                 type="button"
                 aria-pressed={on}
-                aria-label={opt}
+                aria-label={/型$/.test(opt) ? `${opt.replace(/型$/, '')}${suffix}` : tv(opt, lang)}
                 onClick={() => onChange(on ? '' : opt)}
                 className={`pb-choice min-h-[44px] min-w-[44px] !text-[17px] ${on ? 'pb-choice-on' : '!text-ink/75'}`}
               >
@@ -5308,7 +5366,7 @@ function BloodTypeField({ label, value, onChange, options, vis, onVis }: { label
             </span>
           );
         })}
-        {options.length > 0 && /型$/.test(options[options.length - 1]) && <span aria-hidden className="ml-1 text-[12px] font-black text-muted">型</span>}
+        {suffix && options.length > 0 && /型$/.test(options[options.length - 1]) && <span aria-hidden className="ml-1 text-[12px] font-black text-muted">{suffix}</span>}
       </div>
     </div>
   );
@@ -5338,13 +5396,11 @@ function CheckListField({ label, value, onChange, options, vis, onVis }: { label
 }
 
 // MBTI：16個から探すのではなく、4つの軸を選んでいくと結果が決まる「診断カード」
-const MBTI_AXES: { a: string; b: string; la: string; lb: string }[] = [
-  { a: 'E', b: 'I', la: '外向', lb: '内向' },
-  { a: 'N', b: 'S', la: '直感', lb: '感覚' },
-  { a: 'T', b: 'F', la: '思考', lb: '感情' },
-  { a: 'J', b: 'P', la: '計画', lb: '柔軟' },
+const MBTI_AXES: { a: string; b: string }[] = [
+  { a: 'E', b: 'I' }, { a: 'N', b: 'S' }, { a: 'T', b: 'F' }, { a: 'J', b: 'P' },
 ];
 function MbtiField({ label, value, onChange, vis, onVis }: { label: string; value: string; onChange: (v: string) => void; vis?: FieldVisibility; onVis?: (v: FieldVisibility) => void }) {
+  const lang = useContext(EditLangContext);
   const valid = /^[EI][NS][TF][JP]$/.test(value ?? '');
   const [picks, setPicks] = useState<(string | null)[]>(() => (valid ? value.split('') : [null, null, null, null]));
   useEffect(() => { if (/^[EI][NS][TF][JP]$/.test(value ?? '')) setPicks(value.split('')); }, [value]);
@@ -5362,15 +5418,15 @@ function MbtiField({ label, value, onChange, vis, onVis }: { label: string; valu
       <div className="mt-1.5 rounded-lg bg-white p-3 ring-1 ring-ink/10">
         <div className="space-y-1.5">
           {MBTI_AXES.map((ax, i) => (
-            <div key={ax.a} className="flex items-center gap-1.5" role="radiogroup" aria-label={`${ax.la}か${ax.lb}か`}>
-              {[[ax.a, ax.la], [ax.b, ax.lb]].map(([letter, word], j) => {
+            <div key={ax.a} className="flex items-center gap-1.5" role="radiogroup" aria-label={`${t(`mbti_${ax.a}`, lang)} / ${t(`mbti_${ax.b}`, lang)}`}>
+              {[[ax.a, t(`mbti_${ax.a}`, lang)], [ax.b, t(`mbti_${ax.b}`, lang)]].map(([letter, word], j) => {
                 const on = picks[i] === letter;
                 return (
                   <Fragment key={letter}>
-                    {j === 1 && <span aria-hidden className="text-[11px] font-black text-muted">or</span>}
+                    {j === 1 && <span aria-hidden className="text-[11px] font-black text-muted">/</span>}
                     <button type="button" role="radio" aria-checked={on} onClick={() => pick(i, letter)}
-                      className={`flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-md text-[13px] font-black transition ${on ? 'bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.15)]' : 'text-ink/75 ring-1 ring-ink/15'}`}>
-                      <span className="gk-font text-[15px]">{letter}</span>{word}
+                      className={`flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1 text-[13px] font-black leading-tight transition ${on ? 'bg-cream text-ink shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.15)]' : 'text-ink/75 ring-1 ring-ink/15'}`}>
+                      <span className="gk-font text-[15px]">{letter}</span><span className="min-w-0 truncate">{word}</span>
                     </button>
                   </Fragment>
                 );
@@ -5379,14 +5435,14 @@ function MbtiField({ label, value, onChange, vis, onVis }: { label: string; valu
           ))}
         </div>
         <div className="mt-2.5 flex items-center gap-2 border-t-2 border-dotted border-ink/10 pt-2">
-          <span className="pb-label">けっか</span>
+          <span className="pb-label">{t('mbti_result', lang)}</span>
           <span className="inline-flex gap-1" aria-live="polite">
             {picks.map((c, i) => <span key={i} className="pb-letterbox gk-font">{c ?? '?'}</span>)}
           </span>
-          {done && <span aria-hidden className="pb-stamp h-9 w-9 -rotate-12 text-[9px]">けって<br />い！</span>}
+          {done && <span aria-hidden className="pb-stamp h-9 w-9 -rotate-12 text-[9px] leading-tight">{t('mbti_done', lang)}</span>}
           {(done || picks.some(Boolean)) && (
             <button type="button" onClick={() => { setPicks([null, null, null, null]); onChange(''); }}
-              className="ml-auto min-h-[36px] px-1 text-[11px] font-bold text-muted underline decoration-dotted underline-offset-4">わからない・消す</button>
+              className="ml-auto min-h-[36px] px-1 text-[11px] font-bold text-muted underline decoration-dotted underline-offset-4">{t('mbti_clear', lang)}</button>
           )}
         </div>
       </div>
@@ -5398,11 +5454,15 @@ function Best3EditBlock({
   title,
   items,
   onChange,
+  hideTitle = false,
 }: {
   title: string;
   items: string[];
   onChange: (next: string[]) => void;
+  /** 見出しを外に出しているとき（今月のおだい）は表示しない */
+  hideTitle?: boolean;
 }) {
+  const lang = useContext(EditLangContext);
   const safeItems = [items[0] || '', items[1] || '', items[2] || ''];
 
   const updateItem = (index: number, value: string) => {
@@ -5413,7 +5473,7 @@ function Best3EditBlock({
 
   return (
     <div className="space-y-2.5 rounded-xl border border-ink/10 bg-white/70 p-3.5">
-      <p className="pb-label pb-label-md">{title}</p>
+      {!hideTitle && <p className="pb-label pb-label-md">{title}</p>}
 
       {safeItems.map((item, index) => (
         <label key={index} className="flex items-center gap-3">
@@ -5421,7 +5481,8 @@ function Best3EditBlock({
           <input
             value={item}
             onChange={(e) => updateItem(index, e.target.value)}
-            placeholder={`${index + 1}位を入力`}
+            placeholder={tf('ph_rank', lang, { n: index + 1 })}
+            aria-label={`${title} ${tf('ph_rank', lang, { n: index + 1 })}`}
             className="pen-text w-full rounded-xl border-2 border-ink/10 bg-white px-3.5 py-2.5 text-[15px] font-bold text-ink outline-none focus:border-pink"
           />
         </label>
