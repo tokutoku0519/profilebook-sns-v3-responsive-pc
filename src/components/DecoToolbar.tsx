@@ -9,6 +9,7 @@ import { useId, useState } from 'react';
 import { RetroEmojiPicker } from '@/components/RetroEmoji';
 import { DEFAULT_PEN, PEN_FONTS, PEN_INKS, PEN_SIZES, type Pen } from '@/lib/pen';
 import { t, type Lang } from '@/lib/i18n';
+import { useLang } from '@/lib/langContext';
 
 type Tool = 'pen' | 'marker' | 'sticker' | 'deco';
 
@@ -22,7 +23,7 @@ export function DecoToolbar({
   sticker,
   onOpenSticker,
   onInsertDeco,
-  lang = 'ja',
+  lang: langProp,
 }: {
   lang?: Lang;
   pen: Pen | null;
@@ -32,6 +33,9 @@ export function DecoToolbar({
   onOpenSticker?: () => void;
   onInsertDeco: (code: string) => void;
 }) {
+  // 言語を渡されなければアプリの表示言語
+  const ctxLang = useLang();
+  const lang = langProp ?? ctxLang;
   const [tool, setTool] = useState<Tool>('pen');
   const cur = pen ?? DEFAULT_PEN;
   const uid = useId();
@@ -90,7 +94,9 @@ export function DecoToolbar({
 }
 
 /** ペンの書体と大きさを選ぶ部品（回答のツールバー・プロフィール編集で共用） */
-export function PenFontPicker({ pen, onChange, hint, lang = 'ja' }: { pen: Pen; onChange: (pen: Pen) => void; hint?: string; lang?: Lang }) {
+export function PenFontPicker({ pen, onChange, hint, lang: langProp }: { pen: Pen; onChange: (pen: Pen) => void; hint?: string; lang?: Lang }) {
+  const ctxLang = useLang();
+  const lang = langProp ?? ctxLang;
   return (
     <>
       <p className="pb-label mb-1.5">{hint ?? t('pen_font_label', lang)}</p>
@@ -139,7 +145,9 @@ export function PenFontPicker({ pen, onChange, hint, lang = 'ja' }: { pen: Pen; 
 }
 
 /** インクの色を選ぶ部品（マーカーのキャップ風） */
-export function PenInkPicker({ pen, onChange, lang = 'ja' }: { pen: Pen; onChange: (pen: Pen) => void; lang?: Lang }) {
+export function PenInkPicker({ pen, onChange, lang: langProp }: { pen: Pen; onChange: (pen: Pen) => void; lang?: Lang }) {
+  const ctxLang = useLang();
+  const lang = langProp ?? ctxLang;
   return (
     <>
       <p className="pb-label mb-1.5">{t('pen_ink_label', lang)}</p>

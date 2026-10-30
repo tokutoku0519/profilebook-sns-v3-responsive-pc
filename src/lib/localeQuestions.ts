@@ -1,4 +1,5 @@
-import type { Lang } from './i18n';
+import { tv, type Lang } from './i18n';
+import { hasQuestionText, questionText } from './questionI18n';
 
 export type LocaleQuestion = {
   id: string;
@@ -378,7 +379,9 @@ const questionsJa: LocaleQuestion[] = [
 ];
 
 // ───── English ─────
-const questionsEn: LocaleQuestion[] = [
+// 以前の英語のお題（eq*）。いまの英語の出題は公式のお題（d*）の英訳を使う。
+// 昔の回答は保存されたお題の文で表示されるので、ここは記録として残す。
+export const questionsEn: LocaleQuestion[] = [
   { id: 'eq1',  category: 'Nostalgia', title: 'What was your favorite childhood TV show?', sponsor: null },
   { id: 'eq2',  category: 'Nostalgia', title: 'What game were you obsessed with as a kid?', sponsor: null },
   { id: 'eq3',  category: 'Nostalgia', title: 'What toy or collectible did you always want?', sponsor: null },
@@ -396,9 +399,9 @@ const questionsEn: LocaleQuestion[] = [
   { id: 'eq16', category: 'Basics',    title: 'If you could only take one thing to a desert island, what would it be?', sponsor: null },
   { id: 'eq18', category: 'Basics',    title: "What's your guilty pleasure?", sponsor: null },
   { id: 'eq19', category: 'Basics',    title: "What's something you want to try this year?", sponsor: null },
-  { id: 'eq20', category: 'Late Night','title': "What do you do when you can\\'t sleep?", sponsor: null },
+  { id: 'eq20', category: 'Late Night',title: "What do you do when you can't sleep?", sponsor: null },
   { id: 'eq21', category: 'Late Night', title: "Song you'd listen to alone late at night?", sponsor: null },
-  { id: 'eq22', category: 'Basics',    title: "What\\'s your most-used emoji?", sponsor: null },
+  { id: 'eq22', category: 'Basics',    title: "What's your most-used emoji?", sponsor: null },
   { id: 'eq3c', category: 'Collab',    title: 'How do you treat yourself lately?', sponsor: 'mellow milk' },
 ];
 
@@ -498,26 +501,46 @@ const questionsTh: LocaleQuestion[] = [
   { id: 'thq3c', category: 'คอลแลบ',   title: 'ช่วงนี้รางวัลให้ตัวเองคืออะไร?', sponsor: 'mellow milk' },
 ];
 
+// 公式のお題（日本語の原文）をIDで引くための表
+const JA_BY_ID = new Map(questionsJa.map((q) => [q.id, q]));
+
+/**
+ * お題を閲覧者の言語で表示するための写しを返す（元のオブジェクト・保存データは変えない）。
+ *  - 公式のお題（IDが questionsJa にある）：日本語は原文、ほかの言語は questionI18n の訳（無ければ英語 → 原文）
+ *  - それ以外（ユーザーが作ったお題・PR・昔の言語別お題）：保存された文のまま（英語の訳があるデモ用IDだけ訳す）
+ *  - カテゴリ名：決まった名前なら表示用の訳（tv）
+ */
+export function localizeQuestion<T extends { id?: string; title: string; category?: string }>(q: T, lang: Lang): T {
+  if (!q) return q;
+  const ja = q.id ? JA_BY_ID.get(q.id) : undefined;
+  const baseTitle = ja ? ja.title : q.title;
+  // 公式以外でも、PR質問のように表示用の訳がある決まった文なら訳す（ユーザーが作ったお題はそのまま）
+  const title = lang === 'ja' ? baseTitle : questionText(q.id, ja ? baseTitle : tv(baseTitle, lang), lang);
+  const baseCat = ja ? ja.category : q.category;
+  const category = baseCat ? tv(baseCat, lang) : baseCat;
+  if (title === q.title && category === q.category) return q;
+  return { ...q, title, category };
+}
+
+// 日本語以外で、公式のお題の訳がまだ無い言語のための、その言語で作ったお題（IDは別）
+const LEGACY_POOLS: Partial<Record<Lang, LocaleQuestion[]>> = { ko: questionsKo, zh: questionsZh, 'zh-tw': questionsZhTw, th: questionsTh };
+
 export function getQuestionsForLang(lang: Lang): LocaleQuestion[] {
   const all = (() => {
-    switch (lang) {
-      case 'ja': return questionsJa;
-      case 'ko': return questionsKo;
-      case 'zh': return questionsZh;
-      case 'zh-tw': return questionsZhTw;
-      case 'th': return questionsTh;
-      default: return questionsEn;
-    }
+    if (lang === 'ja') return questionsJa;
+    // 公式のお題（ID共通）にその言語の訳があれば、それを使う（いまは英語）
+    const shared = questionsJa.filter((q) => hasQuestionText(q.id, lang));
+    if (shared.length) return shared.map((q) => localizeQuestion(q, lang));
+    // 訳がまだ無い言語：その言語で作ったお題があればそれ、無ければ英語の公式のお題
+    const legacy = LEGACY_POOLS[lang];
+    if (legacy) return legacy;
+    return questionsJa.filter((q) => hasQuestionText(q.id, 'en')).map((q) => localizeQuestion(q, lang));
   })();
   // スポンサー付き（PR/コラボのサンプル）は通常のお題一覧には出さない。
   // データ自体は残してあるので、正式なPR案件を扱うときに再利用できる。
   return all.filter((q) => !q.sponsor);
 }
 
-// ───── 質問のブラッシュアップ用（本実装後に随時編集）─────
-// 反応が悪い・回答が少ない質問は、ここに id を足すだけで
-// 「デイリー出題」「新規回答の一覧」から出なくできる。
-// ※ 質問データ自体は残るので、過去に付いた回答の表示は壊れない。
 // 例）export const RETIRED_QIDS = new Set<string>(['d123', 'd200']);
 export const RETIRED_QIDS = new Set<string>([]);
 

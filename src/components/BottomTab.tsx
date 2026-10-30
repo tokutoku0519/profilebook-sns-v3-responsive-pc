@@ -21,7 +21,7 @@ export function BottomTab({ active, onChange, lang = 'ja', unread = 0, themeGrad
   const navBg = themeGradient ? `bg-gradient-to-t ${themeGradient}` : 'bg-[#FFFCF5]/95';
   return (
     <nav
-      aria-label="メインメニュー"
+      aria-label={t('nav_main_menu', lang)}
       className={`absolute bottom-0 left-0 right-0 z-30 rounded-t-[22px] px-3 pt-2 shadow-[0_-6px_18px_rgba(156,125,173,.16)] backdrop-blur ${navBg}`}
       style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}
     >

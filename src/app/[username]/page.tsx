@@ -30,7 +30,7 @@ import { initialAnswers, profiles, questions } from '@/lib/data';
 import { isDev } from '@/lib/env';
 import { DEFAULT_PEN, normalizePen, penAttrs, setCachedPen, useUserPen, type Pen } from '@/lib/pen';
 import { DecoToolbar, PenFontPicker, PenInkPicker } from '@/components/DecoToolbar';
-import { getQuestionsForLang, getActiveQuestionsForLang } from '@/lib/localeQuestions';
+import { getQuestionsForLang, getActiveQuestionsForLang, localizeQuestion } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
 import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
@@ -38,6 +38,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
 import { addProperNames } from '@/lib/properNames';
+import { LangContext, useLang } from '@/lib/langContext';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
 import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
@@ -58,7 +59,14 @@ type Answer = (typeof initialAnswers)[number];
 type Profile = (typeof profiles)[number];
 
 // アプリ内アクティビティの通知（localStorage 永続化）
-type AppNotification = { id: number; icon: string; text: string; at: number };
+// key があれば表示のときにその言語で組み立てる（text は日本語の控え＝古い通知はこれだけ）
+type AppNotification = { id: number; icon: string; text: string; at: number; key?: string; vars?: Record<string, string | number> };
+function notifText(n: { text: string; key?: string; vars?: Record<string, string | number> }, lang: Lang): string {
+  if (!n.key) return n.text;
+  // 差し込む値が決まった名前（背景名など）なら表示用の訳にする。ユーザーの名前・文はそのまま
+  const vars = Object.fromEntries(Object.entries(n.vars ?? {}).map(([k, v]) => [k, typeof v === 'string' ? tv(v, lang) : v]));
+  return tf(n.key, lang, vars);
+}
 
 type DraftAnswer = {
   questionId: string;
@@ -578,7 +586,7 @@ function ProfileProgress({ info, lang = 'ja' }: { info: typeof defaultProfileBoo
               key={m.pct}
               className={`absolute top-1/2 grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-[11px] shadow-sm ring-2 transition ${reached ? 'bg-white ring-pink' : 'bg-white/80 ring-pink/20 grayscale'}`}
               style={{ left: `${m.pct}%` }}
-              title={`${m.pct}%: ${m.label}`}
+              title={`${m.pct}%: ${tv(m.label, lang)}`}
             >
               {m.emoji}
             </span>
@@ -1323,7 +1331,7 @@ function DesktopNav({ active, go, lang = 'ja', currentScreen }: { active: TabKey
   );
   const secondary: { screen: Screen; label: string; icon: any }[] = [
     { screen: 'shop', label: t('nav_shop', lang), icon: ShoppingBag },
-    { screen: 'collab', label: 'コラボ', icon: Handshake },
+    { screen: 'collab', label: t('nav_collab', lang), icon: Handshake },
     { screen: 'circles', label: t('nav_circles', lang), icon: Lock },
     { screen: 'followers', label: t('nav_following', lang), icon: Users },
     { screen: 'settings', label: t('nav_settings', lang), icon: Settings },
@@ -1383,8 +1391,8 @@ function RightRail({ answers, go, avatarUrl, ownedStickerCount, lang = 'ja', tra
         <SectionHeader title={t('feed_popular', lang)} />
         <div className="space-y-3">{answers.slice(0,3).map((answer) => (
           <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full rounded-2xl bg-base p-3 text-left hover:bg-pink/10">
-            <span className="inline-block rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pinkStrong">{answer.question?.category}</span>
-            <span className="mt-1 block text-xs font-black leading-5 text-ink line-clamp-2">Q. {answer.question?.title}</span>
+            <span className="inline-block rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pinkStrong">{answer.question ? localizeQuestion(answer.question, lang).category : ''}</span>
+            <span className="mt-1 block text-xs font-black leading-5 text-ink line-clamp-2">Q. {answer.question ? localizeQuestion(answer.question, lang).title : ''}</span>
             <span className="mt-0.5 block text-xs font-bold leading-5 text-muted line-clamp-2">{(translatedAnswerBodies[answer.id] ?? answer.body).slice(0,50)}</span>
           </button>
         ))}</div>
@@ -1487,11 +1495,11 @@ function HomeScreen({
   <section className="space-y-3">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-black text-ink">
-        公認ユーザーのお題
+        {t('home_community_q', lang)}
       </h2>
 
       <button onClick={() => go('search')} className="text-xs font-black text-pink">
-        もっと見る
+        {t('btn_see_more', lang)}
       </button>
     </div>
 
@@ -1508,7 +1516,7 @@ function HomeScreen({
         >
           <OfficialBadge />
           <span className="text-xs font-black text-muted underline decoration-dotted underline-offset-2">
-            {q.createdByName} が作成
+            {tf('home_created_by', lang, { name: q.createdByName })}
           </span>
         </button>
 
@@ -1534,21 +1542,21 @@ function HomeScreen({
         <section className="relative">
           <span className="pointer-events-none absolute -right-1 -top-3 z-10"><RetroStar /></span>
           <SectionHeader
-            title="今日のお題"
-            action={hasAnsweredToday ? '回答済み ✅' : '答える'}
+            title={t('home_today', lang)}
+            action={hasAnsweredToday ? `${t('home_answered', lang)} ✅` : t('home_answer', lang)}
             onAction={() => go('daily-question')}
           />
           <button onClick={() => go('daily-question')} className="block w-full text-left">
             <div className="relative overflow-hidden rounded-[28px] bg-white p-4 shadow-card active:scale-[0.98] transition">
               <div className="mb-2 flex items-center gap-2">
-                <span className="rounded-full bg-base px-2 py-0.5 text-[10px] font-black text-muted">📅 毎日更新</span>
+                <span className="rounded-full bg-base px-2 py-0.5 text-[10px] font-black text-muted">📅 {t('home_daily_badge', lang)}</span>
               </div>
-              <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion?.title}</p>
+              <p className="text-base font-black text-ink leading-relaxed pr-2">{dailyQuestion ? localizeQuestion(dailyQuestion, lang).title : ''}</p>
               <div className="mt-3 flex items-center gap-2">
                 {hasAnsweredToday ? (
-                  <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">🔓 みんなの回答を見る</span>
+                  <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">🔓 {t('home_see_answers', lang)}</span>
                 ) : (
-                  <span className="rounded-full bg-purple/10 px-3 py-1 text-[10px] font-black text-purple">🔒 答えるとみんなの回答が見えます</span>
+                  <span className="rounded-full bg-purple/10 px-3 py-1 text-[10px] font-black text-purple">🔒 {t('home_locked', lang)}</span>
                 )}
               </div>
             </div>
@@ -1558,7 +1566,7 @@ function HomeScreen({
         {SHOW_PR_QUESTIONS && (
         <section>
           <div className="flex items-center mb-3">
-            <h2 className="text-lg font-black text-ink">💼 PR案件</h2>
+            <h2 className="text-lg font-black text-ink">💼 {t('home_pr', lang)}</h2>
           </div>
           <button
             onClick={() => !hasAnsweredPR && go('create', { ...prQuestion, id: prQuestion.id, category: 'PR', title: prQuestion.question })}
@@ -1574,9 +1582,9 @@ function HomeScreen({
                 <CoinIcon size={13} /> +{prQuestion.reward}
               </span>
             </div>
-            <p className="text-sm font-black text-ink leading-relaxed">{prQuestion.question}</p>
+            <p className="text-sm font-black text-ink leading-relaxed">{tv(prQuestion.question, lang)}</p>
             <p className="mt-2 text-[10px] font-bold text-ink/60">
-              {hasAnsweredPR ? '✅ 本日分回答済み' : '答えるとコインがもらえます'}
+              {hasAnsweredPR ? `✅ ${t('home_pr_done', lang)}` : t('home_pr_reward', lang)}
             </p>
           </button>
         </section>
@@ -1588,14 +1596,14 @@ function HomeScreen({
           {!isTranslating && answers.length === 0 && (
             <button onClick={() => go('create')} className="flex w-full flex-col items-center gap-2 rounded-[28px] border border-dashed border-pink/40 bg-white/70 px-6 py-8 text-center shadow-card transition active:scale-[0.99]">
               <span className="text-3xl">🌱</span>
-              <p className="text-sm font-black text-ink">まだ回答がありません</p>
-              <p className="text-xs font-bold text-muted">最初のお題に答えて、みんなの一番乗りになろう！</p>
-              <span className="mt-1 rounded-full bg-pink px-4 py-1.5 text-xs font-black text-white">お題に答える</span>
+              <p className="text-sm font-black text-ink">{t('home_empty_title', lang)}</p>
+              <p className="text-xs font-bold text-muted">{t('home_empty_desc', lang)}</p>
+              <span className="mt-1 rounded-full bg-pink px-4 py-1.5 text-xs font-black text-white">{t('btn_answer_topic', lang)}</span>
             </button>
           )}
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
             {isTranslating && (
-              <p className="w-full text-center text-xs font-bold text-muted py-2">🌐 翻訳中...</p>
+              <p className="w-full text-center text-xs font-bold text-muted py-2">🌐 {t('msg_translating', lang)}</p>
             )}
             {answers.map((answer) => (
               <button key={answer.id} onClick={() => go('detail', answer.id)} className="min-w-[288px] text-left transition active:scale-[0.98]">
@@ -1606,10 +1614,10 @@ function HomeScreen({
         </section>
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />🤝 交換日記</h2>
+            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink"><RetroHeart scale={0.85} />🤝 {t('sec_diary', lang)}</h2>
             <button onClick={() => go('diary-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
           </div>
-          <p className="mt-0.5 text-[11px] font-bold text-muted">みんなで1冊に書き込む、テーマ制の日記</p>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">{t('home_diary_desc', lang)}</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {diaryPages.slice(0, 5).map((page) => (
               <button key={page.id} onClick={() => go('diary-detail', page.id)} className="min-w-[220px] rounded-[24px] bg-gradient-to-br from-pink/10 via-white to-purple/10 p-4 text-left shadow-card active:scale-[0.98]">
@@ -1627,10 +1635,10 @@ function HomeScreen({
         {/* ブログ（個人記事・交換日記とは別機能） */}
         <section>
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink">📔 ブログ</h2>
+            <h2 className="flex items-center gap-1.5 text-lg font-black text-ink">📔 {t('pb_blog', lang)}</h2>
             <button onClick={() => go('blog-list')} className="text-xs font-black text-pink">{t('btn_see_more', lang)}</button>
           </div>
-          <p className="mt-0.5 text-[11px] font-bold text-muted">タイトルをつけて書く、自分だけのブログ</p>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">{t('home_blog_desc', lang)}</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {[...blogPosts].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()).slice(0, 5).map((p) => (
               <button key={p.id} onClick={() => go('blog-detail', p.id)} className="min-w-[220px] max-w-[220px] overflow-hidden rounded-[24px] bg-gradient-to-br from-purple/10 via-white to-pink/10 text-left shadow-card active:scale-[0.98]">
@@ -1641,7 +1649,7 @@ function HomeScreen({
                 )}
                 <div className="p-4">
                   <p className="text-sm">{p.weather}{p.mood}</p>
-                  <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || '無題のブログ'}</p>
+                  <p className="mt-1 font-black leading-snug text-ink line-clamp-1" style={{ color: p.textColor || undefined }}>{p.title || t('pb_blog_untitled', lang)}</p>
                   <p className="mt-1 line-clamp-2 text-xs font-bold text-muted"><RetroText text={blogPlain(p.body)} /></p>
                   <div className="mt-2.5 flex items-center gap-1.5">
                     <AvatarBubble value={p.authorAvatar} className="h-6 w-6 text-xs" />
@@ -1655,16 +1663,16 @@ function HomeScreen({
               </button>
             ))}
             <button onClick={() => go('blog-create')} className="grid min-w-[110px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-sm font-black text-purple shadow-card active:scale-[0.98]">
-              ＋ ブログを書く
+              ＋ {t('home_blog_write', lang)}
             </button>
           </div>
         </section>
         <section>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-ink">🔒 {t('nav_circles', lang)}</h2>
-            <button onClick={() => go('circles')} className="text-xs font-black text-pink">さがす →</button>
+            <button onClick={() => go('circles')} className="text-xs font-black text-pink">{t('tab_search', lang)} →</button>
           </div>
-          <p className="mt-0.5 text-[11px] font-bold text-muted">仲間だけのコミュニティ。作る／さがして参加できます</p>
+          <p className="mt-0.5 text-[11px] font-bold text-muted">{t('home_circle_desc', lang)}</p>
           <div className="-mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
             {circles.map((c) => {
               const latest = circlePosts.filter((p) => p.circleId === c.id).slice(-1)[0];
@@ -1680,7 +1688,7 @@ function HomeScreen({
             })}
             <button onClick={() => go('circles')}
               className="grid min-w-[130px] place-items-center rounded-[24px] border border-dashed border-purple/40 bg-white px-4 text-center text-sm font-black text-purple shadow-card active:scale-[0.98]">
-              🔍 サークルを<br />さがす
+              🔍 {t('home_circle_find', lang)}
             </button>
             <button onClick={() => go('circle-create')}
               className="grid min-w-[100px] place-items-center rounded-[24px] border border-dashed border-pink/40 bg-white px-4 text-sm font-black text-pink shadow-card active:scale-[0.98]">
@@ -1712,7 +1720,7 @@ function HomeScreen({
         <div className="pixel-picker-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="pixel-picker-sheet relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
-            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
+            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">{t('react_sticker', lang)}</p>
             <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
           </div>
         </div>
@@ -1720,6 +1728,12 @@ function HomeScreen({
     </>
   );
 }
+
+// さがす画面の話題タグ（表示は翻訳キー、検索には日本語の語も使う）
+const TREND_TAGS = [
+  { key: 'tag_heisei', ja: '平成' }, { key: 'tag_lunch', ja: '給食' }, { key: 'tag_nightowl', ja: '夜型' },
+  { key: 'tag_indoor', ja: 'インドア' }, { key: 'tag_oshi', ja: '推し活' }, { key: 'tag_afterschool', ja: '放課後' },
+];
 
 function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, likedIds, onLike, onReact, myStickers = [] }: {
   go: (s: Screen, payload?: any) => void;
@@ -1732,17 +1746,22 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
   onReact?: (answerId: string, type: string) => void;
   myStickers?: string[];
 }) {
+  const lang = useLang();
   const [query, setQuery] = useState('');
   const [stickerPickerFor, setStickerPickerFor] = useState<string | null>(null);
   const [mode, setMode] = useState<'answer' | 'person' | 'question' | 'match'>('answer');
+  // 話題タグ：表示は閲覧者の言語。押したときは訳と日本語の両方で探す（回答は日本語で書かれていることが多いため）
+  const tagHit = TREND_TAGS.find((tg) => t(tg.key, lang) === query.trim());
+  const terms = [query.toLowerCase(), ...(tagHit ? [tagHit.ja.toLowerCase()] : [])];
+  const hit = (text: string) => terms.some((w) => text.toLowerCase().includes(w));
   // 回答タブでお題を選んで絞り込むためのお題ID（'' = すべてのお題）
   const [selectedOdaiId, setSelectedOdaiId] = useState('');
   const filteredAnswers = answers.filter((a) =>
-    `${a.body} ${a.question?.title ?? ''} ${a.user.name}`.toLowerCase().includes(query.toLowerCase())
+    hit(`${a.body} ${a.question?.title ?? ''} ${a.question ? localizeQuestion(a.question, lang).title : ''} ${a.user.name}`)
     && (!selectedOdaiId || a.question?.id === selectedOdaiId)
   );
   const localProfiles = profiles.filter((p) => `${p.name} ${p.id} ${p.bio} ${p.common}`.toLowerCase().includes(query.toLowerCase()));
-  const filteredQuestions = questionList.filter((q) => `${q.title} ${q.category}`.toLowerCase().includes(query.toLowerCase()));
+  const filteredQuestions = questionList.filter((q) => hit(`${q.title} ${q.category}`));
 
   // なかま検索：Supabase の実ユーザーも検索（入力が止まってから照会）
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
@@ -1785,25 +1804,25 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
 
   return (
     <>
-      <AppHeader title="さがす" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('header_search', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="px-4 pt-3">
         <div className="flex items-center gap-2 rounded-full border border-purple-100 bg-white px-4 py-3 shadow-card">
           <Search size={20} className="text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="回答・お題・ユーザーを検索" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder={t('search_ph', lang)} />
         </div>
         <div className="mt-4 grid grid-cols-4 rounded-full bg-white p-1 text-center text-xs font-bold shadow-card">
-          <button onClick={() => setMode('answer')} className={`rounded-full py-2 ${mode === 'answer' ? 'bg-pink text-white' : 'text-muted'}`}>回答</button>
-          <button onClick={() => setMode('question')} className={`rounded-full py-2 ${mode === 'question' ? 'bg-pink text-white' : 'text-muted'}`}>お題</button>
-          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>なかま</button>
-          <button onClick={() => setMode('match')} className={`rounded-full py-2 ${mode === 'match' ? 'bg-pink text-white' : 'text-muted'}`}>共通点</button>
+          <button onClick={() => setMode('answer')} className={`rounded-full py-2 ${mode === 'answer' ? 'bg-pink text-white' : 'text-muted'}`}>{t('label_answers', lang)}</button>
+          <button onClick={() => setMode('question')} className={`rounded-full py-2 ${mode === 'question' ? 'bg-pink text-white' : 'text-muted'}`}>{t('search_tab_topics', lang)}</button>
+          <button onClick={() => setMode('person')} className={`rounded-full py-2 ${mode === 'person' ? 'bg-pink text-white' : 'text-muted'}`}>{t('search_tab_people', lang)}</button>
+          <button onClick={() => setMode('match')} className={`rounded-full py-2 ${mode === 'match' ? 'bg-pink text-white' : 'text-muted'}`}>{t('search_tab_match', lang)}</button>
         </div>
 
         {mode === 'match' ? (
           <div className="mt-4 space-y-4 pb-8">
-            <p className="text-xs font-bold text-muted">プロフ帳の共通点から、仲良くなれそうな人をさがしているよ 🍀</p>
+            <p className="text-xs font-bold text-muted">{t('search_match_desc', lang)} 🍀</p>
             {matches.length === 0 ? (
               <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-                共通点のある人が見つかりませんでした。<br />プロフィールを編集すると増えます！
+                {t('search_match_empty', lang)}
               </div>
             ) : matches.map(({ profile, field, value }) => (
               <button key={profile.id} onClick={() => go('profile', profile.id)}
@@ -1812,20 +1831,20 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
                 <div className="min-w-0 flex-1">
                   <p className="font-black text-ink">{profile.name}</p>
                   <p className="text-xs font-bold text-muted">{profile.id}</p>
-                  <p className="mt-1 text-xs font-bold text-pink">✨ {field}が一緒：{value}</p>
+                  <p className="mt-1 text-xs font-bold text-pink">✨ {tf('fl_common', lang, { label: tv(field, lang), v: tv(value, lang) })}</p>
                 </div>
-                <span className="rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink">プロフ帳</span>
+                <span className="shrink-0 rounded-full bg-pink/10 px-3 py-2 text-xs font-black text-pink">{t('search_book', lang)}</span>
               </button>
             ))}
             <div className="rounded-[24px] bg-cream/60 px-4 py-3 text-xs font-bold text-muted">
-              💡 血液型・MBTIなどを設定で選択すると共通点が見つかりやすくなります
+              💡 {t('search_match_tip', lang)}
             </div>
           </div>
         ) : (
           <>
             <div className="mt-4 flex flex-wrap gap-2">
-              {['平成', '給食', '夜型', 'インドア', '推し活', '放課後'].map((tag) => (
-                <button key={tag} onClick={() => setQuery(tag)} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-muted shadow-card">#{tag}</button>
+              {TREND_TAGS.map((tg) => (
+                <button key={tg.key} onClick={() => setQuery(t(tg.key, lang))} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-muted shadow-card">#{t(tg.key, lang)}</button>
               ))}
             </div>
 
@@ -1845,19 +1864,19 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
                   }}
                   className="w-full rounded-2xl border border-purple-100 bg-white p-3 text-sm font-bold text-ink outline-none shadow-card"
                 >
-                  <option value="">{mode === 'answer' ? 'すべてのお題' : 'お題を選んで答える…'}</option>
+                  <option value="">{mode === 'answer' ? t('search_all_topics', lang) : t('search_pick_topic', lang)}</option>
                   {questionList.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
                 </select>
               </div>
             )}
 
             <section className="mt-6 space-y-3">
-              <SectionHeader title={mode === 'answer' ? '回答を探す' : mode === 'person' ? 'なかまを探す' : 'お題を探す'} />
+              <SectionHeader title={mode === 'answer' ? t('search_find_answers', lang) : mode === 'person' ? t('search_find_people', lang) : t('search_find_topics', lang)} />
               {mode === 'answer' && filteredAnswers.map((answer) => <button key={answer.id} onClick={() => go('detail', answer.id)} className="block w-full text-left"><AnswerCard answer={answer} liked={likedIds?.has(answer.id)} reactions={reactionsMap?.[answer.id]} onLike={onLike ? () => onLike(answer.id) : undefined} onSticker={onReact ? () => setStickerPickerFor(answer.id) : undefined} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} /></button>)}
               {mode === 'person' && <div className="grid grid-cols-2 gap-3">{filteredProfiles.map((profile) => <button key={profile.id} onClick={() => go('profile', profile)} className="text-left"><ProfileCard profile={profile} /></button>)}</div>}
               {mode === 'question' && filteredQuestions.map((question) => <button key={question.id} onClick={() => go('create', question)} className="block w-full text-left"><QuestionCard question={question} /></button>)}
               {((mode === 'answer' && filteredAnswers.length === 0) || (mode === 'person' && filteredProfiles.length === 0) || (mode === 'question' && filteredQuestions.length === 0)) && (
-                <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">見つかりませんでした。別の言葉で探してみてね。</div>
+                <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">{t('search_none', lang)}</div>
               )}
             </section>
           </>
@@ -1869,7 +1888,7 @@ function SearchScreen({ go, answers, myProfile, questionList, reactionsMap, like
         <div className="pixel-picker-overlay fixed inset-0 z-50 flex items-end justify-center" onClick={() => setStickerPickerFor(null)}>
           <div className="absolute inset-0 bg-black/30" />
           <div className="pixel-picker-sheet relative w-full max-w-md p-3" onClick={(e) => e.stopPropagation()}>
-            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">スタンプでリアクション</p>
+            <p className="mb-2 px-2 text-xs font-black text-white drop-shadow">{t('react_sticker', lang)}</p>
             <EmojiPicker myStickers={myStickers} onPick={(e) => { onReact(stickerPickerFor, e); setStickerPickerFor(null); }} />
           </div>
         </div>
@@ -1890,6 +1909,7 @@ function StickerPickerPanel({
   onSelect: (sticker: StickerItem) => void;
   onClose: () => void;
 }) {
+  const lang = useLang();
   const [activePack, setActivePack] = useState<string | null>(null);
 
   const usablePacks = STICKER_PACKS.filter((p) =>
@@ -1947,8 +1967,8 @@ function StickerPickerPanel({
         ) : (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <p className="text-2xl mb-2">🎭</p>
-            <p className="text-sm font-black text-ink">スタンプがありません</p>
-            <p className="text-xs font-bold text-muted">ショップでスタンプを入手しよう</p>
+            <p className="text-sm font-black text-ink">{t('stamp_none', lang)}</p>
+            <p className="text-xs font-bold text-muted">{t('stamp_none_desc', lang)}</p>
           </div>
         )}
       </div>
@@ -1978,6 +1998,7 @@ function CreateScreen({
   pen?: Pen | null;
   onPenChange?: (pen: Pen) => void;
 }) {
+  const lang = useLang();
   const [createMode, setCreateMode] = useState<'question' | 'diary'>('question');
   // 便せんに表示するペン（未設定の人には既定の手書きペンで書き心地を見せる）
   const writingPen = pen ?? DEFAULT_PEN;
@@ -2078,7 +2099,7 @@ function CreateScreen({
 
   return (
     <>
-      <AppHeader title="書き込む" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('create_title', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-8">
 
         {/* モード切替タブ */}
@@ -2087,13 +2108,13 @@ function CreateScreen({
             onClick={() => setCreateMode('question')}
             className={`rounded-full py-2.5 transition ${createMode === 'question' ? 'bg-pink text-white shadow-sm' : 'text-muted'}`}
           >
-            ✏️ お題に答える
+            ✏️ {t('btn_answer_topic', lang)}
           </button>
           <button
             onClick={() => setCreateMode('diary')}
             className={`rounded-full py-2.5 transition ${createMode === 'diary' ? 'bg-pink text-white shadow-sm' : 'text-muted'}`}
           >
-            📖 日記に書く
+            📖 {t('create_tab_diary', lang)}
           </button>
         </div>
 
@@ -2105,7 +2126,7 @@ function CreateScreen({
                 フリー作成時のみ、答えるお題を選べるドロップダウンを表示する。 */}
             {!isLocked && (
               <section className="rounded-[28px] bg-white p-4 shadow-card">
-                <label className="mb-2 block text-sm font-bold">答えるお題</label>
+                <label className="mb-2 block text-sm font-bold">{t('create_pick_topic', lang)}</label>
                 <select value={draft.questionId} onChange={(e) => setDraft({ ...draft, questionId: e.target.value })} className="w-full rounded-2xl border border-purple-100 bg-base p-3 text-sm font-bold outline-none">
                   {questionList.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}
                 </select>
@@ -2116,7 +2137,7 @@ function CreateScreen({
             <section className="pb-sheet px-4 pb-4 pt-4">
               <PrintedHeading
                 kicker="WRITE"
-                title={<label htmlFor="answer-body">あなたの回答</label>}
+                title={<label htmlFor="answer-body">{t('create_your_answer', lang)}</label>}
                 right={selectedQuestion?.answerType !== 'select' ? <span className="pb-label pb-0.5">{draft.body.length}/160</span> : undefined}
               />
               {selectedQuestion?.answerType === 'select' && Array.isArray(selectedQuestion?.answerOptions) && selectedQuestion.answerOptions.length > 0 ? (
@@ -2141,7 +2162,7 @@ function CreateScreen({
                       onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                       style={{ lineHeight: '34px', backgroundOrigin: 'content-box' }}
                       className="pen-text pen-size notebook-lines h-44 w-full resize-none rounded-2xl border-2 border-dashed border-pink/25 bg-white p-4 outline-none focus:border-pink placeholder:font-sans placeholder:text-[14px] placeholder:text-muted"
-                      placeholder="ここにプロフィール帳みたいに書いてね"
+                      placeholder={t('create_ph', lang)}
                     />
                   </div>
                   <div className="mt-3">
@@ -2155,14 +2176,14 @@ function CreateScreen({
                   </div>
                   {/* できあがり：みんなのタイムラインでの見え方（デコ絵文字も絵で表示） */}
                   <div className="mt-3 rounded-xl border-2 border-dotted border-ink/15 bg-white px-3 py-2.5" aria-live="polite">
-                    <p className="pb-label mb-1">できあがり</p>
+                    <p className="pb-label mb-1">{t('create_preview', lang)}</p>
                     <div className="flex items-start gap-2">
                       <p
                         {...penAttrs(writingPen)}
                         style={{ ...penAttrs(writingPen).style, ['--pen-base' as any]: '17px' }}
                         className="pen-text pen-size notebook-lines min-h-[2rem] min-w-0 flex-1 rounded-xl px-2 py-1 leading-8"
                       >
-                        {draft.body ? <RetroText text={draft.body} /> : <span className="font-sans text-[13px] font-bold text-muted">書くとここに表示されます</span>}
+                        {draft.body ? <RetroText text={draft.body} /> : <span className="font-sans text-[13px] font-bold text-muted">{t('create_preview_empty', lang)}</span>}
                       </p>
                       <span aria-hidden className="grid h-10 w-10 shrink-0 rotate-6 place-items-center rounded-full bg-cream text-xl shadow-[inset_0_0_0_2px_rgba(255,255,255,.9),0_2px_4px_rgba(0,0,0,.15)]">{draft.sticker}</span>
                     </div>
@@ -2173,14 +2194,14 @@ function CreateScreen({
             {/* 選択式のお題でもシールは貼れる（記述式はツールバーの「シール」から） */}
             {selectedQuestion?.answerType === 'select' && (
               <section className="pb-sheet px-4 pb-4 pt-4">
-                <PrintedHeading kicker="STICKER" title="シール" />
+                <PrintedHeading kicker="STICKER" title={t('tool_sticker', lang)} />
                 <div className="flex items-center gap-3">
                   <span className="grid h-14 w-14 place-items-center rounded-2xl bg-pink/10 text-3xl">{draft.sticker}</span>
                   <button
                     onClick={() => setShowStickerPicker(true)}
                     className="flex-1 rounded-full border-2 border-dashed border-pink/30 py-3 text-sm font-black text-pink hover:bg-pink/5 active:scale-[0.98]"
                   >
-                    🎭 スタンプを変える
+                    🎭 {t('tool_sticker_change', lang)}
                   </button>
                 </div>
               </section>
@@ -2194,12 +2215,12 @@ function CreateScreen({
               />
             )}
             <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <label className="mb-2 block text-sm font-bold">公開範囲</label>
+              <label className="mb-2 block text-sm font-bold">{t('create_visibility', lang)}</label>
               <div className="grid grid-cols-3 gap-2 text-xs font-bold">
-                {[['public','全体公開'],['followers','フォロワー'],['private','非公開']].map(([key,label]) => <button key={key} onClick={() => setDraft({ ...draft, visibility: key as DraftAnswer['visibility'] })} className={`rounded-full py-3 ${draft.visibility === key ? 'bg-purple text-white' : 'bg-base text-muted'}`}>{label}</button>)}
+                {[['public', t('create_vis_public', lang)],['followers', t('create_vis_followers', lang)],['private', t('create_vis_private', lang)]].map(([key,label]) => <button key={key} onClick={() => setDraft({ ...draft, visibility: key as DraftAnswer['visibility'] })} className={`rounded-full py-3 ${draft.visibility === key ? 'bg-purple text-white' : 'bg-base text-muted'}`}>{label}</button>)}
               </div>
             </section>
-            <button onClick={submit} disabled={!canPost} className={`h-14 w-full rounded-full text-base font-black text-white shadow-floating transition ${canPost ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}>投稿する</button>
+            <button onClick={submit} disabled={!canPost} className={`h-14 w-full rounded-full text-base font-black text-white shadow-floating transition ${canPost ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}>{t('btn_post', lang)}</button>
           </>
         )}
 
@@ -2220,8 +2241,8 @@ function CreateScreen({
               ) : (
                 <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-[28px] border-2 border-dashed border-pink/30 bg-pink/5 shadow-card">
                   <span className="text-3xl">📷</span>
-                  <span className="text-sm font-bold text-muted">写真を追加</span>
-                  <span className="text-xs text-muted/60">タップして選ぶ</span>
+                  <span className="text-sm font-bold text-muted">{t('diary_add_photo', lang)}</span>
+                  <span className="text-xs text-muted/60">{t('diary_tap_pick', lang)}</span>
                 </div>
               )}
               <input type="file" accept="image/*" className="hidden" onChange={handleDiaryCaptionPhoto} />
@@ -2229,14 +2250,14 @@ function CreateScreen({
 
             {/* タイトルの色（ページの見出しに使われる）。本文の字は下の「わたしのペン」 */}
             <section className="pb-sheet p-4">
-              <p className="pb-label mb-2">タイトルの色</p>
+              <p className="pb-label mb-2">{t('diary_title_color', lang)}</p>
               <div className="flex gap-2 flex-wrap">
                 {DIARY_COLORS.map((c) => (
                   <button
                     key={c.value}
                     onClick={() => setDiaryColor(c.value)}
-                    title={c.label}
-                    aria-label={c.label}
+                    title={tv(c.label, lang)}
+                    aria-label={tv(c.label, lang)}
                     aria-pressed={diaryColor === c.value}
                     className={`h-8 w-8 rounded-full transition ${diaryColor === c.value ? 'ring-2 ring-offset-2 ring-pink scale-110' : ''}`}
                     style={{ backgroundColor: c.bg }}
@@ -2247,12 +2268,12 @@ function CreateScreen({
 
             {/* 公開範囲 */}
             <section className="rounded-[28px] bg-white p-4 shadow-card">
-              <p className="mb-2 text-xs font-black text-muted">書き込める相手</p>
+              <p className="mb-2 text-xs font-black text-muted">{t('diary_who_can_write', lang)}</p>
               <div className="grid grid-cols-3 gap-2">
                 {([
-                  ['followers', '👥', 'フォロワー'],
-                  ['mentioned', '✉️', '特定の人'],
-                  ['public',    '🌍', '全体'],
+                  ['followers', '👥', t('create_vis_followers', lang)],
+                  ['mentioned', '✉️', t('diary_aud_mentioned', lang)],
+                  ['public',    '🌍', t('diary_aud_public', lang)],
                 ] as const).map(([key, icon, label]) => (
                   <button
                     key={key}
@@ -2273,7 +2294,7 @@ function CreateScreen({
               {diaryVisibility === 'mentioned' && (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs font-black text-muted">
-                    招待するフォロワーを選んでね（{diaryMentionedIds.length}人選択中）
+                    {tf('diary_invite_pick', lang, { n: diaryMentionedIds.length })}
                   </p>
                   {followers.map((f) => {
                     const selected = diaryMentionedIds.includes(f.id);
@@ -2286,7 +2307,7 @@ function CreateScreen({
                         <span className="text-xl">{f.avatar}</span>
                         <span className="flex-1 text-sm font-black text-ink">{f.name}</span>
                         <span className={`text-xs font-black ${selected ? 'text-purple' : 'text-muted'}`}>
-                          {selected ? '✓ 招待中' : '招待する'}
+                          {selected ? `✓ ${t('diary_inviting', lang)}` : t('diary_invite', lang)}
                         </span>
                       </button>
                     );
@@ -2299,7 +2320,7 @@ function CreateScreen({
             <section className="pb-sheet p-4">
               {diaryNgError && (
                 <p className="mb-2 rounded-2xl bg-pink/10 px-3 py-2 text-xs font-black text-pink">
-                  不適切な言葉が含まれています。書き直してね。
+                  {t('ng_word', lang)}
                 </p>
               )}
               <div {...penAttrs(writingPen)} style={{ ...penAttrs(writingPen).style, ['--pen-base' as any]: '16px' }}>
@@ -2309,8 +2330,8 @@ function CreateScreen({
                   onChange={(e) => { setDiaryCaption(e.target.value); if (diaryNgError) setDiaryNgError(false); }}
                   maxLength={200}
                   rows={3}
-                  aria-label="日記の本文"
-                  placeholder="コメントを書く…（200文字以内）"
+                  aria-label={t('diary_body_aria', lang)}
+                  placeholder={t('diary_ph', lang)}
                   className="pen-text pen-size pb-ruled pb-ruled-rows w-full resize-none bg-transparent leading-7 outline-none"
                 />
               </div>
@@ -2328,7 +2349,7 @@ function CreateScreen({
                   disabled={!diaryCanSubmit}
                   className="rounded-full bg-pink px-6 py-2 text-sm font-black text-white disabled:opacity-40 active:scale-[0.98] transition"
                 >
-                  投稿する
+                  {t('btn_post', lang)}
                 </button>
               </div>
             </section>
@@ -4108,7 +4129,7 @@ function ProfileEditScreen({
                     return (
                       <button key={bg.id} type="button" onClick={() => onEquipBg(equipped ? null : bg.id)} aria-pressed={equipped} className="flex flex-col items-center gap-1">
                         <MiniBookCover themeId="default" emoji={bg.emoji} selected={equipped} scene={bg} />
-                        <span className="block w-full line-clamp-2 break-words text-[11px] font-bold leading-tight text-ink/80">{bg.name}</span>
+                        <span className="block w-full line-clamp-2 break-words text-[11px] font-bold leading-tight text-ink/80">{tv(bg.name, lang)}</span>
                       </button>
                     );
                   })}
@@ -5629,6 +5650,7 @@ function DetailScreen({
   ownedPackIds?: string[];
   ownedGachaStickers?: string[];
 }) {
+  const lang = useLang();
   const myStickers = getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers);
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -5673,7 +5695,7 @@ function DetailScreen({
 
   return (
     <>
-      <AppHeader title="回答詳細" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('detail_title', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
         <AnswerCard answer={answer} detail liked={likeInfo.mine} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
 
@@ -5686,7 +5708,7 @@ function DetailScreen({
               className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-black shadow-card transition active:scale-95 ${likeInfo.mine ? 'bg-pink text-white' : 'bg-white text-ink'}`}
             >
               <Heart size={18} fill={likeInfo.mine ? 'currentColor' : 'none'} className={heartPop ? 'heart-pop' : ''} />
-              すき{likeInfo.count > 0 && <span>{likeInfo.count}</span>}
+              {t('detail_like', lang)}{likeInfo.count > 0 && <span>{likeInfo.count}</span>}
             </button>
 
             {/* 付いている絵文字スタンプ（Slack風チップ） */}
@@ -5718,17 +5740,17 @@ function DetailScreen({
         {/* シェア・ブックマーク */}
         <div className="flex gap-3">
           <button
-            onClick={() => onShare(`「${answer.question?.title ?? ''}」\n\n${answer.body}\n\n— ${answer.user.name} on Miri`)}
+            onClick={() => onShare(`「${answer.question ? localizeQuestion(answer.question, lang).title : ''}」\n\n${answer.body}\n\n— ${answer.user.name} on Miri`)}
             className="flex flex-1 items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-black text-muted shadow-card transition active:scale-[0.98]"
           >
-            <Share2 size={16} />シェア
+            <Share2 size={16} />{t('detail_share', lang)}
           </button>
           <button
             onClick={() => onToggleBookmark(answer.id)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-full py-3 text-sm font-black shadow-card transition active:scale-[0.98] ${isBookmarked ? 'bg-pink text-white' : 'bg-white text-muted'}`}
           >
             <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
-            {isBookmarked ? '保存済み' : 'ブックマーク'}
+            {isBookmarked ? t('detail_saved', lang) : t('nav_bookmark', lang)}
           </button>
         </div>
 
@@ -5739,24 +5761,24 @@ function DetailScreen({
               onClick={() => onReport(answer.id)}
               className="text-[11px] font-bold text-muted underline underline-offset-2 active:opacity-70"
             >
-              🚩 この回答を通報する
+              🚩 {t('detail_report', lang)}
             </button>
           </div>
         )}
 
         <section className="rounded-[28px] bg-white p-4 shadow-card">
-          <SectionHeader title="コメント" />
+          <SectionHeader title={t('detail_comments', lang)} />
           <div className="mb-3 flex gap-2">
             <input value={comment} onChange={(e) => setComment(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addComment()}
-              placeholder="コメントする" className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" />
-            <button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">送信</button>
+              placeholder={t('detail_comment_ph', lang)} className="min-w-0 flex-1 rounded-full bg-base px-4 py-3 text-sm outline-none" />
+            <button onClick={addComment} className="rounded-full bg-pink px-4 text-xs font-black text-white">{t('btn_send', lang)}</button>
           </div>
           <div className="space-y-2">
-            {comments.length === 0 && <p className="py-2 text-center text-xs font-bold text-muted">まだコメントはありません。最初のひとことを！</p>}
+            {comments.length === 0 && <p className="py-2 text-center text-xs font-bold text-muted">{t('detail_no_comments', lang)}</p>}
             {comments.map((c) => (
               <div key={c.id} className="rounded-2xl bg-blue-50 p-3">
-                <p className="mb-0.5 text-[11px] font-black text-muted">{c.profile?.display_name ?? 'ゲスト'}</p>
+                <p className="mb-0.5 text-[11px] font-black text-muted">{c.profile?.display_name ?? t('guest', lang)}</p>
                 <p className="text-sm text-ink">{c.body}</p>
               </div>
             ))}
@@ -5764,10 +5786,10 @@ function DetailScreen({
         </section>
 
         <section>
-          <SectionHeader title="同じ回答の人" action="もっと見る" />
+          <SectionHeader title={t('detail_same_answer', lang)} action={t('btn_see_more', lang)} />
           <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">{profiles.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}</div>
         </section>
-        <button onClick={() => go('create')} className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating">このお題に答える</button>
+        <button onClick={() => go('create')} className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating">{t('btn_answer_q', lang)}</button>
       </div>
     </>
   );
@@ -5910,7 +5932,7 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
             <span className="grid h-10 w-10 place-items-center rounded-full bg-red-50 text-red-500">
               <LogOut size={18} />
             </span>
-            <p className="text-sm font-black text-red-500">ログアウト</p>
+            <p className="text-sm font-black text-red-500">{t('btn_logout', lang)}</p>
           </div>
           <span className="text-xs font-black text-red-400">→</span>
         </button>
@@ -5950,8 +5972,8 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-full bg-mint/40 text-xl">💾</span>
             <div className="text-left">
-              <p className="text-sm font-black text-ink">データをバックアップ</p>
-              <p className="text-xs font-bold text-muted">プロフ帳・回答・コイン・所持デコをJSON保存</p>
+              <p className="text-sm font-black text-ink">{t('mypage_backup', lang)}</p>
+              <p className="text-xs font-bold text-muted">{t('mypage_backup_desc', lang)}</p>
             </div>
           </div>
           <span className="text-xs font-black text-muted">↓</span>
@@ -6121,7 +6143,7 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
           </button>
           <button onClick={() => setTab('requests')}
             className={`relative rounded-xl py-2 text-sm font-black transition ${tab === 'requests' ? 'bg-white shadow-card text-purple' : 'text-muted'}`}>
-            申請 {incoming.length}
+            {t('fr_requests_tab', lang)} {incoming.length}
             {incoming.length > 0 && tab !== 'requests' && (
               <span className="absolute right-1.5 top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-purple px-1 text-[9px] font-black text-white">{incoming.length}</span>
             )}
@@ -6131,10 +6153,10 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
         {/* なかよし申請（受信） */}
         {tab === 'requests' && (
           <section className="space-y-3">
-            {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">読み込み中…</div>}
+            {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">{t('loading', lang)}</div>}
             {!loading && incoming.length === 0 && (
               <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">
-                届いているなかよし申請はありません
+                {t('fr_no_requests', lang)}
               </div>
             )}
             {incoming.map((person) => (
@@ -6147,14 +6169,14 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
                 </button>
                 <button onClick={() => go('profile', '@' + person.username)} className="min-w-0 flex-1 text-left">
                   <p className="font-black">{person.display_name || person.username}</p>
-                  <p className="text-xs font-bold text-muted">📖 プロフ帳を交換したいそうです</p>
+                  <p className="text-xs font-bold text-muted">📖 {t('fr_wants_swap', lang)}</p>
                 </button>
                 <button
                   onClick={() => accept(person)}
                   disabled={accepting === person.id}
                   className="shrink-0 rounded-full bg-purple px-4 py-2 text-[12px] font-black text-white transition active:scale-95 disabled:opacity-50"
                 >
-                  {accepting === person.id ? '…' : '✅ 承認'}
+                  {accepting === person.id ? '…' : `✅ ${t('fr_accept', lang)}`}
                 </button>
               </div>
             ))}
@@ -6163,10 +6185,10 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
 
         {tab !== 'requests' && (
         <section className="space-y-3">
-          {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">読み込み中…</div>}
+          {loading && <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">{t('loading', lang)}</div>}
           {!loading && list.length === 0 && (
             <div className="rounded-[24px] bg-white p-6 text-center text-sm font-bold text-muted shadow-card">
-              {tab === 'following' ? 'まだ誰もフォローしていません' : 'まだフォロワーはいません'}
+              {tab === 'following' ? t('fl_none_following', lang) : t('fl_none_followers', lang)}
             </div>
           )}
           {list.map((person) => {
@@ -6193,7 +6215,7 @@ function FollowersScreen({ go, lang = 'ja' }: { go: (s: Screen, payload?: any) =
                   </div>
                 </div>
                 <span className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-black ${close.level === 3 ? 'bg-pink/15 text-pink' : close.level === 2 ? 'bg-purple/10 text-purple' : 'bg-base text-muted'}`}>
-                  {close.label}
+                  {tv(close.label, lang)}
                 </span>
               </button>
             );
@@ -7719,17 +7741,18 @@ const CIRCLE_EMOJIS = ['🔒','🎭','📸','⚾','🎸','📚','🎨','💃','�
 function CirclesScreen({
   go, circles, circlePosts,
 }: { go: (s: Screen, payload?: any) => void; circles: Circle[]; circlePosts: CirclePost[] }) {
+  const lang = useLang();
   return (
     <>
-      <AppHeader title="サークル" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('nav_circles', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <button onClick={() => go('circle-create')}
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]">
-          🔒 新しいサークルを作る
+          🔒 {t('circle_new', lang)}
         </button>
         {circles.length === 0 ? (
           <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-            まだサークルがありません<br />仲間だけのお題を作ってみよう！
+            {t('circle_empty', lang)}
           </div>
         ) : circles.map((c) => {
           const posts = circlePosts.filter((p) => p.circleId === c.id);
@@ -7749,22 +7772,22 @@ function CirclesScreen({
                 <div className="flex items-center gap-2">
                   <p className="font-black text-ink">{c.name}</p>
                   {c.isOfficial ? (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">⭐ 公認</span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-600">⭐ {t('title_official', lang)}</span>
                   ) : (
                     <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🔒</span>
                   )}
                   {(c as any).visibility === 'followers' && (
-                    <span className="rounded-full bg-purple/10 px-2 py-0.5 text-[10px] font-black text-purple">👥 フォロワー限定</span>
+                    <span className="rounded-full bg-purple/10 px-2 py-0.5 text-[10px] font-black text-purple">👥 {t('circle_followers_only', lang)}</span>
                   )}
                   {c.isOfficial && !iAmMember && c.fanIds?.includes(me.id) && (
-                    <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 ファン参加中</span>
+                    <span className="rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">🎫 {t('circle_fan_joined', lang)}</span>
                   )}
                   {c.createdBy === me.id && (c.pendingFanIds?.length ?? 0) > 0 && (
-                    <span className="rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">🔔 申請{c.pendingFanIds?.length}</span>
+                    <span className="rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">🔔 {t('fr_requests_tab', lang)} {c.pendingFanIds?.length}</span>
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
-                  メンバー{memberCount}人{c.isOfficial && c.allowFans ? `・ファン${fanCount}人` : ''}・{posts.length}件のお題
+                  {tf('circle_stats', lang, { n: memberCount, q: posts.length })}{c.isOfficial && c.allowFans ? ` · ${tf('circle_fans', lang, { n: fanCount })}` : ''}
                 </p>
                 <div className="mt-2 flex items-center gap-1">
                   {members.slice(0, 5).map((m, i) => (
@@ -7773,15 +7796,15 @@ function CirclesScreen({
                   {!iAmMember && (() => {
                     const st = (c as any).myStatus;
                     const approval = ((c as any).joinPolicy ?? 'open') === 'approval';
-                    if (st === 'pending') return <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-600">⏳ 承認まち</span>;
-                    return <span className="ml-1 rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{approval ? '✋ 承認制' : 'タップで参加'}</span>;
+                    if (st === 'pending') return <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-600">⏳ {t('circle_pending', lang)}</span>;
+                    return <span className="ml-1 rounded-full bg-pink/10 px-2 py-0.5 text-[10px] font-black text-pink">{approval ? `✋ ${t('circle_approval', lang)}` : t('circle_tap_join', lang)}</span>;
                   })()}
                 </div>
               </div>
             </button>
           );
         })}
-        <p className="text-center text-xs font-bold text-muted">🔒 サークル内のお題はメンバーだけに表示されます</p>
+        <p className="text-center text-xs font-bold text-muted">🔒 {t('circle_private_note', lang)}</p>
       </div>
     </>
   );
@@ -8382,16 +8405,17 @@ function DiagnosisScreen({ go, target }: { go: (s: Screen, payload?: any) => voi
 
 // ── コラボ特集（企業コラボの一覧・入口） ───────────────────────
 function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
+  const lang = useLang();
   const campaigns = activeBrandCampaigns();
   return (
     <>
-      <AppHeader title="コラボ特集" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('collab_title', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <div className="pb-banner rounded-[24px] p-5 shadow-card">
-          <p className="text-sm font-black">🤝 ブランドコラボ</p>
-          <p className="mt-1 text-xs font-bold">お気に入りブランドの限定スタンプ・背景・お題をチェック！</p>
+          <p className="text-sm font-black">🤝 {t('collab_brand', lang)}</p>
+          <p className="mt-1 text-xs font-bold">{t('collab_desc', lang)}</p>
         </div>
-        {campaigns.length === 0 && <EmptyState text="いまは開催中のコラボはありません。" />}
+        {campaigns.length === 0 && <EmptyState text={t('collab_none', lang)} />}
         {campaigns.map((c) => {
           const a = campaignAssets(c);
           return (
@@ -8402,27 +8426,27 @@ function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
                 </span>
                 <div>
                   <p className="text-base font-black text-ink">{c.brand}</p>
-                  <p className="text-[11px] font-bold text-muted">コラボ開催中</p>
+                  <p className="text-[11px] font-bold text-muted">{t('collab_live', lang)}</p>
                 </div>
               </div>
               <div className="space-y-3 p-5">
-                <p className="text-sm font-bold leading-6 text-ink">{c.blurb}</p>
+                <p className="text-sm font-bold leading-6 text-ink">{tv(c.blurb, lang)}</p>
                 {a.sticker && (
                   <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
                     <span className="text-2xl">{a.sticker.thumbnail}</span>
-                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.sticker.name}</b><br /><span className="text-[11px] text-muted">スタンプ・ショップで見る →</span></span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{tv(a.sticker.name, lang)}</b><br /><span className="text-[11px] text-muted">{t('collab_see_shop', lang)} →</span></span>
                   </button>
                 )}
                 {a.bg && (
                   <button onClick={() => go('shop')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
                     <span className={`grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br ${a.bg.gradient} text-lg`}>{a.bg.emoji}</span>
-                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.bg.name}</b><br /><span className="text-[11px] text-muted">背景テーマ →</span></span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{tv(a.bg.name, lang)}</b><br /><span className="text-[11px] text-muted">{t('collab_bg', lang)} →</span></span>
                   </button>
                 )}
                 {a.pr && (
                   <button onClick={() => go('home')} className="flex w-full items-center gap-3 rounded-2xl bg-base p-3 text-left active:scale-[0.99]">
                     <span className="text-2xl">{a.pr.brandEmoji}</span>
-                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{a.pr.question}</b><br /><span className="text-[11px] text-muted">PR質問に答える（+{a.pr.reward}コイン）→</span></span>
+                    <span className="min-w-0 flex-1"><b className="text-sm text-ink">{tv(a.pr.question, lang)}</b><br /><span className="text-[11px] text-muted">{tf('collab_pr', lang, { n: a.pr.reward })} →</span></span>
                   </button>
                 )}
               </div>
@@ -8430,7 +8454,7 @@ function CollabScreen({ go }: { go: (s: Screen, payload?: any) => void }) {
           );
         })}
         <p className="px-2 text-center text-[11px] font-bold text-muted">
-          企業の方へ：コラボ掲載は <a href="/creator-kit" className="text-blue-500 underline">Miri Creator Kit</a> から
+          {t('collab_biz', lang)} <a href="/creator-kit" className="text-blue-500 underline">Miri Creator Kit</a>
         </p>
       </div>
     </>
@@ -8615,7 +8639,7 @@ function ShopScreen({
                       <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-zinc-900 text-2xl">{pack.thumbnail}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-black text-ink">{pack.name}</p>
+                          <p className="text-sm font-black text-ink">{tv(pack.name, lang)}</p>
                           {pack.isNew && <span className="rounded-full bg-pink px-2 py-0.5 text-[9px] font-black text-white">NEW</span>}
                         </div>
                         <p className="text-[11px] font-bold text-muted">{pack.description}</p>
@@ -8717,7 +8741,7 @@ function ShopScreen({
                     <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
                   </div>
                   <div className="p-3">
-                    <p className="truncate text-xs font-black text-ink">{t.name}</p>
+                    <p className="truncate text-xs font-black text-ink">{tv(t.name, lang)}</p>
                     <button
                       onClick={() => onExchangeBg?.(t.id)}
                       disabled={bgShards < SHARD_EXCHANGE_COST}
@@ -8749,7 +8773,7 @@ function ShopScreen({
                         <span className={`absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-black ${RARITY_COLOR[t.rarity]}`}>{t.rarity}</span>
                       </div>
                       <div className="p-3">
-                        <p className="flex items-center gap-1 text-xs font-black text-ink">{t.floaters[0] && <ThemeArt art={t.floaters[0].art} size={14} />}{t.name}</p>
+                        <p className="flex items-center gap-1 text-xs font-black text-ink">{t.floaters[0] && <ThemeArt art={t.floaters[0].art} size={14} />}{tv(t.name, lang)}</p>
                         <button
                           onClick={() => onEquipBg(equipped ? null : t.id)}
                           className={`mt-2 w-full rounded-full py-1.5 text-[11px] font-black transition active:scale-[0.97] ${equipped ? 'bg-base text-pink ring-1 ring-pink' : 'bg-pink text-white'}`}>
@@ -8776,7 +8800,7 @@ function ShopScreen({
               return (
                 <div key={item.id} className={`rounded-[24px] bg-white p-4 shadow-card ${equipped ? 'ring-2 ring-pink' : ''}`}>
                   <div className={`mb-3 h-20 rounded-2xl bg-gradient-to-br ${item.gradient}`} />
-                  <p className="text-sm font-black text-ink">{item.name}</p>
+                  <p className="text-sm font-black text-ink">{tv(item.name, lang)}</p>
                   <div className="mt-2">
                     {owned ? (
                       <button
@@ -8809,7 +8833,7 @@ function ShopScreen({
                 <div className="mb-3 flex h-20 items-center justify-center rounded-2xl bg-gradient-to-br from-pink/10 to-purple/10 text-center text-2xl font-black leading-snug">
                   {item.preview}
                 </div>
-                <p className="text-sm font-black text-ink">{item.name}</p>
+                <p className="text-sm font-black text-ink">{tv(item.name, lang)}</p>
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-xs font-black text-pinkStrong">¥{item.price}</span>
                   <button disabled className="rounded-full bg-base px-3 py-1.5 text-[11px] font-black text-muted ring-1 ring-pink/20">
@@ -8830,7 +8854,7 @@ function ShopScreen({
             <div className="mb-4 flex items-center gap-3">
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-base text-3xl">{detailPack.thumbnail}</span>
               <div>
-                <p className="font-black text-ink">{detailPack.name}</p>
+                <p className="font-black text-ink">{tv(detailPack.name, lang)}</p>
                 <p className="text-xs font-bold text-muted">{detailPack.creator}</p>
               </div>
               <button onClick={() => setDetailPack(null)} className="ml-auto text-xl text-muted">✕</button>
@@ -8897,7 +8921,7 @@ function ShopScreen({
             </div>
             <div className="p-6 text-center">
               <p className="text-base font-black text-ink">
-                {bgResult.theme.name}
+                {tv(bgResult.theme.name, lang)}
                 {bgResult.isNew && <span className="ml-2 rounded-full bg-pink px-2 py-0.5 text-[10px] font-black text-white">NEW!</span>}
               </p>
               <p className="mt-1 text-xs font-bold text-muted">{bgResult.theme.description}</p>
@@ -8930,12 +8954,13 @@ function PackRow({ pack, owned, onDetail, action }: {
   onDetail: () => void;
   action: React.ReactNode;
 }) {
+  const lang = useLang();
   return (
     <div className="flex items-center gap-3 rounded-[20px] bg-white p-3 shadow-card">
       <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${owned ? 'bg-pink/10' : 'bg-base'}`}>{pack.thumbnail}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <p className="text-sm font-black text-ink">{pack.name}</p>
+          <p className="text-sm font-black text-ink">{tv(pack.name, lang)}</p>
           {pack.isNew && <span className="rounded-full bg-pink px-1.5 py-0.5 text-[9px] font-black text-white">NEW</span>}
           {pack.collab && <span className="rounded-full bg-purple/15 px-1.5 py-0.5 text-[9px] font-black text-purple">コラボ</span>}
         </div>
@@ -8951,52 +8976,58 @@ function PackRow({ pack, owned, onDetail, action }: {
 
 // ===================== /ショップ画面 =====================
 
-function notificationTimeAgo(at: number): string {
+function notificationTimeAgo(at: number, lang: Lang = 'ja'): string {
   const diff = Date.now() - at;
   const min = Math.floor(diff / 60000);
-  if (min < 1) return 'たった今';
-  if (min < 60) return `${min}分前`;
+  if (min < 1) return t('time_now', lang);
+  // 「5分前」「5 minutes ago」などは各言語の書き方（Intl）に任せる
+  const rtf = (() => { try { return new Intl.RelativeTimeFormat(INTL_LOCALE[lang] ?? lang, { numeric: 'always' }); } catch { return null; } })();
   const hour = Math.floor(min / 60);
-  if (hour < 24) return `${hour}時間前`;
-  return `${Math.floor(hour / 24)}日前`;
+  const day = Math.floor(hour / 24);
+  if (rtf) return min < 60 ? rtf.format(-min, 'minute') : hour < 24 ? rtf.format(-hour, 'hour') : rtf.format(-day, 'day');
+  return min < 60 ? `${min}分前` : hour < 24 ? `${hour}時間前` : `${day}日前`;
 }
 
-// Supabase通知（他ユーザーの行動）を表示用に整形
-function formatServerNotif(n: NotificationRow): { id: string; icon: string; text: string; at: number; onOpen?: 'answer' | 'profile'; answerId?: string; username?: string } {
-  const who = n.actor?.display_name ?? 'だれか';
+// Supabase通知（他ユーザーの行動）を表示用に整形。名前・コメント本文は原文のまま差し込む（訳さない）
+function formatServerNotif(n: NotificationRow, lang: Lang = 'ja'): { id: string; icon: string; text: string; at: number; onOpen?: 'answer' | 'profile'; answerId?: string; username?: string } {
+  const name = n.actor?.display_name ?? t('sn_someone', lang);
   const uname = n.actor?.username;
   const at = new Date(n.created_at).getTime();
   const base = { id: n.id, at, answerId: n.answer_id ?? undefined, username: uname };
+  const said = n.body ? `${lang === 'ja' ? '：' : ': '}${n.body}` : '';
+  const circle = n.body ?? t('nav_circles', lang);
+  const msg = (key: string, vars: Record<string, string> = {}) => tf(key, lang, { name, ...vars });
   switch (n.type) {
-    case 'like':          return { ...base, icon: '💗', text: `${who}さんがあなたの回答に「すき」しました`, onOpen: 'answer' };
-    case 'sticker':       return { ...base, icon: n.emoji || '⭐️', text: `${who}さんがあなたの回答にスタンプでリアクションしました`, onOpen: 'answer' };
-    case 'comment':       return { ...base, icon: '💬', text: `${who}さんがコメントしました${n.body ? '：' + n.body : ''}`, onOpen: 'answer' };
-    case 'follow':        return { ...base, icon: '🎀', text: `${who}さんがあなたをフォローしました`, onOpen: 'profile' };
-    case 'friend_request':return { ...base, icon: '📖', text: `${who}さんからなかよし申請が届きました`, onOpen: 'profile' };
-    case 'friend_accept': return { ...base, icon: '📖', text: `${who}さんがなかよし申請を承認しました`, onOpen: 'profile' };
-    case 'circle_request':return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」への参加をリクエストしました` };
-    case 'circle_join':   return { ...base, icon: '🔒', text: `${who}さんが「${n.body ?? 'サークル'}」に参加しました` };
-    case 'circle_accept': return { ...base, icon: '🎉', text: `「${n.body ?? 'サークル'}」への参加が承認されました` };
-    case 'blog_like':     return { ...base, icon: '💗', text: `${who}さんがあなたのブログにいいねしました` };
-    case 'blog_comment':  return { ...base, icon: '💬', text: `${who}さんがブログにコメントしました${n.body ? '：' + n.body : ''}` };
-    case 'diary_invite':  return { ...base, icon: '📔', text: `${who}さんが交換日記「${n.body ?? ''}」に招待しました` };
-    default:              return { ...base, icon: '🔔', text: `${who}さんからお知らせ` };
+    case 'like':          return { ...base, icon: '💗', text: msg('sn_like'), onOpen: 'answer' };
+    case 'sticker':       return { ...base, icon: n.emoji || '⭐️', text: msg('sn_sticker'), onOpen: 'answer' };
+    case 'comment':       return { ...base, icon: '💬', text: msg('sn_comment') + said, onOpen: 'answer' };
+    case 'follow':        return { ...base, icon: '🎀', text: msg('sn_follow'), onOpen: 'profile' };
+    case 'friend_request':return { ...base, icon: '📖', text: msg('sn_friend_request'), onOpen: 'profile' };
+    case 'friend_accept': return { ...base, icon: '📖', text: msg('sn_friend_accept'), onOpen: 'profile' };
+    case 'circle_request':return { ...base, icon: '🔒', text: msg('sn_circle_request', { circle }) };
+    case 'circle_join':   return { ...base, icon: '🔒', text: msg('sn_circle_join', { circle }) };
+    case 'circle_accept': return { ...base, icon: '🎉', text: msg('sn_circle_accept', { circle }) };
+    case 'blog_like':     return { ...base, icon: '💗', text: msg('sn_blog_like') };
+    case 'blog_comment':  return { ...base, icon: '💬', text: msg('sn_blog_comment') + said };
+    case 'diary_invite':  return { ...base, icon: '📔', text: msg('sn_diary_invite', { diary: n.body ?? '' }) };
+    default:              return { ...base, icon: '🔔', text: msg('sn_default') };
   }
 }
 
 function NotificationsScreen({ go, notifications = [], serverNotifs = [] }: { go: (s: Screen, payload?: any) => void; notifications?: AppNotification[]; serverNotifs?: NotificationRow[] }) {
   // 他ユーザー通知（サーバー）＋端末内通知を時系列でまとめる
-  const server = serverNotifs.map(formatServerNotif);
-  const local = notifications.map((n) => ({ id: 'l-' + n.id, icon: n.icon, text: n.text, at: n.at, onOpen: undefined as undefined, answerId: undefined, username: undefined }));
+  const lang = useLang();
+  const server = serverNotifs.map((n) => formatServerNotif(n, lang));
+  const local = notifications.map((n) => ({ id: 'l-' + n.id, icon: n.icon, text: notifText(n, lang), at: n.at, onOpen: undefined as undefined, answerId: undefined, username: undefined }));
   const merged = [...server, ...local].sort((a, b) => b.at - a.at);
   return (
     <>
-      <AppHeader title="通知" />
+      <AppHeader title={t('header_notifications', lang)} />
       <div className="space-y-3 px-4 pt-3">
         {merged.length === 0 && (
           <div className="flex gap-3 rounded-[24px] bg-white p-4 shadow-card">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15">🎀</span>
-            <p className="text-sm font-bold leading-6">Miriへようこそ！リアクションやフォロー、コメントが届くとここに表示されます</p>
+            <p className="text-sm font-bold leading-6">{t('notif_welcome', lang)}</p>
           </div>
         )}
         {merged.map((n) => {
@@ -9009,12 +9040,12 @@ function NotificationsScreen({ go, notifications = [], serverNotifs = [] }: { go
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pink/15 text-lg"><RetroText text={n.icon} /></span>
               <div className="min-w-0">
                 <p className="text-sm font-bold leading-6">{n.text}</p>
-                <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at)}</p>
+                <p className="text-[10px] font-bold text-muted">{notificationTimeAgo(n.at, lang)}</p>
               </div>
             </div>
           );
         })}
-        <button onClick={() => go('home')} className="mt-4 h-12 w-full rounded-full bg-pink text-sm font-black text-white">ホームに戻る</button>
+        <button onClick={() => go('home')} className="mt-4 h-12 w-full rounded-full bg-pink text-sm font-black text-white">{t('btn_back_home', lang)}</button>
       </div>
     </>
   );
@@ -9628,7 +9659,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
         if (!isDev && looksLoggedIn) {
           const ok = await hasValidSession();
           if (!cancelled && !ok) {
-            showToast('⚠️ ログインの有効期限が切れています。ログインし直すと回答が正しく共有されます');
+            showToast(`⚠️ ${t('toast_session_expired', lang)}`);
           } else if (!cancelled && ok) {
             // 有効セッションがあれば profiles 行を保証（旧アカウントで欠落していると回答保存が失敗する）
             await ensureProfile();
@@ -9638,7 +9669,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
               await persistBook();               // book（プロフ帳・BEST3・ゲーム）を再送
               syncIdentityToProfiles();          // 名前・写真アイコンを再送
               if (localStorage.getItem('miri_pending_profile_sync') !== '1') {
-                showToast('✅ 未保存だった変更をサーバーに保存しました');
+                showToast(`✅ ${t('toast_saved_pending', lang)}`);
               }
             }
           }
@@ -9831,7 +9862,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       return next;
     });
     const theme = getBgTheme(id);
-    if (theme) addNotification('🎠', `新しい背景「${theme.name}」をゲットしました！`);
+    if (theme) addNotification('🎠', `新しい背景「${theme.name}」をゲットしました！`, 'notif_bg_get', { name: theme.name });
   }
 
   // ── かけら（ガチャ被り補償） ──────────────────────────────
@@ -9883,7 +9914,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       return next;
     });
     showToast(`「${item.name}」を購入しました！`);
-    addNotification('🎨', `カラーテーマ「${item.name}」を購入しました`);
+    addNotification('🎨', `カラーテーマ「${item.name}」を購入しました`, 'notif_theme_buy', { name: item.name });
   }
 
   // ── プロフ帳交換（なかよし度アクション） ─────────────────
@@ -10136,8 +10167,9 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     const total = 3 + bonus;
     addCoins(total, bonus ? `${streak}日連続ログインボーナス` : 'デイリーログイン');
     setTimeout(() => {
-      showToast(`🎁 +${total}コイン デイリーログインボーナス！${bonus ? `（${streak}日連続！）` : ''}`);
-      addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${bonus ? `（${streak}日連続！）` : ''}`);
+      const streakNote = bonus ? tf('daily_streak', lang, { n: streak }) : '';
+      showToast(`🎁 ${tf('toast_daily', lang, { n: total })}${streakNote}`);
+      addNotification('🎁', `デイリーログインボーナスで ${total} コインもらいました${bonus ? `（${streak}日連続！）` : ''}`, bonus ? 'notif_daily_streak' : 'notif_daily', { n: total, d: streak });
     }, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameLoaded]);
@@ -10671,9 +10703,9 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     try { return JSON.parse(localStorage.getItem('miri_notifications') || '[]'); } catch { return []; }
   });
 
-  function addNotification(icon: string, text: string) {
+  function addNotification(icon: string, text: string, key?: string, vars?: Record<string, string | number>) {
     setNotifications((prev) => {
-      const next = [{ id: Date.now() + Math.random(), icon, text, at: Date.now() }, ...prev].slice(0, 50);
+      const next = [{ id: Date.now() + Math.random(), icon, text, at: Date.now(), ...(key ? { key, vars } : {}) }, ...prev].slice(0, 50);
       localStorage.setItem('miri_notifications', JSON.stringify(next));
       return next;
     });
@@ -10895,7 +10927,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       const reward = prQuestion.id === draft.questionId ? prQuestion.reward : 15;
       addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
       showToast(`🎁 +${reward}コイン PR案件ボーナス獲得！`);
-      addNotification('💼', `PR案件に回答して ${reward} コインもらいました`);
+      addNotification('💼', `PR案件に回答して ${reward} コインもらいました`, 'notif_pr', { n: reward });
     } else {
       showToast('✏️ 回答を更新しました');
     }
@@ -10904,7 +10936,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   } else if (!alreadyRewarded) {
     addCoins(5, 'お題に回答');
     showToast('🎁 +5コイン 回答ボーナス！');
-    addNotification('✍️', 'お題に回答して 5 コインもらいました');
+    addNotification('✍️', 'お題に回答して 5 コインもらいました', 'notif_answer', { n: 5 });
   } else {
     // 編集（2回目以降）はコインを配らない
     showToast('✏️ 回答を更新しました');
@@ -11459,10 +11491,10 @@ return <ProfileScreen
   const active = tabFromScreen(screen);
 
   return (
-    <>
+    <LangContext.Provider value={lang}>
       <DesktopShell active={active} currentScreen={screen} go={go} answers={answers} avatarUrl={avatarUrl} ownedStickerCount={ownedStickerCount} lang={lang} bgTheme={getBgTheme(equippedBgId)} translatedAnswerBodies={translatedAnswerBodies} unread={unreadCount}>{current}</DesktopShell>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {celebration && <ProfileCelebration data={celebration} onClose={() => setCelebration(null)} />}
-    </>
+    </LangContext.Provider>
   );
 }

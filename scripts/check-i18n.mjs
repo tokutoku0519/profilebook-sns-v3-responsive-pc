@@ -35,6 +35,7 @@ const { LANGS, RAW, RAW_VALUES } = __I18N_RAW;
 const EMPTY_OK = new Set(['blood_suffix']);
 
 const errors = [];
+const QSTAT = [];
 const vars = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 
 // ── 1. 行の形 ──
@@ -56,6 +57,18 @@ const FILES = [
   'src/components/Cards.tsx',
   'src/components/BottomTab.tsx',
 ];
+// 公式のお題：英語の訳が全IDにあるか（ほかの言語は段階的に追加）
+{
+  const { QUESTION_TEXT } = load('src/lib/questionI18n.ts', 'QUESTION_TEXT');
+  const ja = [...fs.readFileSync(path.join(root, 'src/lib/localeQuestions.ts'), 'utf8').matchAll(/id: '(d\d+)'/g)].map((m) => m[1]);
+  for (const l of LANGS) {
+    if (l === 'ja') continue;
+    const have = ja.filter((id) => QUESTION_TEXT[l]?.[id]).length;
+    QSTAT.push(`${l}:${have}/${ja.length}`);
+  }
+  const missingEn = ja.filter((id) => !QUESTION_TEXT.en?.[id]);
+  if (missingEn.length) errors.push(`公式のお題の英訳がないID: ${missingEn.join(' ')}`);
+}
 // テンプレートで組み立てるキーの展開（id の一覧は各定義と同じ）
 const EXPAND = {
   'best3_${cat.key}': ['drink', 'tv', 'artist', 'movie', 'book', 'game', 'hobby'],
@@ -77,6 +90,8 @@ const used = new Set(Array.from({ length: 10 }, (_, i) => `pq_${i + 1}`));
 for (const f of FILES) {
   const src = fs.readFileSync(path.join(root, f), 'utf8');
   for (const m of src.matchAll(/\b(?:t|L|tf)\(\s*'([a-zA-Z0-9_]+)'/g)) used.add(m[1]);
+  // t() を通さずに渡しているキー（通知の msg('sn_…')、addNotification(…, 'notif_…')、データの key: 'tag_…' など）
+  for (const m of src.matchAll(/'((?:sn|notif|tag)_[a-z0-9_]+)'/g)) used.add(m[1]);
   for (const m of src.matchAll(/\b(?:t|L|tf)\(\s*`([^`]+)`/g)) {
     const k = m[1];
     if (!k.includes('${')) { used.add(k); continue; }
@@ -120,6 +135,7 @@ for (const f of ['src/components/DecoToolbar.tsx', 'src/components/Cards.tsx']) 
 
 // ── 結果 ──
 console.log(`言語: ${LANGS.length} / 固定文言キー: ${Object.keys(RAW).length} / 選択肢ラベル: ${Object.keys(RAW_VALUES).length} / 画面で使用中のキー: ${used.size}`);
+console.log(`\n[公式のお題（日本語 366 問）の訳の数] ${QSTAT.join(' ')}\n  ※ 訳がない言語は 英語 → 日本語 の順で表示`);
 console.log('\n[言語ごとの「自分の訳がない」キー数（英語→日本語へフォールバック）]');
 for (const l of LANGS) {
   const list = fallbackByLang[l];

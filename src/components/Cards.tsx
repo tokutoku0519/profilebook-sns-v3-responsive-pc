@@ -6,6 +6,8 @@ import { RetroText, ReactionGlyph } from '@/components/RetroEmoji';
 import { getUserTitles, TITLE_DEFS, type TitleType } from '@/lib/titles';
 import { penAttrs, useUserPen } from '@/lib/pen';
 import { t, type Lang } from '@/lib/i18n';
+import { useLang } from '@/lib/langContext';
+import { localizeQuestion } from '@/lib/localeQuestions';
 
 type Question = (typeof questions)[number];
 type Answer = (typeof answers)[number];
@@ -40,7 +42,9 @@ const TITLE_STICKER: Record<TitleType, { bg: string; fg: string }> = {
   pioneer:  { bg: '#FFE0EC', fg: '#8A1C4A' }, // さくら地 × ベリー
 };
 
-export function TitleBadge({ type, lang = 'ja' }: { type: TitleType; userId?: string; lang?: Lang }) {
+export function TitleBadge({ type, lang: langProp }: { type: TitleType; userId?: string; lang?: Lang }) {
+  const ctxLang = useLang();
+  const lang = langProp ?? ctxLang;
   const def = TITLE_DEFS[type];
   const c = TITLE_STICKER[type] ?? TITLE_STICKER.official;
   return (
@@ -53,8 +57,11 @@ export function TitleBadge({ type, lang = 'ja' }: { type: TitleType; userId?: st
   );
 }
 
-export function QuestionCard({ question, hero = false }: { question: Question; hero?: boolean }) {
-  if (!question) return null;
+export function QuestionCard({ question: raw, hero = false }: { question: Question; hero?: boolean }) {
+  const lang = useLang();
+  if (!raw) return null;
+  // 公式のお題はIDから閲覧者の言語の文に引き直す
+  const question = localizeQuestion(raw, lang);
   return (
     <article className={`${hero ? 'min-h-36' : 'min-h-24'} sticker-shine rounded-[28px] border border-pink/20 bg-gradient-to-br from-white via-blue-50 to-purple-50 p-4 shadow-card`}>
       {question.sponsor && (
@@ -63,7 +70,7 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
         </div>
       )}
       <h3 className="relative z-10 text-lg font-bold leading-snug text-ink">{question.title}</h3>
-      {hero && <button className="relative z-10 mt-4 rounded-full bg-pink px-4 py-2 text-sm font-bold text-white shadow-card">このお題に答える</button>}
+      {hero && <button className="relative z-10 mt-4 rounded-full bg-pink px-4 py-2 text-sm font-bold text-white shadow-card">{t('btn_answer_q', lang)}</button>}
     </article>
   );
 }
@@ -71,7 +78,9 @@ export function QuestionCard({ question, hero = false }: { question: Question; h
 export function AnswerCard({ answer, detail = false, translatedBody, onUserClick, liked = false, reactions, onLike, onSticker }: { answer: Answer; detail?: boolean; translatedBody?: string; onUserClick?: (user: Answer['user']) => void; liked?: boolean; reactions?: Record<string, { count: number; mine: boolean }>; onLike?: () => void; onSticker?: () => void }) {
   // 書いた人の「わたしのペン」（未設定なら従来の文字のまま）
   const pen = useUserPen(answer?.user?.id);
+  const lang = useLang();
   if (!answer) return null;
+  const q = answer.question ? localizeQuestion(answer.question, lang) : undefined;
   const titles = getUserTitles(answer.user.id);
   // 絵文字スタンプ（like以外）を件数の多い順に。詳細画面はリアクションバーがあるので非表示。
   const stickerChips = !detail && reactions
@@ -89,10 +98,10 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
   return (
     <article className={`rounded-[28px] border border-purple-100 bg-white p-4 shadow-card ${detail ? 'min-h-56' : ''}`}>
       <div className="mb-3 flex items-center justify-between">
-        <span className="rounded-full bg-purple/15 px-3 py-1 text-[11px] font-bold text-purple">{answer.question?.category}</span>
+        <span className="rounded-full bg-purple/15 px-3 py-1 text-[11px] font-bold text-purple">{q?.category}</span>
         <Sparkles size={18} className="text-pink" />
       </div>
-      <p className="mb-2 text-xs font-bold text-muted">{answer.question?.title}</p>
+      <p className="mb-2 text-xs font-bold text-muted">{q?.title}</p>
       {pen ? (
         <p
           {...penAttrs(pen)}
@@ -117,7 +126,7 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
           <span>
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="text-sm font-bold">{answer.user.name}</span>
-              {titles.map((t) => <TitleBadge key={t} type={t} userId={answer.user.id} />)}
+              {titles.map((tt) => <TitleBadge key={tt} type={tt} userId={answer.user.id} lang={lang} />)}
             </span>
             <span className="block text-[11px] text-muted">{answer.user.id}</span>
           </span>
@@ -129,7 +138,7 @@ export function AnswerCard({ answer, detail = false, translatedBody, onUserClick
               tabIndex={0}
               onClick={(e: MouseEvent) => { e.stopPropagation(); onSticker(); }}
               className="grid h-7 w-7 place-items-center rounded-full bg-base text-sm transition active:scale-90 hover:bg-pink/10 cursor-pointer"
-              aria-label="スタンプでリアクション"
+              aria-label={t('react_sticker', lang)}
             >
               😊<span className="ml-[-2px] text-[10px]">＋</span>
             </span>
