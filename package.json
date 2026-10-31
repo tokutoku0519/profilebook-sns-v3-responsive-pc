@@ -11,9 +11,11 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:no-external-translate": "node scripts/check-no-external-translate.mjs",
     "report:untranslated": "node scripts/report-untranslated.mjs",
+    "test:translate": "node scripts/translate-test/run.mjs",
     "prebuild": "node scripts/check-no-external-translate.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "latest",
     "@types/qrcode": "^1.5.6",

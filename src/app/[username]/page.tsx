@@ -36,6 +36,8 @@ import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { LangContext, useLang } from '@/lib/langContext';
+import { TranslateBar, TranslationConsentCard, useContentTranslation, type TranslateCandidate } from '@/components/ContentTranslate';
+import { TRANSLATABLE_PROFILE_FIELDS } from '@/lib/translation/shared';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
 import { activeBrandCampaigns, campaignAssets } from '@/lib/brandCampaigns';
@@ -2477,6 +2479,7 @@ function ProfileBookContent({
   visibility = {},
   viewerIsFollower = false,
   pen = null,
+  translated,
 }: {
   info: typeof defaultProfileBookInfo;
   best3: Best3Data;
@@ -2501,6 +2504,8 @@ function ProfileBookContent({
   viewerIsFollower?: boolean;
   /** 持ち主の「わたしのペン」。手書きの回答（.prof-hand）がこの字で表示される。未設定なら従来の手書き風。 */
   pen?: Pen | null;
+  /** 翻訳を表示するときの訳文（キー：項目の場所 例 motto / __questions.2.a、回答は answer:<id>）。無い項目は原文のまま */
+  translated?: Record<string, string>;
 }) {
   const accent = THEME_ACCENT[themeColor] ?? THEME_ACCENT.pink;
   // 項目の公開判定：本人は常に表示。他人は 公開=常に / フォロワー限定=フォロワーのみ / 非公開=不可。
@@ -2512,6 +2517,8 @@ function ProfileBookContent({
     return false;
   };
   const bg = THEME_BG[themeColor] ?? THEME_BG.pink;
+  // 「翻訳を見る」を押したときだけ訳文に置きかえる。原文は info などにそのまま残る
+  const tx = (key: string, v: string) => translated?.[key] ?? v;
 
   // ユーザーが書いた内容（基本情報・回答・自作の質問）は機械翻訳しない＝書いたまま表示する。
   // 公式の質問（最初から入っている10問）だけ、表示言語の訳に置き換える。
@@ -2578,7 +2585,7 @@ function ProfileBookContent({
             {info.catchphrase && (
               <p className="relative mt-2.5 inline-block max-w-full rounded-[14px] border-2 border-ink/15 bg-white px-3 py-1.5 text-[14px] leading-snug text-ink prof-hand">
                 <span aria-hidden className="absolute -top-[7px] left-4 h-3 w-3 rotate-45 border-l-2 border-t-2 border-ink/15 bg-white" />
-                <span className="relative">{info.catchphrase}</span>
+                <span className="relative">{tx('catchphrase', info.catchphrase)}</span>
               </p>
             )}
           </div>
@@ -2588,7 +2595,7 @@ function ProfileBookContent({
         {(info.message) && (
           <div className="pb-memo mt-4 rotate-[-0.4deg]">
             <span className="pb-label absolute left-3 top-1.5">{t('field_message', lang)}</span>
-            <p className="pt-2 text-[15px] leading-relaxed text-ink prof-hand">{info.message}</p>
+            <p className="pt-2 text-[15px] leading-relaxed text-ink prof-hand">{tx('message', info.message)}</p>
           </div>
         )}
         {bgTheme && (
@@ -2642,7 +2649,7 @@ function ProfileBookContent({
           {canShow('hometown') && (isSelf || (info.hometown ?? '').trim()) && (
             <div className="col-span-2 flex items-end gap-2 sm:col-span-4">
               <p className="pb-label shrink-0 pb-1">📍 {t('field_hometown', lang)}</p>
-              <p className="pb-writeline min-w-0 flex-1 text-[17px] leading-snug text-ink prof-hand">{info.hometown}</p>
+              <p className="pb-writeline min-w-0 flex-1 text-[17px] leading-snug text-ink prof-hand">{tx('hometown', info.hometown)}</p>
             </div>
           )}
         </div>
@@ -2655,10 +2662,10 @@ function ProfileBookContent({
         <PrintedHeading no={nextNo()} kicker="LIKE & DISLIKE" title={t('sec_likes', lang)} />
         {/* 食べ物・テレビ・音楽・漫画・ゲーム・趣味は「すきなもの BEST3」に一本化（重複解消） */}
         <div className="grid grid-cols-2 gap-3">
-          {canShow('favoriteFood') && <FavBubble shape="heart" mark="♥" label={t('field_favoriteFood', lang)} value={info.favoriteFood} />}
-          {canShow('dislikeFood') && <FavBubble shape="cross" mark="✕" label={t('field_dislikeFood', lang)} value={info.dislikeFood} />}
+          {canShow('favoriteFood') && <FavBubble shape="heart" mark="♥" label={t('field_favoriteFood', lang)} value={tx('favoriteFood', info.favoriteFood)} />}
+          {canShow('dislikeFood') && <FavBubble shape="cross" mark="✕" label={t('field_dislikeFood', lang)} value={tx('dislikeFood', info.dislikeFood)} />}
           {canShow('favoriteColor') && (
-            <FavBubble shape="color" mark="🎨" label={t('field_favoriteColor', lang)} value={info.favoriteColor}>
+            <FavBubble shape="color" mark="🎨" label={t('field_favoriteColor', lang)} value={tx('favoriteColor', info.favoriteColor)}>
               {colorDots.length > 0 && (
                 <span aria-hidden className="mt-1.5 flex justify-center gap-1.5">
                   {colorDots.map((c) => <span key={c} className="pb-swatch" style={{ background: c }} />)}
@@ -2666,7 +2673,7 @@ function ProfileBookContent({
               )}
             </FavBubble>
           )}
-          {canShow('favoriteCharacter') && <FavBubble shape="star" mark="★" label={t('field_favoriteCharacter', lang)} value={info.favoriteCharacter} />}
+          {canShow('favoriteCharacter') && <FavBubble shape="star" mark="★" label={t('field_favoriteCharacter', lang)} value={tx('favoriteCharacter', info.favoriteCharacter)} />}
         </div>
         {/* 教科は時間割のマスで（すき／にがて） */}
         {(lifeStageDef?.showSubjectFields ?? true) && (
@@ -2683,13 +2690,13 @@ function ProfileBookContent({
       <PaperSheet className="px-4 pb-4 pt-4">
         <PrintedHeading no={nextNo()} kicker="ABOUT ME" title={t('sec_about', lang)} />
         <div className="space-y-1">
-        {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={info.specialty} />}
-        {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={info.holiday} />}
-        {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={info.wantToGo} />}
-        {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={info.collection} />}
-        {canShow('motto') && <MemoLine label={t('field_motto', lang)} value={info.motto} quote />}
-        {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={info.charmPoint} />}
-        {canShow('dream') && <MemoLine label={t('field_dream', lang)} value={info.dream} tone="sax" />}
+        {canShow('specialty') && <ProfileLine label={t('field_specialty', lang)} value={tx('specialty', info.specialty)} />}
+        {canShow('holiday') && <ProfileLine label={t('field_holiday', lang)} value={tx('holiday', info.holiday)} />}
+        {canShow('wantToGo') && <ProfileLine label={t('field_wantToGo', lang)} value={tx('wantToGo', info.wantToGo)} />}
+        {canShow('collection') && <ProfileLine label={t('field_collection', lang)} value={tx('collection', info.collection)} />}
+        {canShow('motto') && <MemoLine label={t('field_motto', lang)} value={tx('motto', info.motto)} quote />}
+        {canShow('charmPoint') && <ProfileLine label={t('field_charmPoint', lang)} value={tx('charmPoint', info.charmPoint)} />}
+        {canShow('dream') && <MemoLine label={t('field_dream', lang)} value={tx('dream', info.dream)} tone="sax" />}
         </div>
       </PaperSheet>
       )}
@@ -2737,7 +2744,7 @@ function ProfileBookContent({
               <div>
                 {monthlyBest3.episodeQ && <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo ? mInfo.episodeQ : monthlyBest3.episodeQ}</p>}
                 {hasEpisode ? (
-                  <p className="mt-1 whitespace-pre-wrap text-[16px] leading-relaxed text-ink prof-hand">{monthlyBest3.episode}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-[16px] leading-relaxed text-ink prof-hand">{tx('__monthly.episode', monthlyBest3.episode ?? '')}</p>
                 ) : isSelf ? (
                   <p className="mt-1 text-xs font-bold text-muted">{t('pb_monthly_ep_empty', lang)}</p>
                 ) : null}
@@ -2747,7 +2754,7 @@ function ProfileBookContent({
             <div>
               <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q</span>{mInfo ? mInfo.best3Q : `${monthlyBest3.theme} は？`}</p>
               {hasBest3 ? (
-                <Best3Lines items={monthlyBest3.items} hideEmpty={hideEmptySlots} />
+                <Best3Lines items={monthlyBest3.items.map((v, i) => tx(`__monthly.items.${i}`, v))} hideEmpty={hideEmptySlots} />
               ) : isSelf ? (
                 <p className="mt-1 text-xs font-bold text-muted">{t('pb_monthly_b3_empty', lang)}</p>
               ) : null}
@@ -2770,7 +2777,7 @@ function ProfileBookContent({
                 {filled.map((cat) => (
                   <div key={cat.key}>
                     <p className="pb-label">{cat.emoji} {t(`best3_${cat.key}`, lang)}</p>
-                    <Best3Lines items={best3[cat.key] ?? []} hideEmpty={hideEmptySlots} />
+                    <Best3Lines items={(best3[cat.key] ?? []).map((v, i) => tx(`__best3.${cat.key}.${i}`, v))} hideEmpty={hideEmptySlots} />
                   </div>
                 ))}
               </div>
@@ -2781,7 +2788,7 @@ function ProfileBookContent({
 
       {/* ── しつもんコーナー：Q は印刷、A は手書き（他人のプロフ帳では未回答の質問は隠す） ── */}
       {(() => {
-        const qaSource = questions.map((item) => ({ q: displayProfileQuestion(item.q, lang), a: item.a }));
+        const qaSource = questions.map((item, idx) => ({ q: displayProfileQuestion(item.q, lang), a: item.a, idx }));
         // 他人が見るときは回答済み（a が空でない）だけを表示。自分は入力促進のため全部表示。
         const visibleQA = isSelf ? qaSource : qaSource.filter((item) => (item.a ?? '').trim());
         if (visibleQA.length === 0) return null; // 全部未回答なら section ごと非表示
@@ -2794,7 +2801,7 @@ function ProfileBookContent({
                   <p className="text-[13px] font-black leading-snug text-ink"><span className="pb-q-no">Q{i + 1}</span>{item.q}</p>
                   <p className="mt-1.5 flex gap-1.5 text-[16px] leading-relaxed text-ink">
                     <span aria-hidden className="pb-label pt-1">A.</span>
-                    <span className="pb-writeline min-w-0 flex-1 prof-hand">{item.a}</span>
+                    <span className="pb-writeline min-w-0 flex-1 prof-hand">{tx(`__questions.${item.idx}.a`, item.a)}</span>
                   </p>
                 </div>
               ))}
@@ -2831,7 +2838,7 @@ function ProfileBookContent({
                 <p className={`text-[11px] font-black ${accent}`}>
                   {typeof answer.question === 'string' ? answer.question : answer.question ? localizeQuestion(answer.question, lang).title : ''}
                 </p>
-                <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">{answer.body}</p>
+                <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">{tx(`answer:${answer.id}`, answer.body)}</p>
               </button>
             ))}
           </div>
@@ -3073,6 +3080,26 @@ function OtherProfileScreen({
     }
     return null;
   })();
+  // 「翻訳を見る」の対象：Supabase 上の実ユーザーの、公開範囲が公開・未設定の自由回答と、公開回答（最新 3 件）。
+  // 名前・ニックネーム・ID などは入れない。送るのは場所と回答 ID だけで、原文と公開範囲はサーバーが確かめる。
+  const trOwner = hasSb ? String(profile.id).replace(/^@/, '') : null;
+  const trCandidates = useMemo<TranslateCandidate[]>(() => {
+    if (!trOwner || !supabaseBook) return [];
+    const vis = supabaseBook.visibility ?? {};
+    const open = (k: string) => !vis[k] || vis[k] === 'public';
+    const out: TranslateCandidate[] = [];
+    const add = (path: string, v: unknown) => { if (typeof v === 'string' && v.trim()) out.push({ item: { kind: 'profile_field', owner: trOwner, path }, text: v }); };
+    for (const k of TRANSLATABLE_PROFILE_FIELDS) if (!k.startsWith('__') && open(k)) add(k, (supabaseBook.info ?? {})[k]);
+    if (open('__best3')) for (const [cat, list] of Object.entries(supabaseBook.best3 ?? {})) (list ?? []).forEach((v, i) => add(`__best3.${cat}.${i}`, v));
+    if (open('__questions')) (supabaseBook.questions ?? []).forEach((q, i) => add(`__questions.${i}.a`, q?.a));
+    if (otherMonthly && open('__monthly')) { add('__monthly.episode', otherMonthly.episode); otherMonthly.items.forEach((v, i) => add(`__monthly.items.${i}`, v)); }
+    for (const a of theirAnswers.slice(0, 3)) {
+      if (/^[0-9a-f-]{36}$/i.test(a.id) && typeof a.body === 'string') out.push({ item: { kind: 'answer', id: a.id }, text: a.body });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trOwner, supabaseBook, otherMonthly?.episode, otherMonthly?.items.join('\u0000'), theirAnswers.map((a) => a.id + a.body).join('\u0000')]);
+  const tr = useContentTranslation(trOwner, lang, trCandidates);
   const themeColor = book?.themeColor ?? 'pink';
   const premium = book?.premium;
   const isSubscribed = subscribedOfficials.includes(profile.id) || (me.isOfficial && book?.isOfficial === true);
@@ -3244,8 +3271,14 @@ function OtherProfileScreen({
         );
       })()}
 
+      {tr.visible && (
+        <div className="px-4 pb-2">
+          <TranslateBar tr={tr} lang={lang} />
+        </div>
+      )}
       <ProfileBookContent
         bare
+        translated={tr.translated}
         info={info}
         best3={best3}
         monthlyBest3={otherMonthly}
@@ -5650,6 +5683,13 @@ function DetailScreen({
   ownedGachaStickers?: string[];
 }) {
   const lang = useLang();
+  // 他人の公開回答だけ「翻訳を見る」を出す（送るのは回答 ID だけ。公開範囲と本人の許可はサーバーが確かめる）
+  const trOwner = answer?.user?.id && answer.user.id !== me.id ? String(answer.user.id).replace(/^@/, '') : null;
+  const trCandidates = useMemo<TranslateCandidate[]>(
+    () => (trOwner && /^[0-9a-f-]{36}$/i.test(answer.id) && typeof answer.body === 'string' ? [{ item: { kind: 'answer', id: answer.id }, text: answer.body }] : []),
+    [trOwner, answer?.id, answer?.body],
+  );
+  const trAnswer = useContentTranslation(trOwner, lang, trCandidates);
   const myStickers = getOwnedStickerEmojis(ownedPackIds, ownedGachaStickers);
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -5696,7 +5736,8 @@ function DetailScreen({
     <>
       <AppHeader title={t('detail_title', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-5 px-4 pt-3">
-        <AnswerCard answer={answer} detail liked={likeInfo.mine} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+        <AnswerCard answer={answer} detail liked={likeInfo.mine} translatedBody={trAnswer.translated?.[`answer:${answer.id}`]} onUserClick={(u) => go('profile', { name: u.name, id: u.id, avatar: u.avatar, bio: '', common: '' })} />
+        <TranslateBar tr={trAnswer} lang={lang} compact />
 
         {/* リアクション（❤️すき＋絵文字スタンプ） */}
         <div className="space-y-2">
@@ -5977,6 +6018,9 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
           </div>
           <span className="text-xs font-black text-muted">↓</span>
         </button>
+
+        {/* 回答の翻訳を許可するか（翻訳が使えるときだけ表示） */}
+        <TranslationConsentCard lang={lang} />
 
       </div>
     </>

@@ -4,7 +4,8 @@
 // 画面の自動翻訳（MyMemory）は廃止した。ブラウザで動くコードから翻訳サービスへ文字を送ると、
 // ユーザーの文章が外へ出るおそれがあるため、見つかったらビルドを止める。
 //  - 翻訳サービスの接続先（MyMemory・Google・DeepL・Microsoft など）：src のどこにも書かない
-//  - Anthropic（Claude）の API：サーバーの API ルート（src/app/api/）の中だけ。ブラウザ側では使わない
+//  - Anthropic（Claude）の API：サーバー専用の場所（src/app/api/・src/lib/translation/server/）の中だけ
+//  - サーバー専用の翻訳コード（src/lib/translation/server/）は、src/app/api/ と同じ場所の中からしか読み込まない
 // ============================================================
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,8 +36,10 @@ for (const file of listFiles(path.join(root, 'src'))) {
   const rel = path.relative(root, file);
   const src = fs.readFileSync(file, 'utf8');
   for (const re of FORBIDDEN) if (re.test(src)) problems.push(`${rel}: 外部の翻訳サービス（${re.source}）`);
-  if (!rel.startsWith(path.join('src', 'app', 'api') + path.sep)) {
-    for (const re of SERVER_ONLY) if (re.test(src)) problems.push(`${rel}: Anthropic の API はサーバーの API ルート（src/app/api/）の中だけで使えます`);
+  const serverOnly = [path.join('src', 'app', 'api') + path.sep, path.join('src', 'lib', 'translation', 'server') + path.sep].some((d) => rel.startsWith(d));
+  if (!serverOnly) {
+    for (const re of SERVER_ONLY) if (re.test(src)) problems.push(`${rel}: Anthropic の API はサーバー専用の場所（src/app/api/・src/lib/translation/server/）の中だけで使えます`);
+    if (/translation\/server/.test(src)) problems.push(`${rel}: サーバー専用の翻訳コード（translation/server）をブラウザ側から読み込んでいます`);
   }
 }
 if (problems.length) {

@@ -56,6 +56,7 @@ const FILES = [
   'src/components/DecoToolbar.tsx',
   'src/components/Cards.tsx',
   'src/components/BottomTab.tsx',
+  'src/components/ContentTranslate.tsx',
 ];
 // 公式のお題：英語の訳が全IDにあるか（ほかの言語は段階的に追加）
 {
