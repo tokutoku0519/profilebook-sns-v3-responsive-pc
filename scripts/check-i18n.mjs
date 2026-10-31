@@ -59,12 +59,12 @@ const FILES = [
 ];
 // 公式のお題：英語の訳が全IDにあるか（ほかの言語は段階的に追加）
 {
-  const { QUESTION_TEXT } = load('src/lib/questionI18n.ts', 'QUESTION_TEXT');
+  const { QUESTION_TEXT, QUESTION_QUALITY } = load('src/lib/questionI18n.ts', 'QUESTION_TEXT, QUESTION_QUALITY');
   const ja = [...fs.readFileSync(path.join(root, 'src/lib/localeQuestions.ts'), 'utf8').matchAll(/id: '(d\d+)'/g)].map((m) => m[1]);
   for (const l of LANGS) {
     if (l === 'ja') continue;
     const have = ja.filter((id) => QUESTION_TEXT[l]?.[id]).length;
-    QSTAT.push(`${l}:${have}/${ja.length}`);
+    QSTAT.push(`${l}:${have}/${ja.length}${QUESTION_QUALITY[l] ? `(${QUESTION_QUALITY[l].status})` : ''}`);
   }
   const missingEn = ja.filter((id) => !QUESTION_TEXT.en?.[id]);
   if (missingEn.length) errors.push(`公式のお題の英訳がないID: ${missingEn.join(' ')}`);
@@ -135,7 +135,7 @@ for (const f of ['src/components/DecoToolbar.tsx', 'src/components/Cards.tsx']) 
 
 // ── 結果 ──
 console.log(`言語: ${LANGS.length} / 固定文言キー: ${Object.keys(RAW).length} / 選択肢ラベル: ${Object.keys(RAW_VALUES).length} / 画面で使用中のキー: ${used.size}`);
-console.log(`\n[公式のお題（日本語 366 問）の訳の数] ${QSTAT.join(' ')}\n  ※ 訳がない言語は 英語 → 日本語 の順で表示`);
+console.log(`\n[公式のお題（日本語 366 問）の訳の数] ${QSTAT.join(' ')}\n  ※ 訳がない言語は 英語 → 日本語 の順で表示。品質：draft=未確認／reviewed=確認済み（ネイティブ以外）／native=ネイティブ確認済み`);
 console.log('\n[言語ごとの「自分の訳がない」キー数（英語→日本語へフォールバック）]');
 for (const l of LANGS) {
   const list = fallbackByLang[l];

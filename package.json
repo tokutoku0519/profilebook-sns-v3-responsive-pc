@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "check:colors": "node scripts/check-tailwind-colors.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "gen:fixed-text": "node scripts/gen-fixed-text.mjs",
+    "prebuild": "node scripts/gen-fixed-text.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

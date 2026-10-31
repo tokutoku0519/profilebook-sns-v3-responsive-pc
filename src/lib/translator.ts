@@ -1,5 +1,12 @@
+// ============================================================
+// 固定文言の翻訳（MyMemory）。使うのは useAutoTranslateUI だけで、送るのはアプリの固定文言だけ。
+// ユーザーが書いた文章をここへ渡さないこと（自由回答の翻訳はサーバー側の翻訳APIで行う）。
+// ============================================================
 const memCache = new Map<string, string>();
-const STORAGE_KEY = 'miri_trans_cache';
+// v2：固定文言だけを保存する。以前のキャッシュにはユーザーの文章の訳が含まれていた可能性があるので消す
+const STORAGE_KEY = 'miri_trans_cache_v2';
+const OLD_STORAGE_KEY = 'miri_trans_cache';
+if (typeof window !== 'undefined') { try { localStorage.removeItem(OLD_STORAGE_KEY); } catch {} }
 
 const LANG_TO_ISO: Record<string, string> = {
   en: 'en', ko: 'ko', zh: 'zh-CN', 'zh-tw': 'zh-TW',
@@ -80,19 +87,4 @@ export async function translateText(text: string, targetLang: string, sourceLang
   })();
   inflight.set(key, p);
   return p;
-}
-
-// Translate an array of texts, throttling to avoid rate limit
-export async function translateBatch(
-  texts: string[],
-  targetLang: string,
-  sourceLang = 'ja',
-  delayMs = 150
-): Promise<string[]> {
-  const results: string[] = [];
-  for (const text of texts) {
-    results.push(await translateText(text, targetLang, sourceLang));
-    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
-  }
-  return results;
 }

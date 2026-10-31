@@ -32,7 +32,6 @@ import { DEFAULT_PEN, normalizePen, penAttrs, setCachedPen, useUserPen, type Pen
 import { DecoToolbar, PenFontPicker, PenInkPicker } from '@/components/DecoToolbar';
 import { getQuestionsForLang, getActiveQuestionsForLang, localizeQuestion } from '@/lib/localeQuestions';
 import { getGenderOptions } from '@/lib/localeConfig';
-import { translateText } from '@/lib/translator';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
@@ -612,6 +611,7 @@ function ProfileProgress({ info, lang = 'ja' }: { info: typeof defaultProfileBoo
 // 節目達成のお祝いオーバーレイ（紙吹雪＋ジャックポット表示。タップで閉じる）
 type Celebration = { pct: number; coins: number; label: string; emoji: string; isComplete: boolean };
 function ProfileCelebration({ data, onClose }: { data: Celebration; onClose: () => void }) {
+  const lang = useLang();
   const colors = ['#EC4899', '#A855F7', '#38BDF8', '#FBBF24', '#34D399', '#FB7185'];
   const pieces = Array.from({ length: 28 }, (_, i) => ({
     left: (i * 37) % 100,
@@ -638,14 +638,14 @@ function ProfileCelebration({ data, onClose }: { data: Celebration; onClose: () 
       </div>
       <div className="gacha-pop relative w-full max-w-xs rounded-[32px] bg-white p-8 text-center shadow-floating">
         <div className="mb-2 text-6xl">{data.emoji}</div>
-        <p className="text-lg font-black text-ink">{data.isComplete ? 'プロフィール100%達成！' : `${data.pct}% 達成！`}</p>
+        <p className="text-lg font-black text-ink">{data.isComplete ? t('cel_complete', lang) : tf('cel_pct', lang, { n: data.pct })}</p>
         <p className="mt-1 text-sm font-bold text-muted">{data.label}</p>
         <div className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full bg-pink/15 px-5 py-2 text-lg font-black text-pink">
-          🎁 ＋{data.coins} コイン
+          🎁 {tf('cel_coins', lang, { n: data.coins })}
         </div>
         {data.isComplete && (
           <p className="mt-4 rounded-2xl bg-gradient-to-r from-pink/15 to-purple/15 px-3 py-2 text-xs font-black text-purple">
-            🏆 称号気分で自慢しちゃおう！シェアでみんなに見せよう
+            🏆 {t('cel_share', lang)}
           </p>
         )}
         <button
@@ -653,7 +653,7 @@ function ProfileCelebration({ data, onClose }: { data: Celebration; onClose: () 
           onClick={onClose}
           className="mt-5 w-full rounded-full bg-pink py-3 text-sm font-black text-white shadow-floating active:scale-[0.98]"
         >
-          やったー！ 🎉
+          {t('cel_ok', lang)} 🎉
         </button>
       </div>
     </div>
@@ -2831,7 +2831,7 @@ function ProfileBookContent({
                 className={`w-full rounded-2xl ${bg} p-3 text-left active:scale-[0.99]`}
               >
                 <p className={`text-[11px] font-black ${accent}`}>
-                  {typeof answer.question === 'string' ? answer.question : answer.question?.title}
+                  {typeof answer.question === 'string' ? answer.question : answer.question ? localizeQuestion(answer.question, lang).title : ''}
                 </p>
                 <p className="mt-1 text-[15px] text-ink leading-relaxed prof-hand">{answer.body}</p>
               </button>
@@ -4259,15 +4259,16 @@ function ProfileEditScreen({
 
 // ── フィードバック投稿モーダル（テスター用の窓口） ───────────────
 function FeedbackModal({ onClose }: { onClose: () => void }) {
+  const lang = useLang();
   const [kind, setKind] = useState<'bug' | 'request' | 'question'>('bug');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(false);
   const KINDS: { key: 'bug' | 'request' | 'question'; label: string }[] = [
-    { key: 'bug', label: '🐛 不具合' },
-    { key: 'request', label: '✨ 要望' },
-    { key: 'question', label: '❓ 質問' },
+    { key: 'bug', label: `🐛 ${t('fb_bug', lang)}` },
+    { key: 'request', label: `✨ ${t('fb_request', lang)}` },
+    { key: 'question', label: `❓ ${t('fb_question', lang)}` },
   ];
   async function send() {
     if (sending || !body.trim()) return;
@@ -4282,13 +4283,13 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
       <div className="w-full max-h-[92vh] overflow-y-auto rounded-t-[32px] bg-white pb-10 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-pink/30" />
         <div className="flex items-center justify-between px-5 py-4">
-          <p className="text-base font-black text-ink">💬 フィードバックを送る</p>
+          <p className="text-base font-black text-ink">💬 {t('pe_feedback_btn', lang)}</p>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-full bg-base text-muted">✕</button>
         </div>
         {done ? (
           <div className="px-6 py-10 text-center">
             <p className="text-3xl">🙏</p>
-            <p className="mt-3 text-sm font-black text-ink">送信しました！ありがとうございます</p>
+            <p className="mt-3 text-sm font-black text-ink">{t('fb_sent', lang)}</p>
           </div>
         ) : (
           <div className="space-y-4 px-5">
@@ -4302,15 +4303,15 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
             </div>
             <textarea
               value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} rows={6}
-              placeholder="気づいたこと・要望・不具合を自由に書いてください（できれば「どの画面で」「何をしたら」も）"
+              placeholder={t('fb_ph', lang)}
               className="w-full rounded-2xl border-2 border-purple/15 bg-white px-4 py-3 text-sm font-bold text-ink outline-none focus:border-pink"
             />
-            {error && <p className="text-center text-xs font-black text-red-500">送信に失敗しました。ログインしているかご確認ください。</p>}
+            {error && <p className="text-center text-xs font-black text-red-500">{t('fb_error', lang)}</p>}
             <button onClick={send} disabled={!body.trim() || sending}
               className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-pink py-3.5 text-sm font-black text-white shadow-floating disabled:opacity-40 active:scale-[0.98]">
-              {sending ? '送信中…' : '送信する'}
+              {sending ? t('fb_sending', lang) : t('btn_send', lang)}
             </button>
-            <p className="text-center text-[11px] font-bold text-muted">※ 内容は運営（開発者）に届きます</p>
+            <p className="text-center text-[11px] font-bold text-muted">※ {t('fb_note', lang)}</p>
           </div>
         )}
       </div>
@@ -6369,22 +6370,23 @@ function DiaryListScreen({
   go: (s: Screen, payload?: any) => void;
   diaryPages: DiaryPage[];
 }) {
+  const lang = useLang();
   return (
     <>
-      <AppHeader title="交換日記" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('sec_diary', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         <button
           onClick={() => go('diary-create')}
           className="flex w-full items-center justify-center gap-2 rounded-[24px] bg-pink px-5 py-4 text-sm font-black text-white shadow-floating active:scale-[0.99]"
         >
-          ＋ 新しい日記を作る
+          ＋ {t('dl_new', lang)}
         </button>
         <p className="px-1 text-xs font-bold text-muted">
-          フォロワーだけが書き込める交換日記です。みんなで一冊の日記を作ってね。
+          {t('dl_desc', lang)}
         </p>
         {diaryPages.length === 0 && (
           <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-            まだ日記がないよ。最初の一冊を作ってみて！
+            {t('dl_empty', lang)}
           </div>
         )}
         {diaryPages.map((page) => (
@@ -6397,21 +6399,21 @@ function DiaryListScreen({
             <span aria-hidden className="absolute inset-y-0 left-0 w-6 bg-[repeating-linear-gradient(180deg,transparent_0_14px,rgb(var(--pb-line)/.35)_14px_20px)] bg-[length:100%_34px] bg-pink/15" />
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="pb-label">📓 交換ノート</p>
+                <p className="pb-label">📓 {t('pen_font_tegaki', lang)}</p>
                 <p className="mt-0.5 font-black text-ink">{page.theme}</p>
                 <p className="mt-1 text-xs font-bold leading-5 text-muted">{page.description}</p>
               </div>
               <span className="shrink-0 rounded-full bg-cream px-3 py-1 text-xs font-black text-ink shadow-[0_2px_4px_rgba(0,0,0,.12)]">
-                {page.entries.length}ページ
+                {tf('dl_pages', lang, { n: page.entries.length })}
               </span>
             </div>
             {page.entries.length > 0 && (() => {
               const latest = page.entries[page.entries.length - 1];
               return (
                 <div className="pb-memo mt-3 !py-2">
-                  <p className="pb-label">さいしんの書き込み</p>
+                  <p className="pb-label">{t('dl_latest', lang)}</p>
                   <AuthorPenText userId={latest.authorId} base="14px" className="mt-0.5 line-clamp-1 text-xs font-black text-ink">
-                    {latest.body.slice(0, 24) || '（写真）'}
+                    {latest.body.slice(0, 24) || t('dl_photo', lang)}
                   </AuthorPenText>
                 </div>
               );
@@ -6419,14 +6421,14 @@ function DiaryListScreen({
             <div className="mt-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-base">{page.createdByAvatar}</span>
-                <span className="text-xs font-bold text-muted">{page.createdByName} が作成</span>
+                <span className="text-xs font-bold text-muted">{tf('home_created_by', lang, { name: page.createdByName })}</span>
               </div>
               <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
                 page.visibility === 'public' ? 'bg-blue-50 text-blue-500' :
                 page.visibility === 'followers' ? 'bg-base text-muted' :
                 'bg-purple/10 text-purple'
               }`}>
-                {page.visibility === 'public' ? '🌍 全体' : page.visibility === 'followers' ? '👥 フォロワー' : '✉️ 招待制'}
+                {page.visibility === 'public' ? `🌍 ${t('diary_aud_public', lang)}` : page.visibility === 'followers' ? `👥 ${t('create_vis_followers', lang)}` : `✉️ ${t('dl_invite_only', lang)}`}
               </span>
             </div>
           </button>
@@ -9058,7 +9060,18 @@ function EmptyState({ text }: { text: string }) {
 // ── コインウォレット画面 ────────────────────────────────────────
 // コインパッケージ定義は @/lib/coinPackages に集約（サーバー検証と共通化）。
 
+// コイン履歴の理由（保存は日本語の文）。決まった形の文だけ表示用に訳す
+function coinReason(reason: string, lang: Lang): string {
+  if (lang === 'ja' || !reason) return reason;
+  let m: RegExpMatchArray | null;
+  if ((m = reason.match(/^(\d+)日連続ログインボーナス$/))) return tf('coin_r_streak', lang, { n: m[1] });
+  if ((m = reason.match(/^プロフィール(\d+)%達成ボーナス$/))) return tf('coin_r_milestone', lang, { n: m[1] });
+  if ((m = reason.match(/^PR案件回答（(.+)）$/))) return tf('coin_r_pr', lang, { brand: m[1] });
+  return tv(reason, lang);
+}
+
 function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coins: number; onCheckout: (packageId: string) => void }) {
+  const lang = useLang();
   // 購入は確認をはさむ
   const [pendingPkg, setPendingPkg] = useState<(typeof COIN_PACKAGES)[number] | null>(null);
   const history: Array<{ amount: number; reason: string; date: string }> = (() => {
@@ -9067,29 +9080,29 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
   })();
 
   const earnMethods = [
-    { icon: '🌅', label: 'デイリーログイン', reward: '+3', desc: '毎日ログインするだけ' },
-    { icon: '✍', label: 'お題に回答', reward: '+5', desc: '回答を投稿するたびに' },
-    { icon: '💼', label: 'PR案件に回答', reward: '+15〜20', desc: '毎日ホームに1問掲載' },
-    { icon: '🔥', label: '7日連続ログイン', reward: '+20', desc: 'ストリークボーナス' },
-    { icon: '👋', label: '友達を招待', reward: '+50', desc: '近日実装予定' },
+    { icon: '🌅', label: t('earn_daily', lang), reward: '+3', desc: t('earn_daily_desc', lang) },
+    { icon: '✍', label: t('earn_answer', lang), reward: '+5', desc: t('earn_answer_desc', lang) },
+    { icon: '💼', label: t('earn_pr', lang), reward: '+15〜20', desc: t('earn_pr_desc', lang) },
+    { icon: '🔥', label: t('earn_streak', lang), reward: '+20', desc: t('earn_streak_desc', lang) },
+    { icon: '👋', label: t('earn_invite', lang), reward: '+50', desc: t('earn_invite_desc', lang) },
   ];
 
   return (
     <>
-      <AppHeader title="コインウォレット" back onBack={() => go('mypage')} />
+      <AppHeader title={t('header_wallet', lang)} back onBack={() => go('mypage')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
         {/* 残高 */}
         <section className="rounded-[32px] bg-gradient-to-br from-amber-400 to-orange-400 p-6 shadow-card text-white text-center">
-          <p className="text-sm font-black opacity-80">コイン残高</p>
+          <p className="text-sm font-black opacity-80">{t('wallet_balance', lang)}</p>
           <p className="mt-1 text-5xl font-black"><CoinIcon size={42} /> {coins.toLocaleString()}</p>
-          <p className="mt-2 text-xs font-bold opacity-70">コインを使ってプレミアムコンテンツやシールをゲット！</p>
+          <p className="mt-2 text-xs font-bold opacity-70">{t('wallet_desc', lang)}</p>
         </section>
 
         {/* コイン購入 */}
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <p className="mb-1 text-sm font-black text-ink">💳 コインを購入する</p>
+          <p className="mb-1 text-sm font-black text-ink">💳 {t('wallet_buy', lang)}</p>
           <p className="mb-4 text-xs font-bold text-muted">
-            {STRIPE_ENABLED ? '※ 決済はStripe（テストモード）で処理されます' : '※ 決済は準備中です（正式版で対応予定）'}
+            {`※ ${STRIPE_ENABLED ? t('wallet_stripe_test', lang) : t('wallet_pay_soon', lang)}`}
           </p>
           <div className="space-y-2">
             {COIN_PACKAGES.map((pkg) => (
@@ -9102,10 +9115,10 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
                   <CoinIcon size={22} />
                   <div>
                     <p className={`text-sm font-black ${pkg.popular ? 'text-white' : 'text-ink'}`}>
-                      {pkg.coins.toLocaleString()}コイン
-                      {pkg.bonus > 0 && <span className={`ml-1.5 text-[10px] ${pkg.popular ? 'text-white/80' : 'text-green-500'}`}>+{pkg.bonus}ボーナス</span>}
+                      {tf('pm_coins', lang, { n: pkg.coins.toLocaleString() })}
+                      {pkg.bonus > 0 && <span className={`ml-1.5 text-[10px] ${pkg.popular ? 'text-white/80' : 'text-green-500'}`}>{tf('wallet_bonus', lang, { n: pkg.bonus })}</span>}
                     </p>
-                    {pkg.popular && <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-black text-white">人気 No.1</span>}
+                    {pkg.popular && <span className="rounded-full bg-white/25 px-2 py-0.5 text-[9px] font-black text-white">{t('wallet_popular', lang)}</span>}
                   </div>
                 </div>
                 <span className={`text-base font-black ${pkg.popular ? 'text-white' : 'text-amber-500'}`}>¥{pkg.price.toLocaleString()}</span>
@@ -9113,18 +9126,18 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
             ))}
           </div>
           <p className="mt-3 text-center text-[10px] font-bold text-muted">
-            <a href="/tokushoho" target="_blank" rel="noopener noreferrer" className="underline">特定商取引法に基づく表記</a>
+            <a href="/tokushoho" target="_blank" rel="noopener noreferrer" className="underline">{t('wallet_tokushoho', lang)}</a>
           </p>
         </section>
 
         {/* 使い道 */}
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <p className="mb-3 text-sm font-black text-ink">💎 コインの使い道</p>
+          <p className="mb-3 text-sm font-black text-ink">💎 {t('wallet_uses', lang)}</p>
           <div className="space-y-2">
             {[
-              { icon: '🔒', label: 'プレミアムプロフィール解除', cost: '200' },
-              { icon: '🎰', label: 'シールガチャ（1回）', cost: '30〜50' },
-              { icon: '🎨', label: 'テーマスキン', cost: '80〜120' },
+              { icon: '🔒', label: t('wallet_use_premium', lang), cost: '200' },
+              { icon: '🎰', label: t('wallet_use_gacha', lang), cost: '30〜50' },
+              { icon: '🎨', label: t('wallet_use_theme', lang), cost: '80〜120' },
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between rounded-2xl bg-base px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -9139,7 +9152,7 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
 
         {/* 稼ぎ方 */}
         <section className="rounded-[28px] bg-white p-5 shadow-card">
-          <p className="mb-3 text-sm font-black text-ink"><CoinIcon size={15} /> コインの稼ぎ方</p>
+          <p className="mb-3 text-sm font-black text-ink"><CoinIcon size={15} /> {t('wallet_earn', lang)}</p>
           <div className="space-y-2">
             {earnMethods.map((m) => (
               <div key={m.label} className="flex items-center justify-between rounded-2xl bg-base px-4 py-3">
@@ -9159,13 +9172,13 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
         {/* 履歴 */}
         {history.length > 0 && (
           <section className="rounded-[28px] bg-white p-5 shadow-card">
-            <p className="mb-3 text-sm font-black text-ink">📋 履歴</p>
+            <p className="mb-3 text-sm font-black text-ink">📋 {t('wallet_history', lang)}</p>
             <div className="space-y-2">
               {history.slice(0, 20).map((item, i) => (
                 <div key={i} className="flex items-center justify-between border-b border-dashed border-purple/15 py-2 last:border-0">
                   <div>
-                    <p className="text-sm font-bold text-ink">{item.reason}</p>
-                    <p className="text-[10px] font-bold text-muted">{new Date(item.date).toLocaleDateString('ja-JP')}</p>
+                    <p className="text-sm font-bold text-ink">{coinReason(item.reason, lang)}</p>
+                    <p className="text-[10px] font-bold text-muted">{new Date(item.date).toLocaleDateString(lang === 'ja' ? 'ja-JP' : INTL_LOCALE[lang] ?? lang)}</p>
                   </div>
                   <span className={`text-sm font-black ${item.amount > 0 ? 'text-green-500' : 'text-red-400'}`}>
                     {item.amount > 0 ? '+' : ''}{item.amount}
@@ -9182,16 +9195,16 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-8" onClick={() => setPendingPkg(null)}>
           <div className="w-full max-w-xs rounded-[28px] bg-white p-6 text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <p className="text-3xl"><CoinIcon size={32} /></p>
-            <p className="mt-2 text-lg font-black text-ink">{(pendingPkg.coins + pendingPkg.bonus).toLocaleString()}コイン</p>
+            <p className="mt-2 text-lg font-black text-ink">{tf('pm_coins', lang, { n: (pendingPkg.coins + pendingPkg.bonus).toLocaleString() })}</p>
             <p className="mt-1 text-xs font-bold text-muted">
-              {STRIPE_ENABLED ? `¥${pendingPkg.price.toLocaleString()}（Stripeテストモード）` : '決済は準備中です（正式版で対応予定）'}
+              {STRIPE_ENABLED ? `¥${pendingPkg.price.toLocaleString()} (${t('wallet_stripe_test_short', lang)})` : t('wallet_pay_soon', lang)}
             </p>
             <div className="mt-4 flex gap-2">
-              <button onClick={() => setPendingPkg(null)} className="flex-1 rounded-full bg-base py-3 text-sm font-black text-muted active:scale-[0.98]">キャンセル</button>
+              <button onClick={() => setPendingPkg(null)} className="flex-1 rounded-full bg-base py-3 text-sm font-black text-muted active:scale-[0.98]">{t('btn_cancel', lang)}</button>
               <button
                 onClick={() => { onCheckout(pendingPkg.id); setPendingPkg(null); }}
                 className="flex-1 rounded-full bg-amber-400 py-3 text-sm font-black text-white shadow-card active:scale-[0.98]"
-              >{STRIPE_ENABLED ? '購入手続きへ' : 'OK'}</button>
+              >{STRIPE_ENABLED ? t('wallet_checkout', lang) : 'OK'}</button>
             </div>
           </div>
         </div>
@@ -9202,10 +9215,11 @@ function WalletScreen({ go, coins, onCheckout }: { go: (s: Screen) => void; coin
 
 // ── オンボーディング画面 ────────────────────────────────────────
 function OnboardingScreen({ onDone }: { onDone: () => void }) {
+  const lang = useLang();
   const steps = [
-    { emoji: '📖', title: 'お題に答えよう', desc: '毎日届くお題に、プロフィール帳みたいに答えてね。' },
-    { emoji: '🎀', title: 'プロフ帳を作ろう', desc: '自分だけのプロフィール帳をデコって、個性を見せよう。' },
-    { emoji: '🍀', title: 'なかよくなろう', desc: '共通点をみつけたら、プロフ帳を交換したり日記をいっしょに書いたり。すこしずつ仲良くなろう。' },
+    { emoji: '📖', title: t('ob_1_title', lang), desc: t('ob_1_desc', lang) },
+    { emoji: '🎀', title: t('ob_2_title', lang), desc: t('ob_2_desc', lang) },
+    { emoji: '🍀', title: t('ob_3_title', lang), desc: t('ob_3_desc', lang) },
   ];
   const [step, setStep] = useState(0);
   const isLast = step === steps.length - 1;
@@ -9215,8 +9229,8 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
       <div className="flex flex-col items-center gap-6 text-center">
         <img src="/icon.png" alt="Miri" className="h-24 w-24 rounded-[28px] shadow-card" />
         <div>
-          <p className="text-2xl font-black text-ink">Miriへようこそ！</p>
-          <p className="mt-1 text-sm font-bold text-muted">平成プロフィール帳 × SNS</p>
+          <p className="text-2xl font-black text-ink">{t('ob_welcome', lang)}</p>
+          <p className="mt-1 text-sm font-bold text-muted">{t('ob_tagline', lang)}</p>
         </div>
 
         <div className="mt-4 w-full rounded-[32px] bg-white p-8 shadow-card">
@@ -9237,11 +9251,11 @@ function OnboardingScreen({ onDone }: { onDone: () => void }) {
           onClick={() => isLast ? onDone() : setStep(s => s + 1)}
           className="h-14 w-full rounded-full bg-pink text-base font-black text-white shadow-floating active:scale-[0.98] transition"
         >
-          {isLast ? 'はじめる ✨' : 'つぎへ →'}
+          {isLast ? `${t('ob_start', lang)} ✨` : `${t('ob_next', lang)} →`}
         </button>
         {!isLast && (
           <button onClick={onDone} className="w-full py-2 text-sm font-black text-muted">
-            スキップ
+            {t('ob_skip', lang)}
           </button>
         )}
       </div>
@@ -9263,6 +9277,7 @@ function DailyQuestionScreen({
   onSubmit: (body: string) => void;
   answers: Answer[];
 }) {
+  const lang = useLang();
   const [body, setBody] = useState('');
   const [ngError, setNgError] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -9288,24 +9303,24 @@ function DailyQuestionScreen({
 
   return (
     <>
-      <AppHeader title="今日のお題" back onBack={() => go('home')} onBell={() => go('notifications')} />
+      <AppHeader title={t('home_today', lang)} back onBack={() => go('home')} onBell={() => go('notifications')} />
       <div className="space-y-4 px-4 pt-3 pb-32">
 
         {/* 問題カード */}
         <section className="overflow-hidden rounded-[32px] border border-pink/20 bg-gradient-to-br from-pink/15 via-white to-purple/15 p-5 shadow-card">
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">📅 今日のお題</span>
-            <span className="rounded-full bg-base px-3 py-1 text-[10px] font-black text-muted">{question?.category}</span>
+            <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">📅 {t('home_today', lang)}</span>
+            <span className="rounded-full bg-base px-3 py-1 text-[10px] font-black text-muted">{question ? localizeQuestion(question, lang).category : ''}</span>
           </div>
-          <p className="text-lg font-black text-ink leading-relaxed">{question?.title}</p>
+          <p className="text-lg font-black text-ink leading-relaxed">{question ? localizeQuestion(question, lang).title : ''}</p>
         </section>
 
         {!revealed ? (
           <>
             <section className="rounded-[28px] bg-white p-5 shadow-card">
-              <p className="mb-3 text-sm font-black text-ink">✍️ あなたの回答</p>
+              <p className="mb-3 text-sm font-black text-ink">✍️ {t('create_your_answer', lang)}</p>
               <div className="mb-4 rounded-2xl bg-purple/5 px-4 py-3">
-                <p className="text-xs font-bold text-muted">🔒 回答するとみんなの答えが見えます</p>
+                <p className="text-xs font-bold text-muted">🔒 {t('home_locked', lang)}</p>
               </div>
               <textarea
                 value={body}
@@ -9313,11 +9328,11 @@ function DailyQuestionScreen({
                 maxLength={200}
                 rows={4}
                 className="w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
-                placeholder="ここに書いてね..."
+                placeholder={t('daily_ph', lang)}
               />
               <div className="mt-1 flex items-center justify-between">
                 <span className={`text-xs font-bold ${ngError ? 'text-red-500' : 'text-transparent'}`}>
-                  この内容は投稿できません
+                  {t('daily_ng', lang)}
                 </span>
                 <span className="text-xs font-bold text-muted">{body.length}/200</span>
               </div>
@@ -9327,7 +9342,7 @@ function DailyQuestionScreen({
               disabled={!body.trim()}
               className={`h-14 w-full rounded-full text-base font-black text-white shadow-floating transition ${body.trim() ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}
             >
-              回答してみんなの答えを見る 🔓
+              {t('daily_submit', lang)} 🔓
             </button>
           </>
         ) : (
@@ -9335,10 +9350,10 @@ function DailyQuestionScreen({
             {/* 自分の回答 */}
             <section className="rounded-[28px] border-2 border-pink/30 bg-white p-5 shadow-card">
               <div className="mb-3 flex items-center justify-between">
-                <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">✅ あなたの回答</span>
+                <span className="rounded-full bg-pink/10 px-3 py-1 text-[10px] font-black text-pink">✅ {t('create_your_answer', lang)}</span>
                 {!editing && (
                   <button onClick={startEdit} className="rounded-full bg-base px-3 py-1 text-[10px] font-black text-pink transition active:scale-95">
-                    ✏️ 編集する
+                    ✏️ {t('btn_edit_profile', lang)}
                   </button>
                 )}
               </div>
@@ -9350,18 +9365,18 @@ function DailyQuestionScreen({
                     maxLength={200}
                     rows={4}
                     className="w-full resize-none rounded-3xl border border-pink/20 bg-blue-50/40 p-4 text-sm font-bold outline-none focus:border-pink leading-7"
-                    placeholder="ここに書いてね..."
+                    placeholder={t('daily_ph', lang)}
                   />
                   <div className="mt-1 flex items-center justify-between">
-                    <span className={`text-xs font-bold ${ngError ? 'text-red-500' : 'text-transparent'}`}>この内容は投稿できません</span>
+                    <span className={`text-xs font-bold ${ngError ? 'text-red-500' : 'text-transparent'}`}>{t('daily_ng', lang)}</span>
                     <span className="text-xs font-bold text-muted">{body.length}/200</span>
                   </div>
                   <div className="mt-3 flex gap-2">
                     <button onClick={() => { setEditing(false); setNgError(false); }} className="h-11 flex-1 rounded-full bg-base text-sm font-black text-muted transition active:scale-[0.98]">
-                      キャンセル
+                      {t('btn_cancel', lang)}
                     </button>
                     <button onClick={submit} disabled={!body.trim()} className={`h-11 flex-1 rounded-full text-sm font-black text-white shadow-floating transition ${body.trim() ? 'bg-pink active:scale-[0.98]' : 'bg-muted/30'}`}>
-                      保存する
+                      {t('btn_save', lang)}
                     </button>
                   </div>
                 </>
@@ -9372,12 +9387,12 @@ function DailyQuestionScreen({
 
             {/* みんなの回答 */}
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-black text-ink">みんなの回答</h2>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-muted shadow-card">{othersAnswers.length}件</span>
+              <h2 className="text-base font-black text-ink">{t('daily_everyone', lang)}</h2>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-muted shadow-card">{tf('daily_count', lang, { n: othersAnswers.length })}</span>
             </div>
             {othersAnswers.length === 0 ? (
               <div className="rounded-[28px] bg-white p-8 text-center text-sm font-bold text-muted shadow-card">
-                まだ誰も答えていないよ、一番乗り！
+                {t('daily_none', lang)}
               </div>
             ) : (
               <div className="space-y-3">
@@ -9425,16 +9440,17 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
   bookmarks: string[];
   onToggleBookmark: (id: string) => void;
 }) {
+  const lang = useLang();
   const saved = answers.filter(a => bookmarks.includes(a.id));
   return (
     <>
-      <AppHeader title="ブックマーク" back onBack={() => go('mypage')} onBell={() => go('notifications')} />
+      <AppHeader title={t('nav_bookmark', lang)} back onBack={() => go('mypage')} onBell={() => go('notifications')} />
       <div className="space-y-3 px-4 pt-3 pb-32">
         {saved.length === 0 ? (
           <div className="mt-10 flex flex-col items-center gap-4 text-center">
             <span className="text-5xl">🔖</span>
-            <p className="font-black text-ink">保存した回答がここに表示されます</p>
-            <p className="text-sm font-bold text-muted">回答詳細のブックマークボタンで保存できます</p>
+            <p className="font-black text-ink">{t('bm_empty', lang)}</p>
+            <p className="text-sm font-bold text-muted">{t('bm_empty_desc', lang)}</p>
           </div>
         ) : saved.map(answer => (
           <button key={answer.id} onClick={() => go('detail', answer.id)}
@@ -9498,30 +9514,10 @@ function AppContent() {
   // 現役の質問（デイリー出題・新規回答の候補に使う。RETIRED は除外）
   const activeQuestions = useMemo(() => getActiveQuestionsForLang(lang), [lang]);
 
-  const [translatedAnswerBodies, setTranslatedAnswerBodies] = useState<Record<string, string>>({});
-  const [isTranslating, setIsTranslating] = useState(false);
-
-  // 言語切り替え時にフィード上の回答を自動翻訳
-  useEffect(() => {
-    if (lang === 'ja') { setTranslatedAnswerBodies({}); return; }
-    let cancelled = false;
-    setIsTranslating(true);
-    (async () => {
-      const targets = initialAnswers.slice(0, 12);
-      const pairs: [string, string][] = [];
-      for (const a of targets) {
-        if (cancelled) break;
-        const txt = await translateText(a.body, lang);
-        pairs.push([a.id, txt]);
-      }
-      if (!cancelled) {
-        setTranslatedAnswerBodies(Object.fromEntries(pairs));
-        setIsTranslating(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  // ユーザーの回答は外部の翻訳サービスへ送らない（原文のまま表示）。
+  // 自由回答の翻訳は、サーバー側の翻訳API（閲覧権限の確認つき）を承認後に入れる。
+  const translatedAnswerBodies: Record<string, string> = {};
+  const isTranslating = false;
 
 const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 

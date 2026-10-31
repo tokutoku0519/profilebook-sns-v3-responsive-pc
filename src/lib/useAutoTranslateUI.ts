@@ -10,6 +10,9 @@ import { findProperNames, onProperNamesChange, properNamesVersion } from './prop
 // translator 側で localStorage に保存される（2回目以降は即時）。
 //
 // 方針：
+//  - 【外部へ送るのはアプリの固定文言だけ】ソースに書かれた日本語の一覧（fixedText.generated.json。
+//    ビルド前に scripts/gen-fixed-text.mjs で作る）に完全一致する文字列だけを翻訳サービスへ送る。
+//    ユーザーが書いた回答・日記・コメント・名前などは一覧に無いので、公開・非公開を問わず送らない（原文のまま表示）。
 //  - 日本語（ひら・カタ・漢字・半角カナ）を含むテキストノードだけを対象。
 //  - <input>/<textarea>/contentEditable/script/style、[data-noauto] 配下は除外。
 //  - ユーザーが書いた文章（.prof-hand / .pen-text / [data-user]）は翻訳しない。名前や回答を
@@ -30,6 +33,24 @@ const ROMAJI_LIKE = /^(?:[kgsztdhbpcfjr](?=[kgsztdhbpcfjr]))?(?:(?:(?:[kgsztdnhb
 function looksLikeRomaji(orig: string, tr: string): boolean {
   return HIRAGANA_ONLY.test(orig.trim()) && ROMAJI_LIKE.test(tr.trim().replace(/[!?.,]/g, ''));
 }
+// 固定文言の一覧（日本語以外を表示するときだけ読み込む）
+let fixedText: Set<string> | null = null;
+let fixedLoading: Promise<Set<string>> | null = null;
+function loadFixedText(): Promise<Set<string>> {
+  if (fixedText) return Promise.resolve(fixedText);
+  fixedLoading ??= import('./fixedText.generated.json').then((m) => {
+    const list = ((m as { default?: string[] }).default ?? (m as unknown as string[])) as string[];
+    fixedText = new Set(list);
+    return fixedText;
+  });
+  return fixedLoading;
+}
+const normText = (s: string) => s.replace(/\s+/g, ' ').trim();
+/** アプリの固定文言か（＝外部の翻訳サービスへ送ってよいか） */
+function isFixedText(s: string): boolean {
+  return !!fixedText && fixedText.has(normText(s));
+}
+
 // テキストノード → { orig: 元の日本語, applied: 最後に自分で書き込んだ文字列 }
 const reg = new WeakMap<Text, { orig: string; applied: string; names?: number }>();
 
@@ -94,6 +115,8 @@ export function useAutoTranslateUI(lang: Lang) {
       if (cur === e.applied && e.applied !== '' && e.applied !== orig) return;
       if (inflight.has(node)) return;
       if (orig.length > 480) return; // API上限対策
+      // 固定文言でなければ送らない（ユーザーの文章・名前・組み立てた文は原文のまま）
+      if (!isFixedText(orig)) { if (cur !== orig) node.nodeValue = orig; reg.set(node, { orig, applied: orig, names: e.names }); return; }
 
       // 名前だけの文字列は訳さない。文章の中の名前は目印に置きかえて訳す。
       const names = findProperNames(orig);
@@ -126,7 +149,9 @@ export function useAutoTranslateUI(lang: Lang) {
       for (const t of list) process(t);
     }
 
-    walk(document.body);
+    // 固定文言の一覧を読み込んでから画面を走査する（読み込み前は何も送らない）
+    if (lang === 'ja') walk(document.body);
+    else loadFixedText().then(() => { if (!disposed) walk(document.body); }).catch(() => {});
     // 名前が増えたら（Supabase から読み込んだ直後など）、画面を見直して名前の誤訳を戻す
     const offNames = onProperNamesChange(() => { if (!disposed) walk(document.body); });
 

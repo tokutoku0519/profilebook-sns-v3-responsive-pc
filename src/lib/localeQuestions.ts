@@ -1,5 +1,5 @@
 import { tv, type Lang } from './i18n';
-import { hasQuestionText, questionText } from './questionI18n';
+import { questionText, sharedPoolReady } from './questionI18n';
 
 export type LocaleQuestion = {
   id: string;
@@ -503,6 +503,7 @@ const questionsTh: LocaleQuestion[] = [
 
 // 公式のお題（日本語の原文）をIDで引くための表
 const JA_BY_ID = new Map(questionsJa.map((q) => [q.id, q]));
+const JA_IDS = questionsJa.map((q) => q.id);
 
 /**
  * お題を閲覧者の言語で表示するための写しを返す（元のオブジェクト・保存データは変えない）。
@@ -528,13 +529,13 @@ const LEGACY_POOLS: Partial<Record<Lang, LocaleQuestion[]>> = { ko: questionsKo,
 export function getQuestionsForLang(lang: Lang): LocaleQuestion[] {
   const all = (() => {
     if (lang === 'ja') return questionsJa;
-    // 公式のお題（ID共通）にその言語の訳があれば、それを使う（いまは英語）
-    const shared = questionsJa.filter((q) => hasQuestionText(q.id, lang));
-    if (shared.length) return shared.map((q) => localizeQuestion(q, lang));
-    // 訳がまだ無い言語：その言語で作ったお題があればそれ、無ければ英語の公式のお題
+    // 公式のお題（ID共通）の訳が全問そろい、品質の確認が済んだ言語はそれを使う（いまは英語）
+    if (sharedPoolReady(lang, JA_IDS)) return questionsJa.map((q) => localizeQuestion(q, lang));
+    // まだの言語：その言語で作ったお題（韓国語・中国語・タイ語）があればそれ、無ければ英語の公式のお題
     const legacy = LEGACY_POOLS[lang];
     if (legacy) return legacy;
-    return questionsJa.filter((q) => hasQuestionText(q.id, 'en')).map((q) => localizeQuestion(q, lang));
+    if (sharedPoolReady('en', JA_IDS)) return questionsJa.map((q) => localizeQuestion(q, lang));
+    return questionsEn;
   })();
   // スポンサー付き（PR/コラボのサンプル）は通常のお題一覧には出さない。
   // データ自体は残してあるので、正式なPR案件を扱うときに再利用できる。

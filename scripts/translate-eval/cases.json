@@ -1,0 +1,30 @@
+{
+  "description": "自由回答の翻訳エンジン比較用のテスト文（承認後に実行）。expect: translate=訳す / keep=原文のまま / keep_terms=その語は残して文は訳す",
+  "target_langs": ["en", "zh", "ko", "th"],
+  "cases": [
+    { "id": "short-1", "question": "特技は？", "answer": "指パッチン", "expect": "translate", "note": "en: Finger snapping" },
+    { "id": "short-2", "question": "行ってみたい場所は？", "answer": "ヨーロッパ", "expect": "translate", "note": "en: Europe" },
+    { "id": "short-3", "question": "マイブームは？", "answer": "これを作っている、ダイビング", "expect": "translate", "note": "en: Working on this app, and scuba diving" },
+    { "id": "short-4", "question": "集めているものは？", "answer": "香水", "expect": "translate", "note": "en: Perfume" },
+    { "id": "name-1", "question": "好きな芸能人は？", "answer": "Juice=Juice", "expect": "keep", "note": "グループ名。「ジュース」にしない" },
+    { "id": "name-2", "question": "好きなアーティストは？", "answer": "嵐", "expect": "keep_terms", "keep_terms": ["嵐"], "note": "天気の「storm」にしない。Arashi と併記は可" },
+    { "id": "name-3", "question": "好きな曲は？", "answer": "米津玄師のLemon", "expect": "keep_terms", "keep_terms": ["米津玄師", "Lemon"], "note": "人名・曲名" },
+    { "id": "title-1", "question": "好きなアニメは？", "answer": "鬼滅の刃", "expect": "translate", "note": "公式の英題 Demon Slayer: Kimetsu no Yaiba は可。別作品にしない" },
+    { "id": "title-2", "question": "好きな映画は？", "answer": "君の名は。", "expect": "translate", "note": "公式の英題 Your Name. は可" },
+    { "id": "title-3", "question": "好きなゲームは？", "answer": "どうぶつの森", "expect": "translate", "note": "Animal Crossing（公式の海外名）" },
+    { "id": "brand-1", "question": "よく行く店は？", "answer": "スタバとマック", "expect": "translate", "note": "Starbucks and McDonald's（略称の意味を理解）" },
+    { "id": "slang-1", "question": "最近の口ぐせは？", "answer": "ぴえん", "expect": "keep", "note": "意味が文脈次第。訳すなら pleading/sad 系、自信がなければ原文" },
+    { "id": "slang-2", "question": "好きな言葉は？", "answer": "エモい", "expect": "translate", "note": "emotional / nostalgic" },
+    { "id": "slang-3", "question": "最近ハマっていることは？", "answer": "推し活", "expect": "translate", "note": "supporting my fave（説明を足しすぎない）" },
+    { "id": "slang-4", "question": "ひとこと", "answer": "草", "expect": "keep", "note": "ネットスラング（lol）。文脈が薄いので原文でも可" },
+    { "id": "ambig-1", "question": "ひとこと", "answer": "なし", "expect": "translate", "note": "None" },
+    { "id": "ambig-2", "question": "ひとこと", "answer": "？", "expect": "keep", "note": "記号だけ → API を呼ばない" },
+    { "id": "ambig-3", "question": "ニックネーム", "answer": "とっくん", "expect": "keep", "note": "名前。ローマ字化しない" },
+    { "id": "multi-1", "question": "10年後の自分へひとこと", "answer": "元気にしてる？\nあのときのワクワクを忘れないでね[♥]", "expect": "translate", "note": "改行とデコ記号 [♥] を残す" },
+    { "id": "emoji-1", "question": "好きな季節は？", "answer": "夏🍉🌻 花火大会が最高", "expect": "translate", "note": "絵文字を残す" },
+    { "id": "mixed-1", "question": "将来のゆめ", "answer": "パン屋さん in Paris", "expect": "translate", "note": "英語まじり" },
+    { "id": "place-1", "question": "出身地", "answer": "大阪", "expect": "translate", "note": "Osaka（地名の一般的な表記）" },
+    { "id": "place-2", "question": "行ってみたい場所は？", "answer": "原宿の竹下通り", "expect": "translate", "note": "Takeshita Street in Harajuku" },
+    { "id": "community-1", "question": "所属しているところ", "answer": "深夜散歩部", "expect": "keep_terms", "keep_terms": ["深夜散歩部"], "note": "コミュニティ名。意味を添えるのは可" }
+  ]
+}

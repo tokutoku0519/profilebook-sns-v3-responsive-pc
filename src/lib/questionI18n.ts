@@ -404,7 +404,27 @@ const EN: Record<string, string> = {
 /** お題IDごとの訳。言語を足すときはここに表を追加する。 */
 export const QUESTION_TEXT: Partial<Record<Lang, Record<string, string>>> = { en: EN };
 
-/** その言語の訳があるか（デイリー出題の候補に入れるかの判定に使う） */
+/**
+ * 訳の品質（訳があるかどうかとは別に管理する）
+ *  - draft：下書き（機械翻訳・未確認）。出題には使わず、回答のお題表示だけに使う
+ *  - reviewed：内容を確認済み（ネイティブではない）
+ *  - native：ネイティブが自然さ・文化的な表現まで確認済み
+ * 出題（今日のお題など）を共通IDのお題へ切り替えるのは、全問そろい、かつ draft ではない言語だけ。
+ */
+export type QuestionQuality = 'draft' | 'reviewed' | 'native';
+export const QUESTION_QUALITY: Partial<Record<Lang, { status: QuestionQuality; note: string }>> = {
+  en: { status: 'reviewed', note: '366問。開発側で確認（ネイティブ確認は未実施）' },
+};
+
+/** 出題を共通IDのお題に切り替えてよい言語か（全問の訳があり、品質が draft でない） */
+export function sharedPoolReady(lang: Lang, allIds: string[]): boolean {
+  const q = QUESTION_QUALITY[lang];
+  if (!q || q.status === 'draft') return false;
+  const table = QUESTION_TEXT[lang];
+  return !!table && allIds.every((id) => !!table[id]);
+}
+
+/** その言語の訳があるか */
 export function hasQuestionText(id: string, lang: Lang): boolean {
   return !!QUESTION_TEXT[lang]?.[id];
 }
