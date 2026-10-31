@@ -4,9 +4,9 @@
 // 1. src/lib/i18nUi.ts の各行が 20 言語ぶん揃っているか（空欄・{n} などの差し込み漏れ）
 // 2. プロフィール編集・プロフ帳・他人のプロフ帳・ペン道具で使っているキーが、
 //    20 言語すべてで「その言語の訳」を持っているか（英語/日本語へのフォールバックになっていないか）
-// 3. 上の画面のソースに、翻訳キーを通していない日本語の文言が残っていないか（目安）
+// 3. 画面の文言の訳の品質（UI_QUALITY）と公式のお題の訳の数・品質を表示（キーが揃っていることとは別）
 //
-// 1 と 2 に問題があれば終了コード 1。3 は一覧を出すだけ（コメントやデータ定義も拾うため）。
+// 1 と 2 に問題があれば終了コード 1。3 は表示だけ。
 // ※ ここで分かるのは「キーと訳が揃っているか」まで。訳の自然さ・正しさは人の確認が必要。
 // ============================================================
 import fs from 'node:fs';
@@ -29,7 +29,7 @@ function load(file, exportsList) {
 
 const { dict } = load('src/lib/i18n.ts', 'dict');
 const { __I18N_RAW } = load('src/lib/i18nUi.ts', '__I18N_RAW');
-const { LANGS, RAW, RAW_VALUES } = __I18N_RAW;
+const { LANGS, RAW, RAW_VALUES, UI_QUALITY } = __I18N_RAW;
 
 // 訳が「空」でよいキー（例：血液型の「型」は英語などでは付けない）
 const EMPTY_OK = new Set(['blood_suffix']);
@@ -107,34 +107,11 @@ for (const key of [...used].sort()) {
   for (const l of LANGS) if (own(key, l) === undefined) fallbackByLang[l].push(key);
 }
 
-// ── 3. 翻訳キーを通していない日本語（目安）──
-const JP = /[ぁ-ゖァ-ヺ一-龯]/;
-const literalReport = [];
-for (const f of ['src/components/DecoToolbar.tsx', 'src/components/Cards.tsx']) {
-  const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
-  lines.forEach((line, i) => {
-    const code = line.replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
-    if (JP.test(code) && /(>[^<{]*[ぁ-ゖァ-ヺ一-龯]|(?:title|placeholder|aria-label|label)=["'][^"']*[ぁ-ゖァ-ヺ一-龯])/.test(code)) literalReport.push(`${f}:${i + 1}: ${code.trim().slice(0, 100)}`);
-  });
-}
-// page.tsx はプロフィール編集・プロフ帳・他人のプロフ帳の範囲だけを見る
-{
-  const f = 'src/app/[username]/page.tsx';
-  const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
-  const ranges = [];
-  const starts = ['function ProfileBookContent', 'function PerceptionVoteCard', 'function MyPerceptionCard', 'function OtherProfileScreen', 'function ProfileScreen', 'function ProfileEditScreen'];
-  lines.forEach((l, i) => { if (starts.some((s) => l.startsWith(s) || l.startsWith(`export ${s}`))) ranges.push(i); });
-  for (const s of ranges) {
-    for (let i = s; i < lines.length; i++) {
-      if (i > s && /^(export )?(function|const|type) /.test(lines[i])) break;
-      const code = lines[i].replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
-      if (/(>[^<{]*[ぁ-ゖァ-ヺ一-龯][^<{]*<|(?:title|placeholder|aria-label|label)=["'][^"']*[ぁ-ゖァ-ヺ一-龯])/.test(code)) literalReport.push(`${f}:${i + 1}: ${code.trim().slice(0, 100)}`);
-    }
-  }
-}
+// ── 3. 翻訳キーを通していない日本語は npm run report:untranslated で画面ごとに数える ──
 
 // ── 結果 ──
 console.log(`言語: ${LANGS.length} / 固定文言キー: ${Object.keys(RAW).length} / 選択肢ラベル: ${Object.keys(RAW_VALUES).length} / 画面で使用中のキー: ${used.size}`);
+console.log(`\n[画面の文言の訳の品質（キーが揃っていることとは別）] ${LANGS.map((l) => `${l}:${UI_QUALITY?.[l] ?? '?'}`).join(' ')}\n  ※ source=原文／reviewed=開発側で確認（ネイティブ以外）／native=ネイティブ確認済み／draft=未確認`);
 console.log(`\n[公式のお題（日本語 366 問）の訳の数] ${QSTAT.join(' ')}\n  ※ 訳がない言語は 英語 → 日本語 の順で表示。品質：draft=未確認／reviewed=確認済み（ネイティブ以外）／native=ネイティブ確認済み`);
 console.log('\n[言語ごとの「自分の訳がない」キー数（英語→日本語へフォールバック）]');
 for (const l of LANGS) {
@@ -142,8 +119,7 @@ for (const l of LANGS) {
   console.log(`  ${l.padEnd(6)} ${String(list.length).padStart(3)}${list.length ? '  ' + list.join(' ') : ''}`);
   if (list.length) errors.push(`${l}: ${list.length} キーに自分の訳がありません`);
 }
-console.log(`\n[翻訳キーを通していない日本語の文言（目安）] ${literalReport.length} 件`);
-literalReport.forEach((r) => console.log('  ' + r));
+console.log('\n[翻訳キーを通していない日本語] npm run report:untranslated で画面ごとに確認できます');
 if (errors.length) {
   console.log(`\n✗ ${errors.length} 件の問題`);
   errors.forEach((e) => console.log('  - ' + e));

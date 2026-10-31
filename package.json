@@ -9,8 +9,9 @@
     "lint": "next lint",
     "check:colors": "node scripts/check-tailwind-colors.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
-    "gen:fixed-text": "node scripts/gen-fixed-text.mjs",
-    "prebuild": "node scripts/gen-fixed-text.mjs"
+    "check:no-external-translate": "node scripts/check-no-external-translate.mjs",
+    "report:untranslated": "node scripts/report-untranslated.mjs",
+    "prebuild": "node scripts/check-no-external-translate.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

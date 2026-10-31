@@ -35,8 +35,6 @@ import { getGenderOptions } from '@/lib/localeConfig';
 import { getUserTitles, TITLE_DEFS } from '@/lib/titles';
 import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, type StickerPack } from '@/lib/stickerPacks';
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
-import { useAutoTranslateUI } from '@/lib/useAutoTranslateUI';
-import { addProperNames } from '@/lib/properNames';
 import { LangContext, useLang } from '@/lib/langContext';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
@@ -9506,8 +9504,11 @@ function AppContent() {
     localStorage.setItem('miri_lang', l);
   }
 
-  // 画面全体のハードコード日本語UIを自動翻訳（t()未対応の文字列を一括でカバー）
-  useAutoTranslateUI(lang);
+  // 画面の自動翻訳（外部の翻訳サービスへ画面の文字を送る仕組み）は廃止した。翻訳は t() のキーだけ。
+  // 以前の自動翻訳が端末に残したキャッシュを消す。
+  useEffect(() => {
+    try { localStorage.removeItem('miri_trans_cache'); localStorage.removeItem('miri_trans_cache_v2'); } catch {}
+  }, []);
 
   // 全質問（過去回答のタイトル解決・検索用。RETIRED も含む＝表示が壊れない）
   const localizedQuestions = useMemo(() => getQuestionsForLang(lang), [lang]);
@@ -9885,7 +9886,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       return next;
     });
     addOwnedBg(id);
-    showToast(`✨ かけらで「${theme.name}」と交換しました！`);
+    showToast(`✨ ${tf('toast_shard_swap', lang, { name: tv(theme.name, lang) })}`);
   }
 
   function equipBg(id: string | null) {
@@ -9903,13 +9904,13 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   function buyTheme(id: string) {
     const item = COLOR_THEMES.find((t) => t.id === id);
     if (!item || ownedThemeIds.includes(id)) return;
-    if (!spendCoins(item.price)) { showToast('コインがたりないよ 🥲'); return; }
+    if (!spendCoins(item.price)) { showToast(`${t('toast_no_coins', lang)} 🥲`); return; }
     setOwnedThemeIds((prev) => {
       const next = [...prev, id];
       localStorage.setItem('miri_owned_themes', JSON.stringify(next));
       return next;
     });
-    showToast(`「${item.name}」を購入しました！`);
+    showToast(tf('toast_bought_item', lang, { name: tv(item.name, lang) }));
     addNotification('🎨', `カラーテーマ「${item.name}」を購入しました`, 'notif_theme_buy', { name: item.name });
   }
 
@@ -9926,7 +9927,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       localStorage.setItem('miri_exchanged_profiles', JSON.stringify(next));
       return next;
     });
-    showToast('📖 プロフ帳を交換しました！なかよし度アップ 💗');
+    showToast(`📖 ${t('toast_book_exchanged', lang)} 💗`);
   }
 
   function purchasePack(packId: string) {
@@ -9935,7 +9936,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       localStorage.setItem('miri_owned_packs', JSON.stringify(next));
       return next;
     });
-    showToast('✨ スタンプを購入しました！');
+    showToast(`✨ ${t('toast_stamp_bought', lang)}`);
   }
 
   function addGachaStickers(ids: string[]) {
@@ -9973,10 +9974,10 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
 
   // コイン購入：Stripe Checkout を開始（有効時のみ）。付与は決済検証後にサーバー側で行う。
   async function startCheckout(packageId: string) {
-    if (!STRIPE_ENABLED) { showToast('💳 決済は準備中です（正式版で対応予定）'); return; }
+    if (!STRIPE_ENABLED) { showToast(`💳 ${t('wallet_pay_soon', lang)}`); return; }
     try {
       const token = await getAccessToken();
-      if (!token) { showToast('ログインが必要です。ログインし直してからお試しください'); return; }
+      if (!token) { showToast(t('toast_login_required', lang)); return; }
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -9984,9 +9985,9 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json?.url) { window.location.href = json.url; return; }
-      showToast('決済を開始できませんでした。時間をおいて再度お試しください');
+      showToast(t('toast_checkout_failed_later', lang));
     } catch {
-      showToast('決済を開始できませんでした。通信環境をご確認ください');
+      showToast(t('toast_checkout_failed_network', lang));
     }
   }
 
@@ -10070,9 +10071,9 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     const url = new URL(window.location.href);
     url.searchParams.delete('checkout');
     window.history.replaceState({}, '', url.toString());
-    if (cs === 'cancel') { showToast('決済をキャンセルしました'); return; }
+    if (cs === 'cancel') { showToast(t('toast_checkout_cancel', lang)); return; }
     if (cs !== 'success') return;
-    showToast('🎁 ご購入ありがとうございます！コインを反映しています…');
+    showToast(`🎁 ${t('toast_checkout_thanks', lang)}`);
     if (!dbReady()) return;
     let stop = false;
     (async () => {
@@ -10084,7 +10085,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
         if (g && typeof g.coins === 'number' && g.coins > localCoins) {
           setCoins(g.coins);
           localStorage.setItem('miri_coins', String(g.coins));
-          showToast('✅ コインを反映しました');
+          showToast(`✅ ${t('toast_coins_applied', lang)}`);
           return;
         }
         await new Promise((r) => setTimeout(r, 1500));
@@ -10103,15 +10104,15 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
   function toggleNotifyOdai(val: boolean) {
     if (val) {
       if (typeof Notification === 'undefined' || Notification.permission === 'denied') {
-        showToast('通知がブロックされています。ブラウザの設定から許可してください。');
+        showToast(t('toast_notif_blocked', lang));
         return;
       }
       Notification.requestPermission().then((perm) => {
         const granted = perm === 'granted';
         setNotifyOdai(granted);
         localStorage.setItem('miri_notify_odai', String(granted));
-        if (!granted) showToast('通知の許可が必要です。ブラウザ設定で許可してください。');
-        else showToast('🔔 お題通知をオンにしました');
+        if (!granted) showToast(t('toast_notif_needed', lang));
+        else showToast(`🔔 ${t('toast_notif_on', lang)}`);
       });
     } else {
       setNotifyOdai(false);
@@ -10126,7 +10127,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     if (Notification.permission !== 'granted') return;
     const today = new Date().toDateString();
     if (localStorage.getItem('miri_last_notified_odai') === today) return;
-    new Notification('✿ Miri — 今日のお題', { body: dailyQuestion?.title ?? '', tag: 'miri-daily' });
+    new Notification(`✿ Miri — ${t('home_today', lang)}`, { body: dailyQuestion?.title ?? '', tag: 'miri-daily' });
     localStorage.setItem('miri_last_notified_odai', today);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifyOdai, dailyQuestion]);
@@ -10139,7 +10140,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       if (localStorage.getItem('miri_username') && !localStorage.getItem('miri_setup_bonus')) {
         localStorage.setItem('miri_setup_bonus', '1');
         addCoins(SETUP_BONUS, '初期設定ボーナス');
-        showToast(`初期設定ボーナス ＋${SETUP_BONUS} コイン！プロフィールを埋めるともっと貯まるよ`);
+        showToast(tf('toast_setup_bonus', lang, { n: SETUP_BONUS }));
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -10188,7 +10189,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
     if (subscribedOfficials.includes(userId)) return; // 解除不可
     const ok = spendCoins(200);
     if (!ok) {
-      showToast('コインが足りません（200枚必要）');
+      showToast(t('toast_need_200', lang));
       return;
     }
     setSubscribedOfficials((prev) => {
@@ -10196,7 +10197,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
       localStorage.setItem('miri_subscribed_officials', JSON.stringify(next));
       return next;
     });
-    showToast('✨ プレミアムコンテンツが解放されました！');
+    showToast(`✨ ${t('toast_premium_unlocked', lang)}`);
   }
 
   // ── 自分のプレミアムコンテンツ（公認ユーザー用） ─────────────
@@ -10240,7 +10241,7 @@ function createCircle(name: string, emoji: string, memberIds: string[], opts?: {
       const realId = await createCircleShared(name, emoji, opts?.isOfficial ?? false, opts?.joinPolicy ?? 'open', opts?.visibility ?? 'public');
       await reloadCircles();
       if (realId) { void reloadCirclePosts(realId); go('circle-detail', realId); }
-      else { showToast('サークルの作成に失敗しました。通信環境を確認してね'); }
+      else { showToast(t('toast_circle_create_failed', lang)); }
     })();
     return '';
   }
@@ -10264,34 +10265,34 @@ function joinCircleH(circleId: string) {
       const res = await dbJoinCircle(circleId, policy);
       await reloadCircles();
       if (res === 'member') await reloadCirclePosts(circleId);
-      showToast(res === 'pending' ? '✋ 参加をリクエストしました。承認をまってね' : res === 'member' ? '🎉 サークルに参加しました！' : '参加に失敗しました');
+      showToast(res === 'pending' ? `✋ ${t('toast_circle_requested', lang)}` : res === 'member' ? `🎉 ${t('toast_circle_joined', lang)}` : t('toast_join_failed', lang));
     })();
     return;
   }
   // デモ：ローカルで参加
   const next = circles.map((c) => c.id === circleId && !c.memberIds.includes(me.id) ? { ...c, memberIds: [...c.memberIds, me.id] } : c);
   setCircles(next); localStorage.setItem('circles', JSON.stringify(next));
-  showToast('🎉 サークルに参加しました！');
+  showToast(`🎉 ${t('toast_circle_joined', lang)}`);
 }
 
 function approveCircleMemberH(circleId: string, atName: string) {
   void (async () => { await approveCircleMember(circleId, atName); await reloadCircles(); })();
-  showToast('✅ 参加を承認しました');
+  showToast(`✅ ${t('toast_join_approved', lang)}`);
 }
 function rejectCircleMemberH(circleId: string, atName: string) {
   void (async () => { await rejectCircleMember(circleId, atName); await reloadCircles(); })();
-  showToast('リクエストを見送りました');
+  showToast(t('toast_request_declined', lang));
 }
 
 function leaveCircleH(circleId: string) {
   if (circlesUseDb) {
     void (async () => { await dbLeaveCircle(circleId); await reloadCircles(); })();
-    showToast('サークルを退会しました');
+    showToast(t('toast_circle_left', lang));
     return;
   }
   const next = circles.map((c) => c.id === circleId ? { ...c, memberIds: c.memberIds.filter((id) => id !== me.id) } : c);
   setCircles(next); localStorage.setItem('circles', JSON.stringify(next));
-  showToast('サークルを退会しました');
+  showToast(t('toast_circle_left', lang));
 }
 
 function postToCircle(circleId: string, body: string, opts?: { audience?: 'members' | 'everyone'; kind?: 'talk' | 'vote' }) {
@@ -10354,7 +10355,7 @@ function applyAsFan(circleId: string) {
     if (pending.includes(me.id) || c.fanIds?.includes(me.id)) return c;
     return { ...c, pendingFanIds: [...pending, me.id] };
   }));
-  showToast('🎫 ファン参加を申請しました！承認をまってね');
+  showToast(`🎫 ${t('toast_fan_requested', lang)}`);
 }
 
 function approveFan(circleId: string, userId: string) {
@@ -10366,7 +10367,7 @@ function approveFan(circleId: string, userId: string) {
       fanIds: [...new Set([...(c.fanIds ?? []), userId])],
     };
   }));
-  showToast('✅ ファン参加を承認しました');
+  showToast(`✅ ${t('toast_fan_approved', lang)}`);
 }
 
 function rejectFan(circleId: string, userId: string) {
@@ -10374,7 +10375,7 @@ function rejectFan(circleId: string, userId: string) {
     if (c.id !== circleId) return c;
     return { ...c, pendingFanIds: (c.pendingFanIds ?? []).filter((id) => id !== userId) };
   }));
-  showToast('申請を見送りました');
+  showToast(t('toast_application_declined', lang));
 }
 
 const [favoritePhotos, setFavoritePhotos] = useState<string[]>(() => {
@@ -10489,7 +10490,7 @@ function onProfileSyncFailed() {
     already = localStorage.getItem('miri_pending_profile_sync') === '1';
     localStorage.setItem('miri_pending_profile_sync', '1');
   } catch {}
-  if (!already) showToast('⚠️ 変更をサーバーに保存できませんでした。ログインし直すと自動で再保存します', 'error');
+  if (!already) showToast(`⚠️ ${t('toast_save_failed_relogin', lang)}`, 'error');
 }
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
@@ -10539,7 +10540,7 @@ function rewardNewlyFilledFields(next: typeof defaultProfileBookInfo) {
       localStorage.setItem('miri_earned_fields', JSON.stringify([...earnedSet]));
       addCoins(count * REWARD_PER_FIELD, 'プロフィール入力');
       const { pct } = profileCompletion(next);
-      showToast(`✨ ＋${count * REWARD_PER_FIELD}コイン ／ 完成度 ${pct}%`);
+      showToast(`✨ ${tf('toast_profile_coins', lang, { n: count * REWARD_PER_FIELD, pct })}`);
     }
   } catch {}
 }
@@ -10758,7 +10759,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     setBookmarks(prev => {
       const next = prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id];
       localStorage.setItem('miri_bookmarks', JSON.stringify(next));
-      showToast(prev.includes(id) ? 'ブックマークを解除しました' : '💾 ブックマークに保存しました');
+      showToast(prev.includes(id) ? t('toast_bookmark_removed', lang) : `💾 ${t('toast_bookmark_saved', lang)}`);
       return next;
     });
   }
@@ -10768,7 +10769,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (navigator.share) {
       navigator.share({ text, url: window.location.href }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(text).then(() => showToast('📋 クリップボードにコピーしました'));
+      navigator.clipboard.writeText(text).then(() => showToast(`📋 ${t('toast_copied', lang)}`));
     }
   }
 
@@ -10899,7 +10900,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     }).then((saved) => {
       if (!saved) {
         // セッション切れ等で共有できなかった。黙って握りつぶさず再ログインを促す。
-        showToast('⚠️ 回答を共有できませんでした。ログインし直してからもう一度お試しください');
+        showToast(`⚠️ ${t('toast_share_failed', lang)}`);
       } else {
         // 共有フィードをすぐ同期（他ユーザーの回答も取り込む）
         void reloadFeed();
@@ -10922,20 +10923,20 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
     if (!alreadyRewarded) {
       const reward = prQuestion.id === draft.questionId ? prQuestion.reward : 15;
       addCoins(reward, `PR案件回答（${prQuestion.brand}）`);
-      showToast(`🎁 +${reward}コイン PR案件ボーナス獲得！`);
+      showToast(`🎁 ${tf('toast_pr_bonus', lang, { n: reward })}`);
       addNotification('💼', `PR案件に回答して ${reward} コインもらいました`, 'notif_pr', { n: reward });
     } else {
-      showToast('✏️ 回答を更新しました');
+      showToast(`✏️ ${t('toast_answer_updated', lang)}`);
     }
     markPRAnswered();
     setHasAnsweredPR(true);
   } else if (!alreadyRewarded) {
     addCoins(5, 'お題に回答');
-    showToast('🎁 +5コイン 回答ボーナス！');
+    showToast(`🎁 ${tf('toast_answer_bonus', lang, { n: 5 })}`);
     addNotification('✍️', 'お題に回答して 5 コインもらいました', 'notif_answer', { n: 5 });
   } else {
     // 編集（2回目以降）はコインを配らない
-    showToast('✏️ 回答を更新しました');
+    showToast(`✏️ ${t('toast_answer_updated', lang)}`);
   }
 
   return id;
@@ -10971,15 +10972,6 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
   }
 
   const [diaryPages, setDiaryPages] = useState<DiaryPage[]>(initialDiaryPages);
-  // 画面にある名前（自分・回答の著者・見ているプロフ帳の相手など）を、自動翻訳しない固有名詞として登録する。
-  // Supabase から読んだ名前は supabase.ts でまとめて登録される。
-  useEffect(() => {
-    addProperNames([
-      me.name, profileBookInfo?.nickname, profileBookInfo?.name, viewedProfile?.name,
-      ...answers.map((a) => a.user?.name),
-      ...followers.map((f) => f.name),
-    ]);
-  });
   const [selectedDiaryId, setSelectedDiaryId] = useState<string>(initialDiaryPages[0]?.id ?? '');
   const [selectedBlogId, setSelectedBlogId] = useState<string>('');
 
@@ -11007,7 +10999,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         const realId = await createDiaryPageShared(theme, description, visibility, mentionedUserIds, (firstEntryBody.trim() || firstPhotoUrl) ? { body: firstEntryBody, photoUrl: firstPhotoUrl || undefined } : undefined);
         await reloadDiary();
         if (realId) go('diary-detail', realId);
-        else showToast('日記の作成に失敗しました。通信環境を確認してね');
+        else showToast(t('toast_diary_create_failed', lang));
       })();
       return '';
     }
@@ -11124,10 +11116,10 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
 
   // 通報：確認 → reports テーブルへ送信 → トースト。運営は Supabase で確認して手動対応。
   async function reportAnswer(answerId: string) {
-    if (!dbReady()) { showToast('通報は本番環境でのみ利用できます', 'error'); return; }
-    if (!window.confirm('この回答を通報しますか？（運営が内容を確認します）')) return;
+    if (!dbReady()) { showToast(t('toast_report_prod_only', lang), 'error'); return; }
+    if (!window.confirm(t('confirm_report', lang))) return;
     const ok = await submitReport('answer', answerId);
-    showToast(ok ? '通報しました。ご協力ありがとうございます' : '通報に失敗しました。時間をおいて再度お試しください', ok ? 'success' : 'error');
+    showToast(ok ? t('toast_reported', lang) : t('toast_report_failed', lang), ok ? 'success' : 'error');
   }
 
   function reportDiaryEntry(pageId: string, entryId: string) {
@@ -11184,7 +11176,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
         postedAt: new Date().toISOString(),
       };
       setBlogPosts((prev) => { const next = [lpost, ...prev]; try { localStorage.setItem('miri_blog_posts', JSON.stringify(next)); } catch {} return next; });
-      showToast('端末に保存しました（通信回復後に再投稿してね）');
+      showToast(t('toast_saved_offline', lang));
       return lid;
     }
     const id = `blog-${Date.now()}`;
