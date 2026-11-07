@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Lang } from '@/lib/i18n';
-import { parseTranslateItem, TRANSLATION_LANGS, type TranslateItem } from '@/lib/translation/shared';
+import { parseConsentItem, parseTranslateItem, TRANSLATION_LANGS, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
+import { CONSENT_VERSION } from '@/lib/translation/consentText';
 import { getRuntime, translateMany, userIdFromToken } from '@/lib/translation/server/service';
 
 export const runtime = 'nodejs';
@@ -9,7 +10,11 @@ export const dynamic = 'force-dynamic';
 // 自由回答の翻訳 API（Phase B）
 //  GET  /api/translate?owner=<username> … 使えるか・その人が翻訳を許可しているか（ボタンを出すかどうか）
 //  POST { action: 'translate', target, items } … 翻訳（ログイン必須。文章は受け取らない。原文はサーバーが DB から読む）
-//  POST { action: 'get_consent' | 'set_consent', allow? } … 自分のプロフ帳・回答の翻訳を許可するか（ログイン必須）
+//  POST { action: 'get_consent' }                          … 自分の許可の状態（版・選んだ項目）
+//  POST { action: 'list_candidates' }                      … 翻訳の対象に選べる、いま公開中の自分の項目・回答
+//  POST { action: 'grant_consent', version, locale, ageConfirmed16, items } … 説明を確認して許可（直接オンにはできない）
+//  POST { action: 'set_items', items }                     … 翻訳してよい項目を変える
+//  POST { action: 'revoke_consent' }                       … 許可を取り消す（翻訳キャッシュは削除、法定の記録は残す）
 // 1 つの関数にまとめているのは、プレビューのメモリ保存（許可・翻訳・予算）を同じインスタンスで共有するため。
 
 const MAX_ITEMS = 40;
@@ -29,7 +34,10 @@ export async function GET(req: NextRequest) {
   const body: Record<string, unknown> = { enabled: rt.cfg.enabled, mock: rt.cfg.enabled && rt.engine.id === 'mock' };
   if (rt.cfg.enabled && rt.store && /^[A-Za-z0-9_.-]{1,40}$/.test(owner)) body.ownerAllows = await rt.store.ownerAllows(owner);
   // 使用状況は本番以外でだけ返す（本番は SQL Editor の translation_budget で見る）
-  if (rt.cfg.enabled && rt.store && !rt.cfg.isProduction && req.nextUrl.searchParams.get('usage') === '1') body.usage = await rt.store.usage();
+  if (rt.cfg.enabled && rt.store && !rt.cfg.isProduction && req.nextUrl.searchParams.get('usage') === '1') {
+    body.usage = await rt.store.usage();
+    body.records = await rt.store.recordCounts();
+  }
   return NextResponse.json(body, { headers: { 'cache-control': 'no-store' } });
 }
 
@@ -49,11 +57,30 @@ export async function POST(req: NextRequest) {
   let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch {}
 
-  if (body.action === 'get_consent') return NextResponse.json({ allow: await rt.store.getConsent(userId) });
-  if (body.action === 'set_consent') {
-    if (typeof body.allow !== 'boolean') return NextResponse.json({ error: 'bad_request' }, { status: 400 });
-    await rt.store.setConsent(userId, body.allow);
-    return NextResponse.json({ allow: body.allow });
+  const parseItems = (raw: unknown): ConsentItem[] | null => {
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > 150) return null;
+    const items = raw.map(parseConsentItem);
+    return items.every((x): x is ConsentItem => !!x) ? items : null;
+  };
+  if (body.action === 'get_consent') return NextResponse.json({ ...(await rt.store.getConsent(userId)), currentVersion: CONSENT_VERSION });
+  if (body.action === 'list_candidates') return NextResponse.json({ candidates: await rt.store.candidates(userId) });
+  if (body.action === 'grant_consent') {
+    const items = parseItems(body.items);
+    if (!items || body.ageConfirmed16 !== true || (body.locale !== 'ja' && body.locale !== 'en') || typeof body.version !== 'string') {
+      return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
+    }
+    const r = await rt.store.grantConsent(userId, { version: body.version, locale: body.locale, ageCheck: 'self_declared_16_plus', items });
+    return NextResponse.json(r, { status: r.ok ? 200 : 409 });
+  }
+  if (body.action === 'set_items') {
+    const items = parseItems(body.items);
+    if (!items) return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
+    const r = await rt.store.setConsentItems(userId, items);
+    return NextResponse.json(r, { status: r.ok ? 200 : 409 });
+  }
+  if (body.action === 'revoke_consent') {
+    await rt.store.revokeConsent(userId);
+    return NextResponse.json({ ok: true });
   }
   if (body.action !== 'translate') return NextResponse.json({ error: 'bad_request' }, { status: 400 });
 

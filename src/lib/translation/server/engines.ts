@@ -12,7 +12,8 @@ import { MAX_OUTPUT_TOKENS, type TranslationConfig, type Usage } from './config'
 
 export type EngineInput = { text: string; context?: string; source: Lang; target: Lang; glossary: GlossaryEntry[] };
 export type EngineOutput =
-  | { ok: true; decision: 'translated' | 'kept_original'; text: string; keptTerms: string[]; usage: Usage }
+  /** inferenceGeo：実際に推論した地域（Anthropic の応答の usage.inference_geo） */
+  | { ok: true; decision: 'translated' | 'kept_original'; text: string; keptTerms: string[]; usage: Usage; inferenceGeo?: string | null }
   /** usage が null：課金されたか分からない（タイムアウトなど）→ 精算せず、見込み額で確定させる */
   | { ok: false; error: string; usage: Usage | null };
 
@@ -36,13 +37,13 @@ export const mockEngine: TranslationEngine = {
   async translate({ text, target, glossary }) {
     const keptTerms = glossary.filter((g) => g.keep).map((g) => g.term);
     if (GLOSSARY.some((g) => g.keep && g.term === text.trim())) {
-      return { ok: true, decision: 'kept_original', text, keptTerms, usage: { ...ZERO, input: 700, output: 20 } };
+      return { ok: true, decision: 'kept_original', text, keptTerms, usage: { ...ZERO, input: 700, output: 20 }, inferenceGeo: 'us' };
     }
     let out = target === 'en' && MOCK_EN[text] ? MOCK_EN[text] : `[mock:${target}] ${text}`;
     // 正式な海外名がある作品・ブランドは置きかえる（仮の翻訳でも用語集の動きを確かめられるように）
     for (const g of glossary) if (!g.keep && g.official?.[target]) out = out.split(g.term).join(g.official[target]!);
     const chars = [...text].length;
-    return { ok: true, decision: 'translated', text: out, keptTerms, usage: { input: 700 + chars * 2, output: 20 + chars * 2, cacheRead: 0, cacheWrite: 0 } };
+    return { ok: true, decision: 'translated', text: out, keptTerms, usage: { input: 700 + chars * 2, output: 20 + chars * 2, cacheRead: 0, cacheWrite: 0 }, inferenceGeo: 'us' };
   },
 };
 
@@ -63,7 +64,7 @@ Rules:
 5. Slang, abbreviations and coined words: translate the meaning naturally when it is clear (エモい -> nostalgic, emotional; 推し活 -> supporting my fave). If the meaning depends on context you do not have, use "kept_original".
 6. Very short or ambiguous text (one word that could mean several things, a lone symbol, a reaction like 草 or ぴえん): use "kept_original" instead of guessing.
 7. Do not romanize Japanese as a substitute for translating it. Do not add explanations, notes, quotation marks or furigana.
-8. Keep line breaks, emoji, kaomoji and decoration marks such as [♥] or ☆ exactly where they are.
+8. Keep line breaks, emoji, kaomoji, decoration marks such as [♥] or ☆, and placeholders such as ⟦1⟧ exactly as they are.
 9. Keep the tone: casual stays casual, polite stays polite. Keep it about as long as the original.
 10. Terms listed in <glossary> must follow the instruction given there.
 
@@ -113,6 +114,8 @@ export function anthropicEngine(cfg: TranslationConfig, apiKey: string): Transla
         res = await client.messages.create({
           model: cfg.model,
           max_tokens: MAX_OUTPUT_TOKENS,
+          // 推論を米国内の設備に限る（既定の global では国が決まらず、同意画面で外国の名称を特定できない）
+          inference_geo: cfg.inferenceGeo,
           // Haiku 5.5 は思考が既定でオン。思考の分も出力料金になるので翻訳では止める（effort が high 以下なら止められる）
           thinking: { type: 'disabled' },
           output_config: { effort: 'low', format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
@@ -126,12 +129,15 @@ export function anthropicEngine(cfg: TranslationConfig, apiKey: string): Transla
         if (e instanceof Anthropic.APIError) return { ok: false, error: `api_${e.status ?? 'unknown'}`, usage: ZERO };
         return { ok: false, error: 'unknown', usage: null };
       }
+      const inferenceGeo = res.usage.inference_geo ?? null;
       const usage: Usage = {
         input: res.usage.input_tokens,
         output: res.usage.output_tokens,
         cacheRead: res.usage.cache_read_input_tokens ?? 0,
         cacheWrite: res.usage.cache_creation_input_tokens ?? 0,
       };
+      // 米国以外で推論された（設定どおりでない）ときは、結果を使わない
+      if (inferenceGeo && inferenceGeo !== cfg.inferenceGeo) return { ok: false, error: `geo_${inferenceGeo}`, usage };
       // refusal（安全性の判定で断られた）・max_tokens（途中で切れた）は失敗として原文を出す
       if (res.stop_reason !== 'end_turn') return { ok: false, error: `stop_${res.stop_reason}`, usage };
       const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
@@ -140,7 +146,7 @@ export function anthropicEngine(cfg: TranslationConfig, apiKey: string): Transla
         if ((parsed.decision !== 'translated' && parsed.decision !== 'kept_original') || typeof parsed.translation !== 'string' || !Array.isArray(parsed.kept_terms)) {
           return { ok: false, error: 'bad_json', usage };
         }
-        return { ok: true, decision: parsed.decision, text: parsed.translation, keptTerms: parsed.kept_terms.filter((x: unknown) => typeof x === 'string'), usage };
+        return { ok: true, decision: parsed.decision, text: parsed.translation, keptTerms: parsed.kept_terms.filter((x: unknown) => typeof x === 'string'), usage, inferenceGeo };
       } catch {
         return { ok: false, error: 'bad_json', usage };
       }

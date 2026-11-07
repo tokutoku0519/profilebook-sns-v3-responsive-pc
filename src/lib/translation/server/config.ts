@@ -25,9 +25,14 @@ export type TranslationConfig = {
   userDailyLimit: number;
   ownerDailyLimit: number;
   maxEstimateUsd: number;
-  /** 料金（米ドル / 100 万トークン） */
+  /** Anthropic で推論する地域。外国の名称（アメリカ合衆国）を特定するため us に固定する（既定の global は国が決まらない） */
+  inferenceGeo: 'us';
+  /** 料金（米ドル / 100 万トークン）。inference_geo=us の 1.1 倍を含めた額 */
   price: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
+
+/** 推論を米国内に限ると料金が 1.1 倍（Claude API Docs「Data residency」） */
+export const US_GEO_MULTIPLIER = 1.1;
 
 const num = (v: string | undefined, d: number) => {
   const n = Number(v);
@@ -46,12 +51,13 @@ export function translationConfig(env: NodeJS.ProcessEnv = process.env): Transla
     userDailyLimit: num(env.TRANSLATION_USER_DAILY_LIMIT, 30),
     ownerDailyLimit: num(env.TRANSLATION_OWNER_DAILY_LIMIT, 60),
     maxEstimateUsd: 0.002,
-    // Claude Haiku 5.5 の公式料金（2026-10 時点）。変わったら環境変数で上書きする
+    inferenceGeo: 'us' as const,
+    // Claude Haiku 5.5 の公式料金（2026-10 時点）× 米国内での推論（inference_geo: us）の 1.1 倍。変わったら環境変数で上書きする
     price: {
-      input: num(env.TRANSLATION_PRICE_INPUT, 0.10),
-      output: num(env.TRANSLATION_PRICE_OUTPUT, 0.50),
-      cacheRead: num(env.TRANSLATION_PRICE_CACHE_READ, 0.01),
-      cacheWrite: num(env.TRANSLATION_PRICE_CACHE_WRITE, 0.125),
+      input: num(env.TRANSLATION_PRICE_INPUT, 0.10 * US_GEO_MULTIPLIER),
+      output: num(env.TRANSLATION_PRICE_OUTPUT, 0.50 * US_GEO_MULTIPLIER),
+      cacheRead: num(env.TRANSLATION_PRICE_CACHE_READ, 0.01 * US_GEO_MULTIPLIER),
+      cacheWrite: num(env.TRANSLATION_PRICE_CACHE_WRITE, 0.125 * US_GEO_MULTIPLIER),
     },
   };
   const off = (reason: string): TranslationConfig => ({ ...base, enabled: false, reason });

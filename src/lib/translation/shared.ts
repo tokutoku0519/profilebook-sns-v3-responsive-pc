@@ -56,6 +56,28 @@ export function parseTranslateItem(raw: unknown): TranslateItem | null {
 
 export const itemKey = (it: TranslateItem) => (it.kind === 'answer' ? `answer:${it.id}` : `profile:${it.owner}:${it.path}`);
 
+// ── 本人が「公開して翻訳してよい」と選ぶ単位（同意の対象）──
+// プロフ帳はセクション（トップレベルの項目）ごと、回答は 1 件ごと。
+// 選んでいない項目・回答は、公開されていても翻訳しない（未設定の公開範囲を公開とみなさないため）。
+export type ProfileSection = (typeof TRANSLATABLE_PROFILE_FIELDS)[number];
+export type ConsentItem = { kind: 'profile_section'; key: ProfileSection } | { kind: 'answer'; id: string };
+export const consentItemKey = (c: ConsentItem) => (c.kind === 'answer' ? `answer:${c.id}` : `profile:${c.key}`);
+/** 翻訳する項目が、どの同意の対象に当たるか */
+export const permissionKeyOf = (it: TranslateItem) => (it.kind === 'answer' ? `answer:${it.id}` : `profile:${it.path.split('.')[0]}`);
+
+export function parseConsentItem(raw: unknown): ConsentItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (r.kind === 'profile_section' && typeof r.key === 'string' && (TRANSLATABLE_PROFILE_FIELDS as readonly string[]).includes(r.key)) {
+    return { kind: 'profile_section', key: r.key as ProfileSection };
+  }
+  if (r.kind === 'answer' && typeof r.id === 'string' && UUID_RE.test(r.id)) return { kind: 'answer', id: r.id.toLowerCase() };
+  return null;
+}
+
+/** 同意画面に出す候補（いま公開されていて、翻訳できる中身があるもの）。preview は本人にだけ見せる短い抜粋 */
+export type ConsentCandidate = { item: ConsentItem; preview: string; question?: string };
+
 export type TranslateStatus = 'done' | 'kept' | 'original' | 'pending';
 export type TranslateResult = { key: string; status: TranslateStatus; text?: string };
 

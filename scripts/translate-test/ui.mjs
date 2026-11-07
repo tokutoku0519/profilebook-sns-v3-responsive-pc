@@ -2,8 +2,8 @@
 //  ・他人のプロフ帳：「翻訳を見る」→ 訳文、「原文を見る」→ 原文。名前・フォロワー限定の項目は原文のまま
 //  ・回答の詳細：「翻訳を見る」
 //  ・表示言語が日本語なら（日本語の文に）ボタンを出さない
-//  ・マイページ：翻訳の許可の切り替え
-export async function runUi({ BASE, check, sessionFor, IDS, require }) {
+//  ・マイページ：翻訳の許可（取り消し → 説明・項目・年齢・同意のチェック → 許可）と、退会・データ削除の申請
+export async function runUi({ BASE, SB, check, sessionFor, IDS, require, regrant, records }) {
   let pw;
   try { pw = require('playwright'); } catch { pw = require(process.env.PW || '/opt/node-tools/node_modules/playwright'); }
   const browser = await pw.chromium.launch();
@@ -84,26 +84,60 @@ export async function runUi({ BASE, check, sessionFor, IDS, require }) {
     check(`[${W}] 日本語で見ているときは日本語の文に翻訳ボタンを出さない`, (await ja.page.locator('[data-translate-bar]').count()) === 0);
     await ja.ctx.close();
 
-    // ── 書いた本人（alice）：マイページの許可の切り替え ──
+    // ── 書いた本人（alice）：マイページの許可（直接オンにはできない。説明・項目・年齢・同意のチェック）──
     const me = await ctxFor('alice', 'en', viewport);
+    me.page.on('dialog', (d) => d.accept());
     await me.page.goto(`${BASE}/alice`, { waitUntil: 'networkidle' });
     await me.page.waitForTimeout(1500);
     await closeOverlays(me.page);
     await me.page.getByRole('button', { name: /^(Profile|My Page)$/ }).first().click().catch(() => {});
     const card = me.page.locator('[data-translation-consent]');
     await card.waitFor({ timeout: 10000 }).catch(() => {});
-    check(`[${W}] マイページに翻訳の許可の切り替えが出る`, await card.isVisible().catch(() => false));
-    const sw = card.getByRole('switch');
-    const before = await sw.isChecked().catch(() => null);
-    await sw.click().catch(() => {});
+    check(`[${W}] マイページに翻訳の許可のカードが出る（許可中）`, (await card.getAttribute('data-state').catch(() => null)) === 'on');
+    check(`[${W}] 許可のカードにスイッチはない（直接オンにできない）`, (await card.getByRole('switch').count()) === 0);
+    const ev0 = (await records()).consentEvents;
+    await card.locator('button').nth(2).click().catch(() => {});      // 取り消す（確認ダイアログは OK）
     await me.page.waitForTimeout(800);
-    const after = await sw.isChecked().catch(() => null);
-    check(`[${W}] 切り替えると保存される`, before === true && after === false && (await card.innerText()).includes('saved'), `${before}→${after}`);
-    await sw.click().catch(() => {});
-    await me.page.waitForTimeout(800);
+    check(`[${W}] 取り消すと「許可していない」に戻る`, (await card.getAttribute('data-state').catch(() => null)) === 'off');
+    await card.locator('button').first().click().catch(() => {});      // 内容を確認して許可する
+    const sheet = me.page.locator('[data-consent-sheet]');
+    await sheet.waitFor({ timeout: 10000 }).catch(() => {});
+    const st = await sheet.innerText().catch(() => '');
+    check(`[${W}] 説明に送り先の国名・事業者・米国の制度・取り消し方法が出る`, /United States/.test(st) && /Anthropic/.test(st) && /withdraw|revoke|stop/i.test(st), st.slice(0, 80));
+    const submit = sheet.locator('[data-consent-submit]');
+    await sheet.locator('[data-item="profile:dream"]').waitFor({ timeout: 10000 }).catch(() => {});
+    check(`[${W}] 候補に公開の項目が出て、フォロワー限定の項目は出ない`, (await sheet.locator('[data-item="profile:dream"]').count()) === 1 && (await sheet.locator('[data-item="profile:motto"]').count()) === 0);
+    check(`[${W}] 最初は何も選ばれておらず、許可ボタンは押せない`, (await sheet.locator('input[data-item]:checked').count()) === 0 && (await submit.isDisabled()));
+    await sheet.locator('[data-item="profile:dream"]').check().catch(() => {});
+    const y = new Date().getFullYear();
+    await sheet.locator('[data-age-year]').selectOption(String(y - 10)).catch(() => {});
+    await sheet.locator('[data-age-month]').selectOption('1').catch(() => {});
+    check(`[${W}] 16 歳未満なら注意が出て、許可できない`, (await sheet.getByRole('alert').count()) > 0 && (await submit.isDisabled()));
+    await sheet.locator('[data-age-year]').selectOption(String(y - 30)).catch(() => {});
+    check(`[${W}] 同意のチェックがなければ許可できない`, await submit.isDisabled());
+    await sheet.locator('[data-agree]').check().catch(() => {});
+    check(`[${W}] 項目・年齢・同意のチェックがそろうと許可できる`, !(await submit.isDisabled()));
+    check(`[${W}] 説明の画面も横はみ出しなし`, (await overflow(me.page)) <= 0);
+    if (shots) await me.page.screenshot({ path: `${shots}/consent_sheet_${W}.png` }).catch(() => {});
+    await submit.click().catch(() => {});
+    await me.page.waitForTimeout(1000);
+    check(`[${W}] 許可すると「許可中」になり、同意・取り消しの記録が増える`, (await card.getAttribute('data-state').catch(() => null)) === 'on' && (await records()).consentEvents === ev0 + 2);
     if (shots) await card.screenshot({ path: `${shots}/consent_${W}.png` }).catch(() => {});
+
+    // 退会・データ削除の申請
+    const del = me.page.locator('[data-account-deletion]');
+    await del.locator('button').first().click().catch(() => {});
+    const ddlg = me.page.getByRole('dialog');
+    await ddlg.waitFor({ timeout: 5000 }).catch(() => {});
+    const dt = await ddlg.innerText().catch(() => '');
+    check(`[${W}] 退会の申請画面に、消すもの・法令で残す記録・Anthropic 側の扱いの説明が出る`, dt.length > 100 && /Anthropic/.test(dt), dt.slice(0, 60));
+    await me.page.locator('[data-deletion-submit]').click().catch(() => {});
+    await me.page.waitForTimeout(1000);
+    const writes = await (await fetch(`${SB}/__test/writes`)).json();
+    check(`[${W}] 申請は feedback に kind=account_deletion で送る（運営者が確認して削除）`, writes.some((w) => w.p === '/rest/v1/feedback' && w.body.includes('account_deletion')) && (await del.getByRole('status').count()) === 1);
     check(`[${W}] マイページも横はみ出しなし・ページエラーなし`, (await overflow(me.page)) <= 0 && me.errors.length === 0, me.errors.join(' | '));
     await me.ctx.close();
+    await regrant();   // 次の画面幅のテストのために、元の項目で許可し直す
   }
   await browser.close();
 }

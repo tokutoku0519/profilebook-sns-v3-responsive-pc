@@ -6,9 +6,14 @@
 //  ・失敗・予算切れ・権限なしの項目は原文のまま
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { t, type Lang } from '@/lib/i18n';
-import { differsFromViewer, keepWithoutEngine, type TranslateItem } from '@/lib/translation/shared';
-import { fetchTranslateAvailability, getMyTranslationConsent, requestTranslations, setMyTranslationConsent } from '@/lib/translation/client';
+import { consentItemKey, differsFromViewer, keepWithoutEngine, type ConsentCandidate, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
+import { ageFrom, CONSENT_TEXT, CONSENT_VERSION, consentLocaleFor, MIN_CONSENT_AGE } from '@/lib/translation/consentText';
+import {
+  fetchTranslateAvailability, getMyTranslationConsent, grantTranslationConsent, listConsentCandidates, requestTranslations,
+  revokeTranslationConsent, setTranslationItems, type MyConsent,
+} from '@/lib/translation/client';
 
 export type TranslateCandidate = { item: TranslateItem; text: string };
 
@@ -100,51 +105,184 @@ export function TranslateBar({ tr, lang, compact = false }: { tr: ContentTransla
   );
 }
 
-/** マイページ：自分の公開プロフ帳・公開回答の翻訳を許可するか（翻訳が使えるときだけ出す） */
+/** マイページ：自分の公開プロフ帳・公開回答の翻訳の許可（翻訳が使えるときだけ出す）。
+ *  直接オンにはできない。説明（外国の名称・制度・事業者の措置・保存期間・取り消し方法など）と項目の選択、
+ *  年齢の確認、同意のチェックを経て許可する。説明は日本語と英語で表示する。 */
 export function TranslationConsentCard({ lang }: { lang: Lang }) {
+  const T = CONSENT_TEXT[consentLocaleFor(lang)];
   const [enabled, setEnabled] = useState(false);
-  const [allow, setAllow] = useState<boolean | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [state, setState] = useState<MyConsent | null>(null);
+  const [sheet, setSheet] = useState<null | 'grant' | 'edit'>(null);
+  const [notice, setNotice] = useState('');
+  const reload = async () => setState(await getMyTranslationConsent());
   useEffect(() => {
     let cancelled = false;
     fetchTranslateAvailability().then(async (a) => {
       if (cancelled || !a.enabled) return;
       setEnabled(true);
       const v = await getMyTranslationConsent();
-      if (!cancelled) setAllow(v);
+      if (!cancelled) setState(v);
     });
     return () => { cancelled = true; };
   }, []);
-  if (!enabled || allow === null) return null;
-  async function change(next: boolean) {
-    setSaving(true); setSaved(false);
-    const ok = await setMyTranslationConsent(next);
-    setSaving(false);
-    if (ok) { setAllow(next); setSaved(true); }
+  if (!enabled || !state) return null;
+  const on = state.allow && state.current;
+  const date = state.grantedAt ? new Date(state.grantedAt).toLocaleDateString(lang === 'ja' ? 'ja-JP' : undefined) : '';
+  async function revoke() {
+    if (!window.confirm(T.revokeConfirm)) return;
+    const r = await revokeTranslationConsent();
+    setNotice(r.ok ? T.revoked : T.failed);
+    await reload();
   }
   return (
-    <section className="rounded-3xl bg-white p-4 shadow-card" data-translation-consent>
+    <section className="rounded-3xl bg-white p-4 shadow-card" data-translation-consent data-state={on ? 'on' : state.allow ? 'reconfirm' : 'off'}>
       <div className="flex items-start gap-3">
         <span aria-hidden className="text-xl">🌐</span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-ink">{t('tr_consent_title', lang)}</p>
-          <p className="mt-1 text-[12px] font-bold leading-relaxed text-muted">{t('tr_consent_desc', lang)}</p>
-          <p className="mt-1 text-[11px] font-bold leading-relaxed text-muted">{t('tr_consent_ext', lang)}</p>
+          <p className="text-sm font-black text-ink">{T.cardTitle}</p>
+          <p className="mt-1 text-[12px] font-bold leading-relaxed text-muted">
+            {on ? T.cardOn(state.version ?? '', date, state.items.length) : state.allow ? T.cardReconfirm : T.cardOff}
+          </p>
         </div>
       </div>
-      <label className="mt-3 flex min-h-[44px] cursor-pointer items-center justify-between gap-3 rounded-2xl bg-base px-3 py-2">
-        <span className="text-[13px] font-black text-ink">{t('tr_consent_on', lang)}</span>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={allow}
-          disabled={saving}
-          onChange={(e) => change(e.target.checked)}
-          className="h-5 w-5 accent-[rgb(255_122_105)]"
+      <div className="mt-3 flex flex-wrap gap-2">
+        {!on && (
+          <button type="button" onClick={() => setSheet('grant')} className="min-h-[40px] rounded-full bg-ink px-4 text-[13px] font-black text-white active:scale-[0.97]">
+            {state.allow ? T.cardReview : T.cardOpen}
+          </button>
+        )}
+        {on && (
+          <>
+            <button type="button" onClick={() => setSheet('edit')} className="min-h-[40px] rounded-full border-2 border-ink/15 bg-white px-4 text-[13px] font-black text-ink active:scale-[0.97]">{T.cardEditItems}</button>
+            <button type="button" onClick={() => setSheet('grant')} className="min-h-[40px] rounded-full border-2 border-ink/15 bg-white px-4 text-[13px] font-black text-ink active:scale-[0.97]">{T.cardReview}</button>
+            <button type="button" onClick={revoke} className="min-h-[40px] rounded-full border-2 border-red-200 bg-white px-4 text-[13px] font-black text-red-500 active:scale-[0.97]">{T.cardRevoke}</button>
+          </>
+        )}
+      </div>
+      {notice && <p role="status" className="mt-2 text-[11px] font-bold text-muted">{notice}</p>}
+      {sheet && (
+        <ConsentSheet
+          lang={lang}
+          mode={sheet}
+          current={state.allow ? state.items : []}
+          onClose={() => setSheet(null)}
+          onDone={async (msg) => { setSheet(null); setNotice(msg); await reload(); }}
         />
-      </label>
-      {saved && <p role="status" className="mt-2 text-[11px] font-bold text-muted">{t('tr_consent_saved', lang)}</p>}
+      )}
     </section>
+  );
+}
+
+function ConsentSheet({ lang, mode, current, onClose, onDone }: {
+  lang: Lang; mode: 'grant' | 'edit'; current: ConsentItem[]; onClose: () => void; onDone: (msg: string) => void;
+}) {
+  const locale = consentLocaleFor(lang);
+  const T = CONSENT_TEXT[locale];
+  const [candidates, setCandidates] = useState<ConsentCandidate[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(current.map(consentItemKey)));
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState('');
+  const [month, setMonth] = useState('');
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { listConsentCandidates().then((c) => setCandidates(c ?? [])); }, []);
+  const age = year && month ? ageFrom(Number(year), Number(month)) : null;
+  const ageOk = mode === 'edit' || (age != null && age >= MIN_CONSENT_AGE);
+  const chosen = (candidates ?? []).filter((c) => picked.has(consentItemKey(c.item))).map((c) => c.item);
+  const canSubmit = !busy && chosen.length > 0 && ageOk && (mode === 'edit' || agree);
+  const toggle = (k: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const labelOf = (c: ConsentCandidate) => (c.item.kind === 'answer' ? `${T.answerLabel}${c.question ? `「${c.question}」` : ''}` : T.sectionLabels[c.item.key] ?? c.item.key);
+
+  async function submit() {
+    setBusy(true); setError('');
+    const r = mode === 'edit' ? await setTranslationItems(chosen) : await grantTranslationConsent(CONSENT_VERSION, locale, chosen);
+    setBusy(false);
+    if (r.ok) onDone(T.saved); else setError(T.failed);
+  }
+
+  // 画面の下のタブバーより手前に出すため、body の直下に出す（マイページの中に置くと、スマホで許可ボタンがタブバーに隠れる）
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/40 sm:items-center" role="dialog" aria-modal="true" aria-label={T.title} data-consent-sheet>
+      <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl">
+        <div className="overflow-y-auto px-5 pb-4 pt-5">
+          <p className="text-base font-black text-ink">{mode === 'edit' ? T.itemsHeading : T.title}</p>
+          <p className="mt-1 text-[11px] font-bold text-muted">{CONSENT_VERSION}{T.languageNote ? ` · ${T.languageNote}` : ''}</p>
+          {mode === 'grant' && (
+            <>
+              <p className="mt-3 text-[13px] font-bold leading-relaxed text-ink">{T.lead}</p>
+              {T.sections.map((sec) => (
+                <div key={sec.h} className="mt-3">
+                  <p className="text-[13px] font-black text-ink">{sec.h}</p>
+                  {sec.body.map((b, i) => <p key={i} className="mt-0.5 break-words text-[12px] font-bold leading-relaxed text-muted">{b}</p>)}
+                </div>
+              ))}
+              <a href="/privacy" target="_blank" rel="noreferrer" className="mt-3 inline-block text-[12px] font-black text-pink underline">{T.policyLink}</a>
+            </>
+          )}
+
+          <div className="mt-4 rounded-2xl bg-base p-3">
+            <p className="text-[13px] font-black text-ink">{T.itemsHeading}</p>
+            <p className="mt-0.5 text-[11px] font-bold leading-relaxed text-muted">{T.itemsHelp}</p>
+            {candidates == null ? null : candidates.length === 0 ? (
+              <p className="mt-2 text-[12px] font-bold text-muted">{T.itemsEmpty}</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {candidates.map((c) => {
+                  const k = consentItemKey(c.item);
+                  return (
+                    <li key={k}>
+                      <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-xl bg-white px-3 py-2">
+                        <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="mt-0.5 h-4 w-4 shrink-0" data-item={k} />
+                        <span className="min-w-0">
+                          <span className="block text-[12px] font-black text-ink">{labelOf(c)}</span>
+                          <span className="block break-words text-[11px] font-bold text-muted">{c.preview}</span>
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {mode === 'grant' && (
+            <>
+              <div className="mt-4 rounded-2xl bg-base p-3">
+                <p className="text-[13px] font-black text-ink">{T.ageHeading}</p>
+                <p className="mt-0.5 text-[11px] font-bold leading-relaxed text-muted">{T.ageHelp}</p>
+                <div className="mt-2 flex gap-2">
+                  <label className="flex-1 text-[11px] font-bold text-muted">{T.ageYear}
+                    <select value={year} onChange={(e) => setYear(e.target.value)} className="mt-1 block w-full rounded-xl border-2 border-ink/10 bg-white px-2 py-2 text-[13px] text-ink" data-age-year>
+                      <option value="">—</option>
+                      {Array.from({ length: 100 }, (_, i) => thisYear - i).map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </label>
+                  <label className="w-24 text-[11px] font-bold text-muted">{T.ageMonth}
+                    <select value={month} onChange={(e) => setMonth(e.target.value)} className="mt-1 block w-full rounded-xl border-2 border-ink/10 bg-white px-2 py-2 text-[13px] text-ink" data-age-month>
+                      <option value="">—</option>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {age != null && age < MIN_CONSENT_AGE && <p role="alert" className="mt-2 text-[12px] font-black text-red-500">{T.ageUnder}</p>}
+              </div>
+              <label className="mt-4 flex cursor-pointer items-start gap-2">
+                <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" data-agree />
+                <span className="text-[12px] font-black leading-relaxed text-ink">{T.agree}</span>
+              </label>
+            </>
+          )}
+          {error && <p role="alert" className="mt-2 text-[12px] font-bold text-red-500">{error}</p>}
+        </div>
+        <div className="flex gap-2 border-t border-ink/10 px-5 py-3">
+          <button type="button" onClick={onClose} className="min-h-[44px] flex-1 rounded-full border-2 border-ink/15 bg-white text-[13px] font-black text-ink">{T.cancel}</button>
+          <button type="button" onClick={submit} disabled={!canSubmit} className="min-h-[44px] flex-1 rounded-full bg-ink text-[13px] font-black text-white disabled:opacity-40" data-consent-submit>
+            {mode === 'edit' ? T.saveItems : T.grant}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

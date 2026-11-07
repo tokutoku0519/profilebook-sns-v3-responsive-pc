@@ -305,6 +305,22 @@ export async function submitFeedback(kind: 'bug' | 'request' | 'question', body:
   return !error;
 }
 
+/** 退会・データ削除の申請（運営者が確認して削除する）。既存の feedback テーブルに kind='account_deletion' で記録する。
+ *  テーブルの構造は変えない（kind は自由な文字列）。削除そのものは運営者が行う（法定の記録は削除の対象と分けて扱う）。 */
+export async function submitAccountDeletionRequest(note: string): Promise<boolean> {
+  if (!supabase) return false;
+  const uid = await getCurrentUserId();
+  if (!uid) return false;
+  let username = '';
+  try {
+    const { data } = await supabase.from('profiles').select('username').eq('id', uid).maybeSingle();
+    username = (data as any)?.username ?? '';
+  } catch {}
+  const body = `[退会・データ削除の申請] ${note.trim()}`.slice(0, 2000);
+  const { error } = await supabase.from('feedback').insert({ user_id: uid, username, kind: 'account_deletion', body });
+  return !error;
+}
+
 /** 現在のアクセストークン（サーバーAPIへ Bearer で渡す用）。無ければ null。 */
 export async function getAccessToken(): Promise<string | null> {
   if (!supabase) return null;

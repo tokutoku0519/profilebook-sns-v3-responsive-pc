@@ -1,83 +1,124 @@
 -- ============================================================
--- 【提案・未適用】自由回答の翻訳キャッシュ・本人の許可・予算管理（Phase B）
+-- 【提案・未適用】自由回答の翻訳：同意・記録・キャッシュ・予算（Phase B）
 --
 -- ★本番DBへの適用は承認後。このファイルは設計レビュー用です。★
--- 設計の説明：docs/translation-phase-b-review.md
+-- 設計の説明：docs/translation-phase-b-review.md ／ ポリシー案：docs/privacy-policy-translation-draft.md
 -- 使う側のコード：src/lib/translation/server/store.ts（DbStore）
+-- テスト：supabase/tests/translation/run.sh（手元の PostgreSQL。本番には接続しない）
 --
--- 翻訳してよいもの（すべて満たすときだけ）
---  1. 書いた本人が「翻訳を許可する」をオンにしている（translation_consents）
---  2. 公開のもの
---     ・プロフ帳：ログインしていない人に見える項目（既存の get_visible_book と同じ判定）で、
---       公開範囲が public または未設定。未設定は 1 の本人の許可があるときだけ（許可がなければ拒否）。
---       require_explicit_public = true にすると、未設定は許可があっても拒否する
---     ・お題への回答：answers.visibility = 'public'
---  3. 翻訳してよい項目（自由に書く欄。名前・ニックネーム・ID・誕生日・血液型・MBTI・性別などは入れない）、
---     決まった形の場所、文字数の上限以内
--- フォロワー限定・非公開・今後増える公開範囲（コミュニティ限定など）は、すべて対象外。
+-- 翻訳してよいのは、次をすべて満たすときだけ
+--  1. 書いた本人が、いまの版の説明（アプリの CONSENT_VERSION）を確認して許可している（translation_consents）
+--     → 説明の版が変わったら、確認し直すまで新しい翻訳も翻訳済みの表示も止める
+--  2. 本人がその項目を「公開して翻訳してよい」と選んでいる（translation_item_permissions）
+--     プロフ帳はセクション（motto・__questions など）ごと、回答は 1 件ごと。
+--     公開範囲が未設定の項目や、選択なしで公開になった回答（デイリーのお題など）は、選ばれていなければ対象外
+--  3. いまも「ログインしていない人」に見える（既存の get_visible_book と answers.visibility = 'public' で判定）
+--  4. 翻訳してよい項目・場所の形・文字数の上限
+--
+-- データを 3 種類に分ける（保存期間と削除の決まりが違うため）
+--  ① 翻訳キャッシュ：content_translations
+--     原文の編集・公開範囲の変更・選択の解除・許可の取り消し・退会で削除
+--  ② 法定の記録：translation_consent_events（同意・撤回の履歴）、translation_provision_log（外国への送信の記録）
+--     翻訳キャッシュとは別に保存する。退会しても保存期間内は残す（外部キーにしない）。期間後に purge で消す。
+--     記録の項目と保存期間は個人情報保護法 29 条・施行規則に照らして法務確認（初期値 3 年は仮）
+--  ③ 費用の集計：translation_budget・translation_reservations（個人の ID を持たない）
+--     translation_daily（回数制限）だけ ID を持ち、2 日で消す
 --
 -- 権限
---  ・テーブルは RLS 有効・ポリシーなし。anon / authenticated の権限は外す。読み書きはサーバー（service_role）だけ
+--  ・テーブルは RLS 有効・ポリシーなし。anon / authenticated の権限を外す。読み書きはサーバー（service_role）だけ
 --  ・関数も service_role だけが実行できる。service_role は RLS を通らないので、判定はすべて関数の中で行う
---  ・原文の取り出し・翻訳済みの返却・保存のどれも、その場で公開範囲と本人の許可を確かめる
---  ・ユーザーのトークン付き（auth.uid() あり）で呼ばれたら何も返さない（閲覧者の権限を持ち込まない）
+--  ・ユーザーのトークン付き（auth.uid() あり）で呼ばれた判定関数は何も返さない（閲覧者の権限を持ち込まない）
 --
+-- 既存のテーブル（profiles・profile_book・answers）の列やデータは変更しない。トリガーを 1 つずつ追加するだけ。
 -- 実行方法：Supabase の SQL Editor に貼って Run（全体が 1 トランザクション）。
--- 取り消し：いちばん下の「ROLLBACK（取り消し）」を別タブで実行（原文・回答には影響なし）。
+-- 取り消し：いちばん下の「ROLLBACK（取り消し）」を別タブで実行。
 -- ============================================================
 begin;
 
--- ── 1. 設定（1 行だけ。再デプロイなしで変えられる）──────────────────
+-- ── 1. 設定（1 行だけ）──────────────────────────────────────
 create table if not exists public.translation_settings (
   id                         boolean primary key default true check (id),
-  enabled                    boolean not null default false,   -- 運営の停止スイッチ（false で新しい翻訳を止める。翻訳済みは返す）
-  monthly_target_usd         numeric(10,4) not null default 5,  -- 目安（超えたら運営に知らせる。止めはしない）
-  monthly_cap_usd            numeric(10,4) not null default 10 check (monthly_cap_usd >= 0), -- 上限（超える見込みなら呼ばない）
-  daily_user_limit           integer not null default 30,       -- 1 人が 1 日に頼める新規翻訳の回数
-  daily_owner_limit          integer not null default 60,       -- 1 人の原文が 1 日に新しく翻訳される回数（編集を繰り返す悪用の防止）
-  require_explicit_public    boolean not null default false,    -- true：公開範囲を「公開」にした項目だけ（未設定は許可があっても拒否）
-  profile_fields             text[] not null default array[      -- 翻訳してよい項目（src/lib/translation/shared.ts と同じ）
+  enabled                    boolean not null default false,   -- 運営の停止スイッチ（false で新しい翻訳を止める）
+  monthly_target_usd         numeric(10,4) not null default 5,
+  monthly_cap_usd            numeric(10,4) not null default 10 check (monthly_cap_usd >= 0),
+  daily_user_limit           integer not null default 30,
+  daily_owner_limit          integer not null default 60,
+  profile_fields             text[] not null default array[      -- 翻訳してよいセクション（src/lib/translation/shared.ts と同じ）
                                'catchphrase','message','hometown',
                                'favoriteFood','dislikeFood','favoriteColor','favoriteCharacter',
                                'specialty','holiday','wantToGo','collection','motto','charmPoint','dream',
                                '__questions','__best3','__monthly'],
   max_field_chars            integer not null default 400,
   max_answer_chars           integer not null default 600,
-  max_estimate_usd           numeric(10,6) not null default 0.002, -- 1 回の見込み額の上限（計算ミスで大きく確保しない）
-  -- 料金（米ドル / 100 万トークン）。Claude Haiku 5.5 の公式料金。変わったらここを更新する
-  price_input_per_mtok       numeric(10,4) not null default 0.10,
-  price_output_per_mtok      numeric(10,4) not null default 0.50,
-  price_cache_read_per_mtok  numeric(10,4) not null default 0.01,
-  price_cache_write_per_mtok numeric(10,4) not null default 0.125,
+  max_estimate_usd           numeric(10,6) not null default 0.002,
+  -- 料金（米ドル / 100 万トークン）。Claude Haiku 5.5 の公式料金 × 米国内での推論（inference_geo: us）の 1.1 倍
+  price_input_per_mtok       numeric(10,4) not null default 0.11,
+  price_output_per_mtok      numeric(10,4) not null default 0.55,
+  price_cache_read_per_mtok  numeric(10,4) not null default 0.011,
+  price_cache_write_per_mtok numeric(10,4) not null default 0.1375,
+  legal_record_retention     interval not null default interval '3 years',  -- ② の保存期間（法務確認で確定）
   updated_at                 timestamptz not null default now()
 );
 insert into public.translation_settings (id) values (true) on conflict (id) do nothing;
 
--- ── 2. 本人の許可 ───────────────────────────────────────────
+-- ── 2. 本人の許可（いまの状態）と選んだ項目 ─────────────────────────
 create table if not exists public.translation_consents (
-  user_id    uuid primary key references public.profiles(id) on delete cascade,
-  allow      boolean not null default false,
-  updated_at timestamptz not null default now()
+  user_id       uuid primary key references public.profiles(id) on delete cascade,
+  allow         boolean not null default false,
+  version       text,                    -- 同意した説明の版
+  granted_at    timestamptz,
+  last_event_id bigint,                  -- いまの状態を作った履歴（translation_consent_events.id）
+  updated_at    timestamptz not null default now()
+);
+create table if not exists public.translation_item_permissions (
+  owner_id         uuid not null references public.profiles(id) on delete cascade,
+  item_kind        text not null check (item_kind in ('profile_section','answer')),
+  item_key         text not null,        -- profile_section：セクション名（motto・__questions など）／answer：回答の id
+  consent_event_id bigint,
+  created_at       timestamptz not null default now(),
+  primary key (owner_id, item_kind, item_key)
 );
 
--- ── 3. 翻訳キャッシュ ─────────────────────────────────────────
+-- ── 3. ② 法定の記録（翻訳キャッシュとは別。退会後も保存期間内は残す）─────────────
+create table if not exists public.translation_consent_events (
+  id                  bigint generated always as identity primary key,
+  user_id             uuid not null,     -- 外部キーにしない（退会後も記録として残す）
+  action              text not null check (action in ('grant','scope_update','revoke')),
+  consent_version     text,
+  consent_text_sha256 text check (consent_text_sha256 ~ '^[0-9a-f]{64}$'),  -- 表示した説明文のハッシュ（サーバーが計算）
+  locale              text check (locale in ('ja','en')),
+  age_check           text check (age_check in ('self_declared_16_plus')),
+  scope               jsonb not null default '[]'::jsonb,                   -- 選んだ項目の一覧
+  created_at          timestamptz not null default now()
+);
+create index if not exists translation_consent_events_user_idx on public.translation_consent_events (user_id, created_at);
+create table if not exists public.translation_provision_log (
+  id               bigint generated always as identity primary key,
+  owner_id         uuid not null,        -- 書いた本人（外部キーにしない）
+  source_type      text not null check (source_type in ('profile_field','answer')),
+  source_path      text not null,        -- 送った項目の場所（本文は保存しない）
+  target_lang      text not null,
+  recipient        text not null default 'Anthropic, PBC (United States)',
+  inference_geo    text not null check (inference_geo = 'us'),
+  consent_event_id bigint,
+  sent_at          timestamptz not null default now()
+);
+create index if not exists translation_provision_log_owner_idx on public.translation_provision_log (owner_id, sent_at);
+
+-- ── 4. ① 翻訳キャッシュ ────────────────────────────────────
 create table if not exists public.content_translations (
   id               bigint generated always as identity primary key,
-  -- 何の文章か。増やすときは check・原文を取り出す関数・削除のトリガーを一緒に追加する
   source_type      text not null check (source_type in ('profile_field','answer')),
-  owner_id         uuid not null references public.profiles(id) on delete cascade,  -- 原文の持ち主。退会で翻訳も消える
-  source_path      text not null,              -- profile_field：motto / __questions.3.a など。answer：回答の id
-  source_hash      text not null check (source_hash ~ '^[0-9a-f]{32}$'),  -- md5(原文)。原文が変わると一致しなくなる
-  -- 翻訳したときの公開範囲。今は public だけ。限定公開を足すときは、返すたびに閲覧者を確かめる関数を必ず通す
+  owner_id         uuid not null references public.profiles(id) on delete cascade,
+  source_path      text not null,
+  source_hash      text not null check (source_hash ~ '^[0-9a-f]{32}$'),
   audience         text not null default 'public' check (audience in ('public')),
   target_lang      text not null check (target_lang in
                      ('ja','en','ko','zh','zh-tw','id','th','vi','tl','ms','es','pt','fr','de','it','ru','ar','hi','tr','nl')),
   status           text not null default 'pending' check (status in ('pending','done','kept','failed')),
-                   -- pending：翻訳中（同じ翻訳を二重に頼まない目印）／done：翻訳あり／
-                   -- kept：訳さない判断（固有名詞・あいまいな短文・同じ言語）／failed：失敗（原文を表示）
   translated_text  text check (char_length(translated_text) <= 3000),
   kept_terms       text[] not null default '{}',
-  engine           text not null,              -- 例：claude-haiku-5-5
+  engine           text not null,
   input_tokens     integer,
   output_tokens    integer,
   cost_usd         numeric(12,6),
@@ -90,36 +131,30 @@ create table if not exists public.content_translations (
   constraint content_translations_done_has_text check (status <> 'done' or translated_text is not null)
 );
 create index if not exists content_translations_owner_idx on public.content_translations (owner_id);
-create index if not exists content_translations_answer_idx on public.content_translations (source_path) where source_type = 'answer';
 
--- ── 4. 予算（月ごと）・確保の記録・1 日の回数 ─────────────────────
+-- ── 5. ③ 費用の集計（個人の ID を持たない）・回数制限（2 日で消す）───────────────
 create table if not exists public.translation_budget (
-  month              date primary key,                     -- その月の 1 日（UTC）
-  spent_usd          numeric(12,6) not null default 0,     -- 確定した費用（API の使用量から計算）
-  reserved_usd       numeric(12,6) not null default 0,     -- 呼び出し中の見込み額の合計
-  requests           integer not null default 0,           -- API を呼ぶために確保した回数
-  cache_hits         integer not null default 0,           -- 翻訳済みを返した回数（API を呼ばない）
+  month              date primary key,
+  spent_usd          numeric(12,6) not null default 0,
+  reserved_usd       numeric(12,6) not null default 0,
+  requests           integer not null default 0,
+  cache_hits         integer not null default 0,
   input_tokens       bigint not null default 0,
   output_tokens      bigint not null default 0,
   cache_read_tokens  bigint not null default 0,
   cache_write_tokens bigint not null default 0,
   updated_at         timestamptz not null default now()
 );
-
 create table if not exists public.translation_reservations (
   id           bigint generated always as identity primary key,
   month        date not null references public.translation_budget(month),
-  user_id      uuid not null,                              -- 翻訳を頼んだ人（退会しても費用の記録は残す）
-  owner_id     uuid not null,                              -- 原文の持ち主
   estimate_usd numeric(12,6) not null check (estimate_usd > 0),
   actual_usd   numeric(12,6),
   status       text not null default 'reserved' check (status in ('reserved','settled','expired')),
-               -- expired：精算されないまま 15 分たった（サーバーが途中で落ちたなど）→ 見込み額を全額使ったとみなす
   created_at   timestamptz not null default now(),
   settled_at   timestamptz
 );
 create index if not exists translation_reservations_open_idx on public.translation_reservations (created_at) where status = 'reserved';
-
 create table if not exists public.translation_daily (
   subject_type text not null check (subject_type in ('user','owner')),
   subject_id   uuid not null,
@@ -128,25 +163,53 @@ create table if not exists public.translation_daily (
   primary key (subject_type, subject_id, day)
 );
 
-alter table public.translation_settings     enable row level security;
-alter table public.translation_consents     enable row level security;
-alter table public.content_translations     enable row level security;
-alter table public.translation_budget       enable row level security;
-alter table public.translation_reservations enable row level security;
-alter table public.translation_daily        enable row level security;
--- ポリシーは作らない（anon / authenticated からは 0 行）。Supabase は新しいテーブルに既定で権限を付けるので外す
-revoke all on public.translation_settings, public.translation_consents, public.content_translations,
-              public.translation_budget, public.translation_reservations, public.translation_daily
-  from public, anon, authenticated;
-grant all on public.translation_settings, public.translation_consents, public.content_translations,
-             public.translation_budget, public.translation_reservations, public.translation_daily
-  to service_role;
+do $$ declare t text; begin
+  foreach t in array array['translation_settings','translation_consents','translation_item_permissions','translation_consent_events',
+                           'translation_provision_log','content_translations','translation_budget','translation_reservations','translation_daily'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from public, anon, authenticated', t);
+    execute format('grant all on public.%I to service_role', t);
+  end loop;
+end $$;
 
--- ── 5. 原文の取り出し（翻訳してよいものだけ）─────────────────────────
--- p_type = 'profile_field'：p_owner = ユーザー名、p_path = 項目の場所
--- p_type = 'answer'       ：p_owner は使わない、p_path = 回答の id
--- 返す：持ち主・原文・md5・手がかり（AI に渡す質問文）。翻訳してよくなければ 0 行。
-create or replace function public.translatable_source(p_type text, p_owner text, p_path text)
+-- ── 6. 判定の部品 ──────────────────────────────────────────
+-- 本人がいまの版で許可しているか
+create or replace function public.translation_consent_current(p_user uuid, p_current_version text)
+returns bigint   -- いまの状態を作った履歴の id（許可していなければ null）
+language sql stable security definer set search_path = public
+as $$
+  select c.last_event_id from public.translation_consents c
+   where c.user_id = p_user and c.allow and c.version = p_current_version
+$$;
+
+-- セクション・配列などから、候補として見せる最初の文字列
+create or replace function public.translation_first_text(v jsonb)
+returns text language plpgsql immutable set search_path = public
+as $$
+declare e jsonb; k text; t text;
+begin
+  if v is null then return null; end if;
+  if jsonb_typeof(v) = 'string' then return nullif(btrim(v #>> '{}'), ''); end if;
+  if jsonb_typeof(v) = 'array' then
+    for e in select * from jsonb_array_elements(v) loop
+      t := public.translation_first_text(case when jsonb_typeof(e) = 'object' and e ? 'a' then e -> 'a' else e end);
+      if t is not null then return t; end if;
+    end loop;
+    return null;
+  end if;
+  if jsonb_typeof(v) = 'object' then
+    for k, e in select * from jsonb_each(v) loop
+      if k = 'monthKey' then continue; end if;
+      t := public.translation_first_text(e);
+      if t is not null then return t; end if;
+    end loop;
+  end if;
+  return null;
+end;
+$$;
+
+-- 翻訳してよい原文を返す（0 行なら翻訳しない）
+create or replace function public.translatable_source(p_type text, p_owner text, p_path text, p_current_version text)
 returns table (owner_id uuid, text_value text, source_hash text, context text)
 language plpgsql stable security definer set search_path = public
 as $$
@@ -161,7 +224,7 @@ declare
   v       text;
   a       public.answers%rowtype;
 begin
-  if auth.uid() is not null then return; end if;          -- 閲覧者の権限を持ち込まない（サーバーの service_role からだけ）
+  if auth.uid() is not null then return; end if;
   select * into s from public.translation_settings where id;
   if not found then return; end if;
 
@@ -169,7 +232,9 @@ begin
     if p_path is null or p_path !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return; end if;
     select * into a from public.answers x where x.id = p_path::uuid;
     if not found or a.visibility is distinct from 'public' then return; end if;
-    if not exists (select 1 from public.translation_consents c where c.user_id = a.user_id and c.allow) then return; end if;
+    if public.translation_consent_current(a.user_id, p_current_version) is null then return; end if;
+    if not exists (select 1 from public.translation_item_permissions ip
+                    where ip.owner_id = a.user_id and ip.item_kind = 'answer' and ip.item_key = p_path) then return; end if;
     if a.body is null or btrim(a.body) = '' or char_length(a.body) > s.max_answer_chars then return; end if;
     owner_id := a.user_id; text_value := a.body; source_hash := md5(a.body); context := left(a.question_title, 200);
     return next; return;
@@ -180,7 +245,6 @@ begin
   parts := string_to_array(p_path, '.');
   top := parts[1];
   if not (top = any (s.profile_fields)) then return; end if;
-  -- 場所の形（src/lib/translation/shared.ts の isTranslatableProfilePath と同じ）
   if top = '__questions' then
     if not (array_length(parts, 1) = 3 and parts[2] ~ '^\d{1,2}$' and parts[3] = 'a') then return; end if;
   elsif top = '__best3' then
@@ -192,13 +256,14 @@ begin
 
   select p.id into tgt from public.profiles p where p.username = p_owner;
   if tgt is null then return; end if;
-  if not exists (select 1 from public.translation_consents c where c.user_id = tgt and c.allow) then return; end if;
+  if public.translation_consent_current(tgt, p_current_version) is null then return; end if;
+  if not exists (select 1 from public.translation_item_permissions ip
+                  where ip.owner_id = tgt and ip.item_kind = 'profile_section' and ip.item_key = top) then return; end if;
   select pb.book into raw from public.profile_book pb where pb.id = tgt;
   if raw is null then return; end if;
   vis := raw -> '__visibility' ->> top;
   if vis is not null and vis <> 'public' then return; end if;
-  if vis is null and s.require_explicit_public then return; end if;
-  visible := public.get_visible_book(p_owner);              -- 未ログインの人に見える内容（auth.uid() は null）
+  visible := public.get_visible_book(p_owner);
   if visible is null or not (visible ? top) then return; end if;
   if jsonb_typeof(visible #> parts) is distinct from 'string' then return; end if;
   v := visible #>> parts;
@@ -213,15 +278,14 @@ begin
 end;
 $$;
 
--- ── 6. 翻訳済みを返す（返すたびに公開範囲・本人の許可・原文の一致を確かめる）──────────
--- available = false：今は翻訳してよいものではない（翻訳済みがあっても返さない）
-create or replace function public.get_translation(p_type text, p_owner text, p_path text, p_lang text)
+-- ── 7. 翻訳キャッシュの取得・目印・保存 ──────────────────────────────
+create or replace function public.get_translation(p_type text, p_owner text, p_path text, p_lang text, p_current_version text)
 returns table (available boolean, status text, translated_text text)
 language plpgsql security definer set search_path = public
 as $$
 declare src record; ct record;
 begin
-  select * into src from public.translatable_source(p_type, p_owner, p_path);
+  select * into src from public.translatable_source(p_type, p_owner, p_path, p_current_version);
   if not found then available := false; return next; return; end if;
   select x.status, x.translated_text into ct from public.content_translations x
     where x.source_type = p_type and x.owner_id = src.owner_id and x.source_path = p_path
@@ -237,15 +301,13 @@ begin
 end;
 $$;
 
--- ── 7. 翻訳中の目印（同じ原文・同じ言語を二重に頼まない）────────────────
--- claimed = true：この呼び出しが翻訳してよい（原文を返す）。2 分以上前の pending・failed は取り直せる
-create or replace function public.claim_translation(p_type text, p_owner text, p_path text, p_lang text, p_engine text)
+create or replace function public.claim_translation(p_type text, p_owner text, p_path text, p_lang text, p_engine text, p_current_version text)
 returns table (claimed boolean, available boolean, owner_id uuid, text_value text, source_hash text, context text)
 language plpgsql security definer set search_path = public
 as $$
 declare src record; got bigint;
 begin
-  select * into src from public.translatable_source(p_type, p_owner, p_path);
+  select * into src from public.translatable_source(p_type, p_owner, p_path, p_current_version);
   if not found then claimed := false; available := false; return next; return; end if;
   insert into public.content_translations as ct (source_type, owner_id, source_path, source_hash, target_lang, status, engine)
   values (p_type, src.owner_id, p_path, src.source_hash, p_lang, 'pending', p_engine)
@@ -259,7 +321,6 @@ begin
 end;
 $$;
 
--- 予算が取れなかったときなどに目印を外す
 create or replace function public.release_translation(p_type text, p_owner text, p_path text, p_lang text, p_hash text)
 returns void
 language sql security definer set search_path = public
@@ -270,12 +331,10 @@ as $$
      and (p_type = 'answer' or x.owner_id = (select p.id from public.profiles p where p.username = p_owner));
 $$;
 
--- ── 8. 翻訳の保存（保存する瞬間にも、原文・公開範囲・本人の許可が変わっていないか確かめる）────
--- 元の行（profile_book・answers）を FOR SHARE で押さえ、同時に起きた編集・公開範囲の変更と順番をそろえる。
--- 変わっていたら保存せず、目印を消して false を返す（画面は原文のまま）。
+-- 保存の瞬間にも、許可・選んだ項目・公開範囲・原文を確かめる（取り消し後・公開をやめた後は保存しない）
 create or replace function public.store_translation(
   p_type text, p_owner text, p_path text, p_lang text, p_hash text,
-  p_status text, p_text text, p_kept_terms text[], p_input integer, p_output integer, p_cost numeric)
+  p_status text, p_text text, p_kept_terms text[], p_input integer, p_output integer, p_cost numeric, p_current_version text)
 returns boolean
 language plpgsql security definer set search_path = public
 as $$
@@ -290,7 +349,7 @@ begin
   end if;
   if tgt is null then return false; end if;
   perform 1 from public.translation_consents c where c.user_id = tgt for share;
-  select * into src from public.translatable_source(p_type, p_owner, p_path);
+  select * into src from public.translatable_source(p_type, p_owner, p_path, p_current_version);
   if not found or src.source_hash <> p_hash then
     perform public.release_translation(p_type, p_owner, p_path, p_lang, p_hash);
     return false;
@@ -305,10 +364,25 @@ begin
 end;
 $$;
 
--- ── 9. 予算の確保（同時に何件来ても上限を超えない）──────────────────────
--- result：'ok' / 'disabled'（停止中）/ 'budget'（今月の上限）/ 'user_limit' / 'owner_limit' / 'bad_estimate'
--- 月の行を FOR UPDATE でロックするので、確保は 1 件ずつ順番に判定される。
--- 「確定額＋呼び出し中の見込み額＋今回の見込み額」が上限を超えるなら確保しない。
+-- ── 8. ② 外国にある第三者への提供の記録（送る直前に呼ぶ。許可が取り消されていれば false で送らない）─────
+create or replace function public.record_translation_provision(
+  p_owner uuid, p_type text, p_path text, p_lang text, p_inference_geo text, p_current_version text)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare ev bigint;
+begin
+  if p_inference_geo is distinct from 'us' then return false; end if;
+  perform 1 from public.translation_consents c where c.user_id = p_owner for share;
+  ev := public.translation_consent_current(p_owner, p_current_version);
+  if ev is null then return false; end if;
+  insert into public.translation_provision_log (owner_id, source_type, source_path, target_lang, inference_geo, consent_event_id)
+  values (p_owner, p_type, p_path, p_lang, p_inference_geo, ev);
+  return true;
+end;
+$$;
+
+-- ── 9. ③ 予算の確保と精算（費用の記録に個人の ID を持たない）──────────────────
 create or replace function public.reserve_translation(p_user uuid, p_owner uuid, p_estimate_usd numeric)
 returns table (result text, reservation_id bigint)
 language plpgsql security definer set search_path = public
@@ -327,9 +401,8 @@ begin
     result := 'bad_estimate'; return next; return;
   end if;
   insert into public.translation_budget (month) values (m) on conflict (month) do nothing;
-  select * into b from public.translation_budget where month = m for update;   -- この月の行をロック
-
-  -- 精算されないまま 15 分たった確保は、見込み額を全額使ったとみなして確定する（少なく数えない）
+  select * into b from public.translation_budget where month = m for update;   -- この月の行をロック（1 件ずつ判定）
+  delete from public.translation_daily where day < d - 1;                       -- 回数制限の記録は 2 日で消す
   for st in
     update public.translation_reservations r set status = 'expired', actual_usd = r.estimate_usd, settled_at = now()
       where r.status = 'reserved' and r.created_at < now() - interval '15 minutes'
@@ -340,7 +413,6 @@ begin
       where month = st.month;
   end loop;
   select * into b from public.translation_budget where month = m;
-
   if b.spent_usd + b.reserved_usd + p_estimate_usd > s.monthly_cap_usd then result := 'budget'; return next; return; end if;
 
   insert into public.translation_daily (subject_type, subject_id, day) values ('user', p_user, d), ('owner', p_owner, d)
@@ -352,18 +424,13 @@ begin
   update public.translation_daily set count = count + 1
     where day = d and ((subject_type = 'user' and subject_id = p_user) or (subject_type = 'owner' and subject_id = p_owner));
 
-  insert into public.translation_reservations (month, user_id, owner_id, estimate_usd)
-    values (m, p_user, p_owner, p_estimate_usd) returning id into reservation_id;
+  insert into public.translation_reservations (month, estimate_usd) values (m, p_estimate_usd) returning id into reservation_id;
   update public.translation_budget set reserved_usd = reserved_usd + p_estimate_usd, requests = requests + 1, updated_at = now()
     where month = m;
   result := 'ok'; return next;
 end;
 $$;
 
--- ── 10. 精算（API の応答に入っている使用量から実額を計算）────────────────────
--- API を呼ばなかった・エラーで課金されなかった → 使用量 0 で精算（実額 0）。
--- 応答が返らず使用量が分からない（タイムアウトなど）→ 精算しない。15 分後に見込み額で確定する。
--- 返り値：実額（すでに精算・確定済みなら null）
 create or replace function public.settle_translation(p_reservation_id bigint, p_input integer, p_output integer,
                                                      p_cache_read integer default 0, p_cache_write integer default 0)
 returns numeric
@@ -384,74 +451,219 @@ begin
         input_tokens = input_tokens + coalesce(p_input, 0), output_tokens = output_tokens + coalesce(p_output, 0),
         cache_read_tokens = cache_read_tokens + coalesce(p_cache_read, 0),
         cache_write_tokens = cache_write_tokens + coalesce(p_cache_write, 0), updated_at = now()
-    where month = r.month;                               -- 確保した月で精算（月をまたいでもずれない）
+    where month = r.month;
   update public.translation_reservations set status = 'settled', actual_usd = actual, settled_at = now() where id = r.id;
   return actual;
 end;
 $$;
 
--- ── 11. 本人の許可 ─────────────────────────────────────────
--- サーバーがアクセストークンで本人を確かめてから呼ぶ。取り消したら、その人の翻訳をすべて消す
-create or replace function public.set_translation_consent(p_user uuid, p_allow boolean)
+-- ── 10. 本人の許可・選んだ項目（サーバーがアクセストークンで本人を確かめてから呼ぶ）──────────
+-- 同意画面に出す候補：いまログインしていない人に見えていて、中身のあるセクションと公開回答
+create or replace function public.translation_candidates(p_user uuid)
+returns table (kind text, item_key text, preview text, question text)
+language plpgsql stable security definer set search_path = public
+as $$
+declare s public.translation_settings%rowtype; uname text; visible jsonb; vis jsonb; k text; t text;
+begin
+  if auth.uid() is not null then return; end if;
+  select * into s from public.translation_settings where id;
+  select p.username into uname from public.profiles p where p.id = p_user;
+  if uname is null then return; end if;
+  visible := public.get_visible_book(uname);
+  select coalesce(pb.book -> '__visibility', '{}'::jsonb) into vis from public.profile_book pb where pb.id = p_user;
+  foreach k in array s.profile_fields loop
+    if coalesce(vis ->> k, 'public') <> 'public' then continue; end if;   -- 公開以外（コミュニティ限定など）は候補にしない
+    t := public.translation_first_text(visible -> k);
+    if t is not null then kind := 'profile_section'; item_key := k; preview := left(t, 60); question := null; return next; end if;
+  end loop;
+  return query select 'answer'::text, a.id::text, left(a.body, 60), left(a.question_title, 60)
+    from public.answers a
+   where a.user_id = p_user and a.visibility = 'public' and a.body is not null and btrim(a.body) <> ''
+   order by a.created_at desc limit 100;
+end;
+$$;
+
+-- 選んだ項目がすべて候補の中にあるか（候補にない＝公開でない・本人のものでない → 拒否）
+create or replace function public.translation_items_valid(p_user uuid, p_items jsonb)
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_typeof(p_items) = 'array' and jsonb_array_length(p_items) between 1 and 150
+     and not exists (
+       select 1 from jsonb_array_elements(p_items) e
+        where not exists (
+          select 1 from public.translation_candidates(p_user) c
+           where c.kind = e ->> 'kind' and c.item_key = coalesce(e ->> 'key', e ->> 'id')))
+$$;
+
+-- 選んだ項目を置きかえる（外した項目の翻訳キャッシュは消す）
+create or replace function public.translation_replace_items(p_user uuid, p_items jsonb, p_event bigint)
 returns void
 language plpgsql security definer set search_path = public
 as $$
+declare r record;
 begin
-  insert into public.translation_consents (user_id, allow, updated_at) values (p_user, p_allow, now())
-  on conflict (user_id) do update set allow = excluded.allow, updated_at = now();
-  if not p_allow then delete from public.content_translations where owner_id = p_user; end if;
+  for r in
+    select ip.item_kind, ip.item_key from public.translation_item_permissions ip
+     where ip.owner_id = p_user
+       and not exists (select 1 from jsonb_array_elements(p_items) e
+                        where e ->> 'kind' = ip.item_kind and coalesce(e ->> 'key', e ->> 'id') = ip.item_key)
+  loop
+    if r.item_kind = 'answer' then
+      delete from public.content_translations where source_type = 'answer' and owner_id = p_user and source_path = r.item_key;
+    else
+      delete from public.content_translations where source_type = 'profile_field' and owner_id = p_user and split_part(source_path, '.', 1) = r.item_key;
+    end if;
+  end loop;
+  delete from public.translation_item_permissions where owner_id = p_user;
+  insert into public.translation_item_permissions (owner_id, item_kind, item_key, consent_event_id)
+  select p_user, e ->> 'kind', coalesce(e ->> 'key', e ->> 'id'), p_event from jsonb_array_elements(p_items) e
+  on conflict do nothing;
 end;
 $$;
-create or replace function public.get_translation_consent(p_user uuid)
-returns boolean
+
+create or replace function public.grant_translation_consent(p_user uuid, p_version text, p_locale text, p_text_sha256 text,
+                                                           p_age_check text, p_items jsonb)
+returns table (ok boolean, reason text)
+language plpgsql security definer set search_path = public
+as $$
+declare ev bigint;
+begin
+  if auth.uid() is not null then ok := false; reason := 'forbidden'; return next; return; end if;
+  if p_age_check is distinct from 'self_declared_16_plus' then ok := false; reason := 'age'; return next; return; end if;
+  if p_items is null or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
+  if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  insert into public.translation_consent_events (user_id, action, consent_version, consent_text_sha256, locale, age_check, scope)
+  values (p_user, 'grant', p_version, p_text_sha256, p_locale, p_age_check, p_items) returning id into ev;
+  insert into public.translation_consents (user_id, allow, version, granted_at, last_event_id, updated_at)
+  values (p_user, true, p_version, now(), ev, now())
+  on conflict (user_id) do update set allow = true, version = excluded.version, granted_at = now(), last_event_id = ev, updated_at = now();
+  perform public.translation_replace_items(p_user, p_items, ev);
+  ok := true; return next;
+end;
+$$;
+
+create or replace function public.set_translation_items(p_user uuid, p_current_version text, p_items jsonb)
+returns table (ok boolean, reason text)
+language plpgsql security definer set search_path = public
+as $$
+declare ev bigint; cv text;
+begin
+  if auth.uid() is not null then ok := false; reason := 'forbidden'; return next; return; end if;
+  if public.translation_consent_current(p_user, p_current_version) is null then ok := false; reason := 'old_version'; return next; return; end if;
+  if p_items is null or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
+  if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  select version into cv from public.translation_consents where user_id = p_user;
+  insert into public.translation_consent_events (user_id, action, consent_version, scope)
+  values (p_user, 'scope_update', cv, p_items) returning id into ev;
+  update public.translation_consents set last_event_id = ev, updated_at = now() where user_id = p_user;
+  perform public.translation_replace_items(p_user, p_items, ev);
+  ok := true; return next;
+end;
+$$;
+
+-- 取り消し：選んだ項目と翻訳キャッシュは消す。② の記録（取り消しの履歴を含む）は残す
+create or replace function public.revoke_translation_consent(p_user uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare ev bigint;
+begin
+  if auth.uid() is not null then return; end if;
+  insert into public.translation_consent_events (user_id, action) values (p_user, 'revoke') returning id into ev;
+  update public.translation_consents set allow = false, last_event_id = ev, updated_at = now() where user_id = p_user;
+  delete from public.translation_item_permissions where owner_id = p_user;
+  delete from public.content_translations where owner_id = p_user;
+end;
+$$;
+
+create or replace function public.get_translation_consent(p_user uuid, p_current_version text)
+returns table (allow boolean, version text, is_current boolean, granted_at timestamptz, items jsonb)
 language sql stable security definer set search_path = public
-as $$ select coalesce((select allow from public.translation_consents where user_id = p_user), false) $$;
-create or replace function public.owner_allows_translation(p_username text)
+as $$
+  select coalesce(c.allow, false), c.version, coalesce(c.allow and c.version = p_current_version, false), c.granted_at,
+         coalesce((select jsonb_agg(case when ip.item_kind = 'answer' then jsonb_build_object('kind','answer','id',ip.item_key)
+                                         else jsonb_build_object('kind','profile_section','key',ip.item_key) end)
+                     from public.translation_item_permissions ip where ip.owner_id = p_user), '[]'::jsonb)
+    from (select p_user as uid) x left join public.translation_consents c on c.user_id = x.uid
+$$;
+
+create or replace function public.owner_allows_translation(p_username text, p_current_version text)
 returns boolean
 language sql stable security definer set search_path = public
 as $$
-  select coalesce((select c.allow from public.profiles p join public.translation_consents c on c.user_id = p.id
-                    where p.username = p_username), false)
+  select exists (
+    select 1 from public.profiles p
+      join public.translation_consents c on c.user_id = p.id and c.allow and c.version = p_current_version
+     where p.username = p_username
+       and exists (select 1 from public.translation_item_permissions ip where ip.owner_id = p.id))
 $$;
 
--- 関数はすべて service_role だけが実行できる（Supabase は新しい関数に既定で実行権限を付けるので外す）
-revoke all on function public.translatable_source(text, text, text) from public, anon, authenticated;
-revoke all on function public.get_translation(text, text, text, text) from public, anon, authenticated;
-revoke all on function public.claim_translation(text, text, text, text, text) from public, anon, authenticated;
-revoke all on function public.release_translation(text, text, text, text, text) from public, anon, authenticated;
-revoke all on function public.store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric) from public, anon, authenticated;
-revoke all on function public.reserve_translation(uuid, uuid, numeric) from public, anon, authenticated;
-revoke all on function public.settle_translation(bigint, integer, integer, integer, integer) from public, anon, authenticated;
-revoke all on function public.set_translation_consent(uuid, boolean) from public, anon, authenticated;
-revoke all on function public.get_translation_consent(uuid) from public, anon, authenticated;
-revoke all on function public.owner_allows_translation(text) from public, anon, authenticated;
-grant execute on function public.translatable_source(text, text, text) to service_role;
-grant execute on function public.get_translation(text, text, text, text) to service_role;
-grant execute on function public.claim_translation(text, text, text, text, text) to service_role;
-grant execute on function public.release_translation(text, text, text, text, text) to service_role;
-grant execute on function public.store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric) to service_role;
-grant execute on function public.reserve_translation(uuid, uuid, numeric) to service_role;
-grant execute on function public.settle_translation(bigint, integer, integer, integer, integer) to service_role;
-grant execute on function public.set_translation_consent(uuid, boolean) to service_role;
-grant execute on function public.get_translation_consent(uuid) to service_role;
-grant execute on function public.owner_allows_translation(text) to service_role;
+-- ② の記録の保存期間が過ぎたものを消す（Supabase の pg_cron などで 1 日 1 回）
+--  ・送信の記録：1 件ごとに、送った日から保存期間が過ぎたら消す
+--  ・同意・取り消しの履歴：その人の「最後の同意・変更・取り消し」と「最後の送信」の両方から保存期間が過ぎたら、
+--    その人の履歴をまとめて消す（送信を続けている人の、もとになった同意の記録を先に消さないため）
+create or replace function public.purge_expired_translation_records()
+returns table (consent_events bigint, provisions bigint)
+language plpgsql security definer set search_path = public
+as $$
+declare keep interval;
+begin
+  select legal_record_retention into keep from public.translation_settings where id;
+  with d as (
+    delete from public.translation_consent_events e
+     where e.user_id in (
+       select x.user_id from public.translation_consent_events x group by x.user_id
+       having max(x.created_at) < now() - keep)
+       and not exists (select 1 from public.translation_provision_log p where p.owner_id = e.user_id and p.sent_at >= now() - keep)
+     returning 1)
+  select count(*) into consent_events from d;
+  with d as (delete from public.translation_provision_log where sent_at < now() - keep returning 1) select count(*) into provisions from d;
+  return next;
+end;
+$$;
 
--- ── 12. 原文の編集・公開範囲の変更・削除で翻訳を消す ─────────────────────
--- プロフ帳：公開範囲（__visibility）が変わった → その人のプロフ帳の翻訳をすべて削除
---           項目の文字列が変わった・消えた → その項目の翻訳だけ削除（原文の md5 が保存値と違う）
---           行が消えた → その人のプロフ帳の翻訳をすべて削除（退会は profiles の外部キーでも消える）
+do $$ declare f text; begin
+  foreach f in array array[
+    'translation_consent_current(uuid, text)', 'translation_first_text(jsonb)', 'translatable_source(text, text, text, text)',
+    'get_translation(text, text, text, text, text)', 'claim_translation(text, text, text, text, text, text)',
+    'release_translation(text, text, text, text, text)',
+    'store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric, text)',
+    'record_translation_provision(uuid, text, text, text, text, text)', 'reserve_translation(uuid, uuid, numeric)',
+    'settle_translation(bigint, integer, integer, integer, integer)', 'translation_candidates(uuid)',
+    'translation_items_valid(uuid, jsonb)', 'translation_replace_items(uuid, jsonb, bigint)',
+    'grant_translation_consent(uuid, text, text, text, text, jsonb)', 'set_translation_items(uuid, text, jsonb)',
+    'revoke_translation_consent(uuid)', 'get_translation_consent(uuid, text)', 'owner_allows_translation(text, text)',
+    'purge_expired_translation_records()'] loop
+    execute format('revoke all on function public.%s from public, anon, authenticated', f);
+    execute format('grant execute on function public.%s to service_role', f);
+  end loop;
+end $$;
+
+-- ── 11. 原文の編集・公開範囲の変更・削除で、翻訳キャッシュと選んだ項目を消す ───────────────
+-- プロフ帳：公開以外（フォロワー限定・非公開など）にしたセクションは、選択も外す（公開に戻しても、選び直すまで訳さない）。
+--           公開範囲が変わったら、その人のプロフ帳の翻訳キャッシュはすべて削除。文字列が変わった項目の翻訳も削除。
+-- 回答：本文・公開範囲が変わったら翻訳キャッシュを削除。公開以外にした・削除したら選択も外す。
 create or replace function public.purge_profile_translations()
 returns trigger
 language plpgsql security definer set search_path = public
 as $$
+declare k text;
 begin
   if tg_op = 'DELETE' then
     delete from public.content_translations where source_type = 'profile_field' and owner_id = old.id;
+    delete from public.translation_item_permissions where owner_id = old.id and item_kind = 'profile_section';
     return old;
   end if;
   if new.book is not distinct from old.book then return new; end if;
   if (old.book -> '__visibility') is distinct from (new.book -> '__visibility') then
     delete from public.content_translations where source_type = 'profile_field' and owner_id = new.id;
+    for k in select key from jsonb_object_keys(coalesce(old.book -> '__visibility', '{}'::jsonb) || coalesce(new.book -> '__visibility', '{}'::jsonb)) as t(key) loop
+      if (old.book -> '__visibility' ->> k) is distinct from (new.book -> '__visibility' ->> k)
+         and coalesce(new.book -> '__visibility' ->> k, 'public') <> 'public' then   -- 公開以外になったセクションだけ選択を外す
+        delete from public.translation_item_permissions where owner_id = new.id and item_kind = 'profile_section' and item_key = k;
+      end if;
+    end loop;
   else
     delete from public.content_translations ct
       where ct.source_type = 'profile_field' and ct.owner_id = new.id
@@ -460,7 +672,7 @@ begin
   return new;
 end;
 $$;
--- 回答：本文・公開範囲が変わった・削除された → その回答の翻訳をすべて削除
+-- 回答：本文が変わった → 翻訳キャッシュを削除。公開範囲が変わった・削除された → 選択も外す
 create or replace function public.purge_answer_translations()
 returns trigger
 language plpgsql security definer set search_path = public
@@ -468,6 +680,9 @@ as $$
 begin
   if tg_op = 'DELETE' or new.body is distinct from old.body or new.visibility is distinct from old.visibility then
     delete from public.content_translations where source_type = 'answer' and source_path = old.id::text;
+  end if;
+  if tg_op = 'DELETE' or new.visibility is distinct from 'public' then
+    delete from public.translation_item_permissions where item_kind = 'answer' and item_key = old.id::text;
   end if;
   return coalesce(new, old);
 end;
@@ -486,38 +701,56 @@ create trigger answers_purge_translations
 commit;
 
 -- ============================================================
--- 使用状況の確認（Supabase の SQL Editor で実行。画面には出さない）
+-- 退会（アカウント削除）時の扱い
+--  ・auth.users を削除 → profiles が削除 → 外部キーで translation_consents・translation_item_permissions・
+--    content_translations が削除される（① と「いまの状態」）
+--  ・② 法定の記録（translation_consent_events・translation_provision_log）は残り、保存期間後に purge で消える
+--  ・③ 費用の集計に個人の ID はない。translation_daily は 2 日で消える
 -- ============================================================
--- select month, spent_usd, reserved_usd, requests, cache_hits, input_tokens, output_tokens,
---        cache_read_tokens, cache_write_tokens,
---        round(cache_hits::numeric / nullif(cache_hits + requests, 0) * 100, 1) as cache_hit_pct
---   from public.translation_budget order by month desc;
--- select status, count(*), sum(estimate_usd), sum(actual_usd) from public.translation_reservations
---   where month = date_trunc('month', now() at time zone 'utc')::date group by status;
+
+-- ============================================================
+-- 使用状況・記録の確認（Supabase の SQL Editor で実行。画面には出さない）
+-- ============================================================
+-- select month, spent_usd, reserved_usd, requests, cache_hits, input_tokens, output_tokens from public.translation_budget order by month desc;
+-- select action, consent_version, created_at from public.translation_consent_events where user_id = '<uuid>' order by created_at;
+-- select source_type, source_path, target_lang, recipient, inference_geo, sent_at from public.translation_provision_log where owner_id = '<uuid>' order by sent_at;
 -- 停止：update public.translation_settings set enabled = false, updated_at = now();
 
 -- ============================================================
--- ROLLBACK（取り消し）— 翻訳キャッシュ・本人の許可・予算の記録が消えます（原文・回答には影響なし）
+-- ROLLBACK（取り消し）— 翻訳・許可・記録・予算のテーブルと関数が消えます（原文・回答には影響なし）
+-- ※ ② 法定の記録も消えるため、本番で一度でも外国への送信をしたあとは、記録を別に保存してから実行すること
 -- ============================================================
 -- begin;
 -- drop trigger if exists answers_purge_translations on public.answers;
 -- drop trigger if exists profile_book_purge_translations on public.profile_book;
 -- drop function if exists public.purge_answer_translations();
 -- drop function if exists public.purge_profile_translations();
--- drop function if exists public.owner_allows_translation(text);
--- drop function if exists public.get_translation_consent(uuid);
--- drop function if exists public.set_translation_consent(uuid, boolean);
+-- drop function if exists public.purge_expired_translation_records();
+-- drop function if exists public.owner_allows_translation(text, text);
+-- drop function if exists public.get_translation_consent(uuid, text);
+-- drop function if exists public.revoke_translation_consent(uuid);
+-- drop function if exists public.set_translation_items(uuid, text, jsonb);
+-- drop function if exists public.grant_translation_consent(uuid, text, text, text, text, jsonb);
+-- drop function if exists public.translation_replace_items(uuid, jsonb, bigint);
+-- drop function if exists public.translation_items_valid(uuid, jsonb);
+-- drop function if exists public.translation_candidates(uuid);
 -- drop function if exists public.settle_translation(bigint, integer, integer, integer, integer);
 -- drop function if exists public.reserve_translation(uuid, uuid, numeric);
--- drop function if exists public.store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric);
+-- drop function if exists public.record_translation_provision(uuid, text, text, text, text, text);
+-- drop function if exists public.store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric, text);
 -- drop function if exists public.release_translation(text, text, text, text, text);
--- drop function if exists public.claim_translation(text, text, text, text, text);
--- drop function if exists public.get_translation(text, text, text, text);
--- drop function if exists public.translatable_source(text, text, text);
+-- drop function if exists public.claim_translation(text, text, text, text, text, text);
+-- drop function if exists public.get_translation(text, text, text, text, text);
+-- drop function if exists public.translatable_source(text, text, text, text);
+-- drop function if exists public.translation_first_text(jsonb);
+-- drop function if exists public.translation_consent_current(uuid, text);
 -- drop table if exists public.translation_daily;
 -- drop table if exists public.translation_reservations;
 -- drop table if exists public.translation_budget;
 -- drop table if exists public.content_translations;
+-- drop table if exists public.translation_provision_log;
+-- drop table if exists public.translation_consent_events;
+-- drop table if exists public.translation_item_permissions;
 -- drop table if exists public.translation_consents;
 -- drop table if exists public.translation_settings;
 -- commit;

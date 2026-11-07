@@ -22,6 +22,7 @@ export const ANSWER_IDS = {
   public: '11111111-0000-4000-8000-000000000001',
   followers: '11111111-0000-4000-8000-000000000002',
   private: '11111111-0000-4000-8000-000000000003',
+  daily: '11111111-0000-4000-8000-000000000004',   // デイリーのお題（選択なしで公開になる回答）
 };
 
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -60,6 +61,7 @@ export function startMockSupabase(port) {
       { id: ANSWER_IDS.public, user_id: IDS.alice, question_key: 'd1', question_title: '小学校の給食で好きだったものは？', question_category: '子ども・平成', body: '揚げパンがいちばん好きだった', sticker: null, visibility: 'public', created_at: now },
       { id: ANSWER_IDS.followers, user_id: IDS.alice, question_key: 'd2', question_title: '休みの日は？', question_category: '価値観', body: 'ずっと寝てる', sticker: null, visibility: 'followers', created_at: now },
       { id: ANSWER_IDS.private, user_id: IDS.alice, question_key: 'd3', question_title: '秘密は？', question_category: '価値観', body: 'ないしょ', sticker: null, visibility: 'private', created_at: now },
+      { id: ANSWER_IDS.daily, user_id: IDS.alice, question_key: 'daily_2026-11-01', question_title: '今日のお題：朝ごはんは？', question_category: 'デイリー', body: 'トーストと牛乳', sticker: null, visibility: 'public', created_at: now },
     ],
     writes: [],
   };

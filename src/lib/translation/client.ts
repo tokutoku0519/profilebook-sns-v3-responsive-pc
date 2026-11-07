@@ -4,7 +4,8 @@
 // ============================================================
 import type { Lang } from '@/lib/i18n';
 import { getAccessToken } from '@/lib/db';
-import type { TranslateItem, TranslateResult } from './shared';
+import type { ConsentCandidate, ConsentItem, TranslateItem, TranslateResult } from './shared';
+import type { ConsentLocale } from './consentText';
 
 export type TranslateAvailability = { enabled: boolean; mock: boolean; ownerAllows?: boolean };
 
@@ -55,14 +56,31 @@ export async function requestTranslations(target: Lang, items: TranslateItem[]):
   return json;
 }
 
-export async function getMyTranslationConsent(): Promise<boolean | null> {
+export type MyConsent = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[]; currentVersion: string };
+
+export async function getMyTranslationConsent(): Promise<MyConsent | null> {
   const res = await post({ action: 'get_consent' });
   if (!res?.ok) return null;
-  return ((await res.json()) as { allow: boolean }).allow;
+  return (await res.json()) as MyConsent;
 }
 
-export async function setMyTranslationConsent(allow: boolean): Promise<boolean> {
-  const res = await post({ action: 'set_consent', allow });
-  if (res?.ok) statusCache.clear();
-  return !!res?.ok;
+/** 翻訳の対象に選べる、いま公開中の自分の項目・回答 */
+export async function listConsentCandidates(): Promise<ConsentCandidate[] | null> {
+  const res = await post({ action: 'list_candidates' });
+  if (!res?.ok) return null;
+  return ((await res.json()) as { candidates: ConsentCandidate[] }).candidates;
 }
+
+export type ConsentResult = { ok: boolean; reason?: string };
+async function consentCall(body: Record<string, unknown>): Promise<ConsentResult> {
+  const res = await post(body);
+  if (!res) return { ok: false, reason: 'network' };
+  const j = (await res.json().catch(() => ({}))) as ConsentResult;
+  if (res.ok) statusCache.clear();
+  return { ok: res.ok && j.ok !== false, reason: j.reason };
+}
+/** 説明を確認したうえでの許可（版・表示した言語・16 歳以上の確認・選んだ項目を送る） */
+export const grantTranslationConsent = (version: string, locale: ConsentLocale, items: ConsentItem[]) =>
+  consentCall({ action: 'grant_consent', version, locale, ageConfirmed16: true, items });
+export const setTranslationItems = (items: ConsentItem[]) => consentCall({ action: 'set_items', items });
+export const revokeTranslationConsent = () => consentCall({ action: 'revoke_consent' });

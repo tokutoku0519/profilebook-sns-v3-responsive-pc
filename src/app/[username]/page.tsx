@@ -37,6 +37,7 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { LangContext, useLang } from '@/lib/langContext';
 import { TranslateBar, TranslationConsentCard, useContentTranslation, type TranslateCandidate } from '@/components/ContentTranslate';
+import { AccountDeletionRequest } from '@/components/AccountDeletionRequest';
 import { TRANSLATABLE_PROFILE_FIELDS } from '@/lib/translation/shared';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
 import { getAccessToken, submitFeedback, saveMyChoices, getMyChoices, getUserChoices, saveProfileIdentity, getPerceptionSummary, castPerceptionVote, clearPerceptionVote, type PerceptionSummary } from '@/lib/db';
@@ -6021,6 +6022,9 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
 
         {/* 回答の翻訳を許可するか（翻訳が使えるときだけ表示） */}
         <TranslationConsentCard lang={lang} />
+
+        {/* 退会・データ削除の申請（運営者が確認して削除する） */}
+        <AccountDeletionRequest lang={lang} />
 
       </div>
     </>

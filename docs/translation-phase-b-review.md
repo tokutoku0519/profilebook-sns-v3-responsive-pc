@@ -4,6 +4,9 @@
 - **実装済み**：API・画面・予算制御・自動テスト。
 - **外部の翻訳 API**：実接続は無効。テスト用の仮の翻訳（外部へは何も送らない）で動く。
 - **未実施**：本番 DB への SQL 適用、Anthropic API の有料利用、本番での有効化。いずれも承認後に行う。
+- **2026-11-07 更新（法務上の一次判断を反映）**
+  - 同意画面（直接オンにできない）、項目の選択、16 歳未満の制限、説明の版、同意・送信の記録を追加した。
+  - 個人情報の伏せ字と送らない判定、`inference_geo: "us"` の指定、費用の記録から ID の除去、退会・データ削除の申請も追加した。
 
 関連ファイル：
 - SQL 案：`supabase/proposal_content_translations.sql`（未適用）
@@ -32,11 +35,15 @@
 
 翻訳してよい項目と場所の形は `src/lib/translation/shared.ts` と SQL の両方で同じに定義し、どちらでも検査する。
 
-### 公開範囲が未設定のとき（原則は拒否）
-- 書いた本人がマイページで「翻訳を許可する」をオンにしていなければ、何も翻訳しない。初期値はオフ。
-- 本人の許可があれば、公開範囲が未設定の項目は画面の表示と同じく公開として扱う。ひとこと質問・BEST3 には公開範囲の設定がないため、この扱いが必要。
-- より厳しくする設定もある。`translation_settings.require_explicit_public = true` にすると、未設定の項目は許可があっても拒否する。
-- 本人の許可は、外部の翻訳サービスへ送ることへの同意（プライバシーポリシーの改訂案）も兼ねる。
+### 本人が選んだ項目だけ（未設定・選択なしの公開は、選ばれなければ対象外）
+- 書いた本人が同意画面で説明を確認し、**翻訳してよい項目を選んで**許可していなければ、何も翻訳しない。初期値は「許可しない」。
+- 同意画面には「いまログインしていない人に見えている項目と回答」だけが出る。最初は何も選ばれていない。
+  - 選ぶ単位：プロフ帳はセクション、回答は 1 件ごと。
+- 本人が選んだことを「公開して翻訳してよい」という明示の選択として扱う。
+  - そのため、公開範囲が未設定の項目、ひとこと質問・BEST3、選択なしで公開になるデイリーの回答も、**選ばれたときだけ**翻訳する。
+- 公開でなくなった項目は、選択を自動で外す。公開に戻しても、選び直すまで翻訳しない。
+- v1 の `require_explicit_public` 設定は不要になったので削除した。
+- 詳しくは `docs/privacy-policy-translation-draft.md` の 3 章・6 章。
 
 ---
 
@@ -47,9 +54,17 @@
                                                                   │
                          原文はサーバーが DB から読む（送られた文章は使わない）
                                                                   ▼
-  権限を確認して翻訳済みを返す → 翻訳中の目印 → API を呼ばない判定 → 予算の確保 → 翻訳
-  → 使用量で精算 → 検証 → 保存（保存の瞬間にも権限を確認） → もう一度権限を確認して返す
+  権限（本人の許可・いまの説明の版・選んだ項目・公開範囲）を確認して翻訳済みを返す → 翻訳中の目印
+  → API を呼ばない判定 → 個人情報の伏せ字／送らない判定 → 予算の確保 → 送信の記録（許可がいまも有効か確認）
+  → 翻訳（inference_geo: us） → 使用量で精算 → 検証 → 伏せ字を戻す → 保存（保存の瞬間にも権限を確認）
+  → もう一度権限を確認して返す
 ```
+
+- **個人情報の伏せ字**（`src/lib/translation/server/pii.ts`）
+  - メール・URL・電話番号・10〜11 桁の数字・郵便番号・@ID は `⟦1⟧` のような記号に置きかえてから送り、訳文で元に戻す。
+  - 記号が訳文から消えていたら失敗として原文を表示する。
+- **送らない判定**：住所らしい文、健康・信条・犯罪歴などに関わる語を含む文は、送らずに「原文のまま」とする。
+- 自動の判定なので、完全ではない。そのため、ポリシーと同意画面で「すべてを見つけられるとは限らない」と説明している。
 
 - 「翻訳を見る」を押したときだけ翻訳する。もう一度押すと原文に戻る。原文は変えない。
 - 翻訳ボタンは、次の 3 つがそろったときだけ出す。
@@ -76,8 +91,11 @@
 | `src/lib/translation/server/service.ts` | 処理の流れ（上の図） |
 | `src/app/api/translate/route.ts` | API（ログイン確認・入力の検査・回数制限） |
 | `src/lib/translation/client.ts` | ブラウザからの呼び出し |
-| `src/components/ContentTranslate.tsx` | 「翻訳を見る／原文を見る」ボタン・マイページの許可の切り替え |
-| `src/app/[username]/page.tsx` | 他人のプロフ帳と回答の詳細にボタン、マイページに許可の切り替え、プロフ帳の表示を訳文に置きかえ（原文のデータは変更なし） |
+| `src/lib/translation/consentText.ts` | 同意画面の説明（日本語・英語）・説明の版・年齢の計算 |
+| `src/lib/translation/server/pii.ts` | 個人情報の伏せ字・送らない判定 |
+| `src/components/ContentTranslate.tsx` | 「翻訳を見る／原文を見る」ボタン・マイページの許可のカードと同意画面（body の直下に表示） |
+| `src/components/AccountDeletionRequest.tsx` | マイページの「退会・データ削除を申請する」（既存の `feedback` に記録） |
+| `src/app/[username]/page.tsx` | 他人のプロフ帳と回答の詳細にボタン、マイページに許可のカードと退会の申請、プロフ帳の表示を訳文に置きかえ（原文のデータは変更なし） |
 | `scripts/check-no-external-translate.mjs` | Anthropic の SDK とサーバー専用の翻訳コードを、ブラウザ側から読み込んでいないかをビルド前に確認 |
 | `scripts/translate-test/` | 自動テスト（Supabase の代わりのサーバー＋API＋画面） |
 
@@ -99,13 +117,16 @@
 
 | 確認したいこと | 設計 | 確認 |
 |---|---|---|
-| 公開範囲が未設定 | 本人の許可がなければ拒否。許可があれば公開として扱う（厳しい設定も可） | SQL・API とも合格 |
-| 明示的に公開された文章だけにできるか | `require_explicit_public = true` でできる。ただし、ひとこと質問・BEST3 には公開範囲の設定がないので対象外になる | SQL で合格 |
+| 直接オンにできないか | 許可には、説明の版・表示した言語・16 歳以上の確認・1 件以上の項目が必要。以前の「オン／オフ」の操作は受け付けない | API・画面とも合格 |
+| 明示的に公開を選んだものだけか | 本人が同意画面で選んだ項目だけ。未設定・デイリーの回答も、選ばれなければ翻訳しない | SQL・API とも合格 |
+| 説明の版が変わったら | 確認し直すまで、新しい翻訳も翻訳済みの表示も止める | SQL で合格（API は古い版の同意を 409） |
 | 非公開・フォロワー限定・コミュニティ限定 | どれも翻訳しない。閲覧者がフォロワーでも同じ。原文は「ログインしていない人」として読む | SQL・API・画面とも合格 |
 | service_role は RLS を通らない | 判定はすべて SECURITY DEFINER の関数の中で行う（取り出し・返却・保存のたび）。ユーザーのトークン付きで呼ばれたら何も返さない | SQL で合格 |
-| 関数の実行権限 | 10 の関数と 2 つのトリガー関数は PUBLIC・anon・authenticated から外し、service_role だけに付ける。`search_path` は固定 | SQL で合格（anon・ログイン中のユーザーから 13 種類の操作がすべて拒否） |
+| 関数の実行権限 | 19 の関数と 2 つのトリガー関数は PUBLIC・anon・authenticated から外し、service_role だけに付ける。`search_path` は固定 | SQL で合格（anon は 9 つのテーブルを読めない。ログイン中のユーザーから 20 種類の操作がすべて拒否） |
 | 翻訳キャッシュが別ユーザーに渡らないか | 対象は誰でも見られる公開の内容の訳だけ。返すたびに公開範囲・本人の許可・原文の一致を確かめるので、非公開にした後・取り消した後・編集した後の訳は返らない | SQL・API とも合格 |
-| 退会・原文の編集・削除・公開範囲の変更・許可の取り消し | 退会：外部キーで削除。プロフ帳の編集：その項目の訳を削除。公開範囲の変更：その人のプロフ帳の訳をすべて削除。回答の編集・公開範囲の変更・削除：その回答の訳を削除。許可の取り消し：その人の訳をすべて削除。翻訳中に変わった場合は保存しない | SQL・API とも合格 |
+| 退会・原文の編集・削除・公開範囲の変更・許可の取り消し | 退会：外部キーで翻訳・許可・選んだ項目を削除（法定の記録は残す）。プロフ帳の編集：その項目の訳を削除。公開範囲の変更：その人のプロフ帳の訳をすべて削除し、公開以外にしたセクションの選択を外す。回答の編集：その回答の訳を削除。回答を公開以外にした・削除した：訳と選択を削除。項目を外した：その項目の訳を削除。許可の取り消し：その人の訳と選択をすべて削除。翻訳中に変わった・取り消した場合は保存しない | SQL・API とも合格 |
+| 取り消し後に送らない | 送る直前に、許可がいまも有効かを確かめて送信の記録を作る。作れなければ送らない | SQL・API とも合格 |
+| 費用の記録に個人の ID を残さない | `translation_budget`・`translation_reservations` に ID の列なし。回数制限（`translation_daily`）だけ ID を持ち、2 日で消す | SQL・API とも合格 |
 | クライアントから任意の文章を送らせない | 送られた値は決まった形（種類・ユーザー名・場所／回答 ID）だけを取り出し、ほかは捨てる | API で合格（送った文章は結果に出ない） |
 | 不正利用・過剰な費用 | 下の 7 点 | API で合格 |
 
@@ -124,8 +145,9 @@
 
 ### 同時アクセスでも超えない
 - 呼び出す前に、最大でかかる額（見込み額）を確保する。
-  - 見込み額 ＝（1,300 ＋ 文字数×3）トークン × $0.10/M ＋ 400 トークン × $0.50/M
-  - 400 文字で約 $0.00045。上限は $0.002 で、それを超える見込みは受け付けない。
+  - 見込み額 ＝（1,300 ＋ 文字数×3）トークン × $0.11/M ＋ 400 トークン × $0.55/M
+    - Haiku 5.5 の料金 × 米国内での推論（`inference_geo: "us"`）の 1.1 倍。
+  - 400 文字で約 $0.0005。上限は $0.002 で、それを超える見込みは受け付けない。
 - 「確定額＋呼び出し中の見込み額＋今回の見込み額」が上限を超えるなら呼ばない。
   - DB では、月の行を `FOR UPDATE` でロックして 1 件ずつ判定する。
   - メモリでは、確保の判定を await をはさまず一度に行う。
@@ -159,13 +181,14 @@
 | 区分 | 内容 |
 |---|---|
 | 変更する既存のもの | 既存のテーブル・列・関数・データは変更しない。`profile_book` と `answers` にトリガーを 1 つずつ追加するだけ（翻訳を消すだけ。元の行は変えない） |
-| 新しいテーブル（6） | `translation_settings`・`translation_consents`・`content_translations`・`translation_budget`・`translation_reservations`・`translation_daily` |
-| 新しい関数（12） | `translatable_source`・`get_translation`・`claim_translation`・`release_translation`・`store_translation`・`reserve_translation`・`settle_translation`・`set_translation_consent`・`get_translation_consent`・`owner_allows_translation`、トリガー用 2 つ（`purge_profile_translations`・`purge_answer_translations`）、既存の `get_visible_book` を中で使う |
+| 新しいテーブル（9） | 設定：`translation_settings`／いまの状態：`translation_consents`・`translation_item_permissions`／② 法定の記録：`translation_consent_events`・`translation_provision_log`（外部キーなし）／① 翻訳キャッシュ：`content_translations`／③ 費用：`translation_budget`・`translation_reservations`（ID なし）・`translation_daily`（2 日で消す） |
+| 新しい関数（19） | 判定：`translation_consent_current`・`translation_first_text`・`translatable_source`／翻訳：`get_translation`・`claim_translation`・`release_translation`・`store_translation`／記録：`record_translation_provision`・`purge_expired_translation_records`／予算：`reserve_translation`・`settle_translation`／本人の操作：`translation_candidates`・`translation_items_valid`・`translation_replace_items`・`grant_translation_consent`・`set_translation_items`・`revoke_translation_consent`・`get_translation_consent`・`owner_allows_translation`。トリガー用 2 つ（`purge_profile_translations`・`purge_answer_translations`）。既存の `get_visible_book` を中で使う |
 | 権限 | RLS 有効・ポリシーなし・anon/authenticated の権限を外す・関数は service_role だけ |
-| 初期値 | `enabled = false`（適用しただけでは翻訳しない）、上限 $10・目安 $5、1 人 1 日 30 件、1 原文 1 日 60 件 |
-| 取り消し | ファイル末尾の ROLLBACK。翻訳・許可・予算の記録だけが消え、原文・回答は残る |
+| 初期値 | `enabled = false`（適用しただけでは翻訳しない）、上限 $10・目安 $5、1 人 1 日 30 件、1 原文 1 日 60 件、料金は米国内の推論（1.1 倍）、法定の記録の保存期間 3 年（仮） |
+| 記録の削除 | `purge_expired_translation_records()` を 1 日 1 回（pg_cron など）。送信の記録は 1 件ごとに 3 年、同意の履歴は最後の同意・取り消し・送信から 3 年 |
+| 取り消し | ファイル末尾の ROLLBACK。翻訳・許可・記録・予算のテーブルだけが消え、原文・回答は残る。**一度でも外国へ送ったあとは、法定の記録を別に保存してから実行する** |
 
-**確認結果**：手元の PostgreSQL 16（Supabase 相当の環境）で 94 項目すべて合格。
+**確認結果**：手元の PostgreSQL 16（Supabase 相当の環境）で 156 項目すべて合格。
 - 取り消し後に残ったテーブル・関数・トリガー：0。
 - 原文（`profile_book`・`answers`）は変化なし。
 - 再適用も成功。
@@ -180,11 +203,14 @@
 
 1. **Anthropic Console**
    - 翻訳専用のワークスペース（例：`miri-translation`）を作る。
+   - そのワークスペースのデータの保存地域（Workspace geo）が US であることを確認する。
+   - 許可する推論の地域（`allowed_inference_geos`）を `["us"]` に制限する。
    - そのワークスペースの月の上限を $10 に設定する（Limits / Spend limits）。
    - そのワークスペースで API キーを発行する。
 2. **比較テスト（手元・少額）**
    - API キーを手元の環境変数にだけ置き、`scripts/translate-eval/cases.json` の 24 文×4 言語を Haiku 5.5 で訳す。
    - 費用の見込みは約 $0.01。応答時間・トークン数・費用を記録し、人が採点する（評価方法は 8 章）。
+   - **応答の `usage.inference_geo` が `us` であることを確認する**（Miri は `us` 以外を失敗として扱う）。
 3. **本番 DB**：SQL を適用する（承認後）。`enabled` は `false` のまま。
 4. **Vercel のプレビュー環境に設定**（本番にはまだ設定しない）
 
@@ -209,6 +235,7 @@ Claude Haiku 5.5 の呼び出し設定（`engines.ts`）：
 - 構造化出力（JSON スキーマ）
 - `max_tokens: 400`
 - system にプロンプトキャッシュ
+- `inference_geo: "us"`（応答の `usage.inference_geo` が `us` 以外なら失敗）
 - タイムアウト 15 秒・再試行 1 回
 - `refusal`・`max_tokens` で止まったとき、JSON が壊れているときは失敗として原文を表示
 - 公式の SDK（`@anthropic-ai/sdk`）を使い、ブラウザ側からは読み込めないようにビルド前に確認している
@@ -221,7 +248,8 @@ Claude Haiku 5.5 の呼び出し設定（`engines.ts`）：
   - 例外：利用規約違反の調査（最長 2 年）、Files API、ゼロデータ保持の契約。
   - 今回使うのは Messages API とプロンプトキャッシュだけで、Batch API・Files API は使わない。
 - 明示的な許可なしに学習に使われない。Claude Haiku 5.5 は 30 日保存が必須の「Covered Models」ではない。
-- 送るのは原文と質問文と言語だけ。名前・ID・メール・アクセストークン・閲覧者の情報は送らない。
+- 送るのは原文（伏せ字にしたもの）と質問文と言語だけ。名前・ID・メール・アクセストークン・閲覧者の情報は送らない。
+- 公式ドキュメント（API and data retention）では、既定では保存しない（Covered Models を除く）、法令上必要な場合と安全性の判定で問題とされた場合は最長 2 年、とされている。ポリシーでは両方を踏まえ「保存されないか、保存されても原則 30 日以内」と書いた。
 - 保存期間の公式ページ（privacy.claude.com）は、この作業環境から開けなかった（検索結果で確認）。契約前に直接確認すること。
 
 ---
@@ -250,10 +278,10 @@ Claude Haiku 5.5 の呼び出し設定（`engines.ts`）：
 
 ## 9. 自動テスト
 
-| テスト | 内容 | 結果 |
+| テスト | 内容 | 結果（2026-11-07） |
 |---|---|---|
-| `npm run test:translate -- --ui` | API 58 項目＋画面 34 項目（390px・1366px） | 92 項目すべて合格 |
-| `supabase/tests/translation/run.sh` | SQL 94 項目（手元の PostgreSQL 16） | すべて合格 |
+| `npm run test:translate -- --ui` | 伏せ字の部品 6 項目、API 92 項目、画面 58 項目（390px・1366px）。画面では同意画面・年齢・同意のチェック・取り消し・退会の申請も確認 | 156 項目すべて合格 |
+| `supabase/tests/translation/run.sh` | SQL 156 項目（手元の PostgreSQL 16）。権限・候補・同意の検証・版・取り出し・送信の記録・編集・公開範囲・項目の変更・取り消し・退会・記録の保存期間・費用 | すべて合格 |
 | 既存の回帰テスト（Unit 1〜4・ログインと表示） | 本番設定のビルド | 前の版と同じ結果 |
 
 `npm run test:translate` は、Supabase の代わりのサーバーを指してビルドしたあとに実行する。手順はファイルの先頭に書いてある。
@@ -262,17 +290,41 @@ Claude Haiku 5.5 の呼び出し設定（`engines.ts`）：
 - 翻訳は仮の翻訳、Supabase は代わりのサーバー、SQL は手元の PostgreSQL で確認した。
 - 本物の Supabase・Anthropic API では、まだ何も確認していない。
 
+テストで見つけて直したこと：
+- スマホで、同意画面と退会の申請画面の下のボタンがタブバーに隠れて押せなかった。body の直下に表示するように直した。
+- メモリ保存で、回答をフォロワー限定にしたとき、その回答の選択が外れていなかった。SQL のトリガーと同じ動作に直した。
+- 同意の履歴を作成日から 3 年で消すと、送信を続けている人の、もとになった同意の記録まで消えてしまう。そのため「最後の同意・取り消し・送信から 3 年」に直した。
+
 ---
 
-## 10. 本番反映までの残りの作業
+## 10. 本番有効化までの手順（すべてそろうまで有効にしない）
 
-1. プレビューで実際に操作して確認（2 アカウント：許可をオンにする人と、英語で見る人）。
-2. 比較テストの実施と結果の評価（API キーの発行と少額の利用の承認が必要）。
-3. プライバシーポリシー・利用規約の改訂（法律の専門家の確認）。マイページの説明に送信先とポリシーへのリンクを加える。
-4. 本番 DB への SQL の適用（承認が必要）。
-5. プレビューで実際の翻訳（Haiku 5.5）を確認し、使用量の記録と上限での停止を確かめる。
-6. 本番の環境変数の設定と有効化（承認が必要）。最初は `monthly_cap_usd` を小さめ（例：$2）にして様子を見る。
-7. 今後の拡張
-   - 日記・ブログ・コメント・サークル（Phase C）。
-   - 限定公開・コミュニティ限定・サブスク限定（閲覧者ごとに権限を確かめる関数を `source_type` ごとに追加）。
-   - 趣味別プロフィール帳・公認ユーザーの独自質問。
+**前提条件**
+1. プライバシーポリシー・利用規約の確定（法律の専門家の確認。`docs/privacy-policy-translation-draft.md` 10 章の論点）。確定した文言で同意画面の版を上げる（`-draft` を外す）。
+2. 同意画面と記録の実装（済み）。法務確認で項目・保存期間を確定する。
+3. 明示的な公開の確認（済み：本人が項目を選ぶ方式）。
+4. API の権限（済み：ログイン必須・service_role だけの関数・回数と予算の制限）。
+5. 翻訳キャッシュと記録の保存期間の確定（初期値 3 年は仮）。`purge_expired_translation_records()` を 1 日 1 回動かす設定（pg_cron など）。
+6. 米国での処理の確認：Workspace geo・`allowed_inference_geos`・応答の `usage.inference_geo`。
+7. 未成年者の扱いの確定（いまは 16 歳未満・未入力は不可）。
+8. Supabase・Vercel の処理地域の確認と、ポリシー「7. 安全管理措置」への反映。
+9. SQL のレビュー（本番の `get_visible_book`・`answers` の定義と一致するか）。
+10. 本番に近い環境でのテスト（Supabase のステージング、または本番 DB に適用後 `enabled = false` のまま、プレビューで確認）。
+
+**手順**（各段階で承認をいただく）
+1. Anthropic Console の設定（6 章 1）と、手元での少額の比較テスト（`usage.inference_geo` の確認を含む）。
+2. 本番 DB に SQL を適用（`enabled = false` のまま）。適用後に `select public.owner_allows_translation('x', 'v')` などで関数があることを確かめる。
+3. Vercel の Preview に翻訳の変数を設定し、実際の Supabase と Anthropic で確認する。
+   - 確認すること：同意 → 翻訳 → 取り消し、記録の作成、上限での停止、伏せ字。
+   - 本番の service_role キーを Preview に入れる場合は、確認後すぐに外す。
+4. ポリシー・規約の本番の文面を差しかえる（`src/app/privacy`・`src/app/terms`）。
+5. 本番の環境変数を設定し、`TRANSLATION_ENABLED=true` と `translation_settings.enabled = true` にする。最初は `monthly_cap_usd` を小さめ（例：$2）にする。
+6. 運営者の作業を決めておく
+   - 退会・データ削除の申請（`feedback` の `kind = 'account_deletion'`）を確認し、本人確認のうえ Supabase の Authentication から削除する。
+   - 本人からの開示請求に、`translation_consent_events`・`translation_provision_log` を ID で抽出して応じる。
+
+**今後の拡張**
+- 保護者の同意による許可（16 歳未満）。
+- 日記・ブログ・コメント・サークル（Phase C）。
+- 限定公開・コミュニティ限定・サブスク限定（閲覧者ごとに権限を確かめる関数を `source_type` ごとに追加）。
+- 趣味別プロフィール帳・公認ユーザーの独自質問。
