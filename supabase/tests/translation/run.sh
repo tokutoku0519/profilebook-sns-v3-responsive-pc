@@ -5,10 +5,12 @@
 #   base.sql … Supabase 相当の環境（anon / authenticated / service_role・auth.uid()・既定の権限付与・
 #              profiles / profile_book / follows / answers・get_visible_book は security_patch_A.sql と同じ定義）
 #   test.sql … 権限・取り出し・目印・保存・削除・予算の確認（結果は PASS / FAIL で表示）
+#   test_account_deletion.sql … 退会・データ削除の申請（supabase/proposal_account_deletion_requests.sql）
 set -e
 D=$(cd "$(dirname "$0")" && pwd); ROOT=$(cd "$D/../../.." && pwd)
 P="psql -X -q"
 $P -d postgres -c "drop database if exists trtest" -c "create database trtest" >/dev/null
 $P -d trtest -v ON_ERROR_STOP=1 -f "$D/base.sql" >/dev/null
 $P -d trtest -v ON_ERROR_STOP=1 -f "$ROOT/supabase/proposal_content_translations.sql" >/dev/null
-$P -d trtest -f "$D/test.sql" 2>&1 | sed -e 's/^psql:[^ ]* NOTICE:  /  /' -e 's/^NOTICE:  /  /' | grep -E '^==|PASS|FAIL|ERROR'
+$P -d trtest -v ON_ERROR_STOP=1 -f "$ROOT/supabase/proposal_account_deletion_requests.sql" >/dev/null
+( $P -d trtest -f "$D/test.sql"; $P -d trtest -f "$D/test_account_deletion.sql" ) 2>&1 | sed -e 's/^psql:[^ ]* NOTICE:  /  /' -e 's/^NOTICE:  /  /' | grep -E '^==|PASS|FAIL|ERROR'

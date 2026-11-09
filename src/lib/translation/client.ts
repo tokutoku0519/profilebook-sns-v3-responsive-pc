@@ -79,8 +79,9 @@ async function consentCall(body: Record<string, unknown>): Promise<ConsentResult
   if (res.ok) statusCache.clear();
   return { ok: res.ok && j.ok !== false, reason: j.reason };
 }
-/** 説明を確認したうえでの許可（版・表示した言語・16 歳以上の確認・選んだ項目を送る） */
-export const grantTranslationConsent = (version: string, locale: ConsentLocale, items: ConsentItem[]) =>
-  consentCall({ action: 'grant_consent', version, locale, ageConfirmed16: true, items });
+/** 説明を確認したうえでの許可（版・表示した言語・生まれた年月・選んだ項目を送る）。
+ *  年齢はサーバーで計算し直す（ブラウザの判定だけでは許可されない）。生まれた年月はサーバーで保存しない */
+export const grantTranslationConsent = (version: string, locale: ConsentLocale, birthYear: number, birthMonth: number, items: ConsentItem[]) =>
+  consentCall({ action: 'grant_consent', version, locale, birthYear, birthMonth, items });
 export const setTranslationItems = (items: ConsentItem[]) => consentCall({ action: 'set_items', items });
 export const revokeTranslationConsent = () => consentCall({ action: 'revoke_consent' });

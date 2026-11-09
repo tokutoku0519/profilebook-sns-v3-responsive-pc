@@ -305,20 +305,27 @@ export async function submitFeedback(kind: 'bug' | 'request' | 'question', body:
   return !error;
 }
 
-/** 退会・データ削除の申請（運営者が確認して削除する）。既存の feedback テーブルに kind='account_deletion' で記録する。
- *  テーブルの構造は変えない（kind は自由な文字列）。削除そのものは運営者が行う（法定の記録は削除の対象と分けて扱う）。 */
-export async function submitAccountDeletionRequest(note: string): Promise<boolean> {
-  if (!supabase) return false;
-  const uid = await getCurrentUserId();
-  if (!uid) return false;
-  let username = '';
+/** 退会・データ削除の申請（運営者が確認して削除する）。サーバー（/api/account-deletion）が本人のトークンで記録する。
+ *  受付中の申請があれば二重に作らない。削除そのものは運営者が行う（法定の記録は削除の対象と分けて扱う）。 */
+export type DeletionRequestState = { pending: boolean; requestedAt?: string };
+export async function getAccountDeletionRequest(): Promise<DeletionRequestState | null> {
+  const token = await getAccessToken().catch(() => null);
+  if (!token) return null;
   try {
-    const { data } = await supabase.from('profiles').select('username').eq('id', uid).maybeSingle();
-    username = (data as any)?.username ?? '';
-  } catch {}
-  const body = `[退会・データ削除の申請] ${note.trim()}`.slice(0, 2000);
-  const { error } = await supabase.from('feedback').insert({ user_id: uid, username, kind: 'account_deletion', body });
-  return !error;
+    const r = await fetch('/api/account-deletion', { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
+    return r.ok ? ((await r.json()) as DeletionRequestState) : null;
+  } catch { return null; }
+}
+export async function submitAccountDeletionRequest(note: string): Promise<DeletionRequestState | null> {
+  const token = await getAccessToken().catch(() => null);
+  if (!token) return null;
+  try {
+    const r = await fetch('/api/account-deletion', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ note }),
+    });
+    const j = (await r.json().catch(() => ({}))) as DeletionRequestState & { ok?: boolean };
+    return r.ok && j.ok ? { pending: true, requestedAt: j.requestedAt } : null;
+  } catch { return null; }
 }
 
 /** 現在のアクセストークン（サーバーAPIへ Bearer で渡す用）。無ければ null。 */

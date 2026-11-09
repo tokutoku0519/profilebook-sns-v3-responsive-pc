@@ -27,6 +27,8 @@ export type ContentTranslation = {
   showing: boolean;
   busy: boolean;
   notice: '' | 'unavailable' | 'login' | 'nothing';
+  /** 一部の文を、個人情報・配慮が必要な内容の可能性があるため送らなかった（分類は出さずにまとめて知らせる） */
+  privacy: boolean;
   translated: Record<string, string> | undefined;
   toggle: () => void;
 };
@@ -40,9 +42,10 @@ export function useContentTranslation(owner: string | null, lang: Lang, candidat
   const [showing, setShowing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<ContentTranslation['notice']>('');
+  const [privacy, setPrivacy] = useState(false);
 
   // 相手・言語・原文が変わったら、表示を原文に戻して取り直す
-  useEffect(() => { setMap(null); setShowing(false); setNotice(''); }, [owner, lang, sig]);
+  useEffect(() => { setMap(null); setShowing(false); setNotice(''); setPrivacy(false); }, [owner, lang, sig]);
   useEffect(() => {
     if (!owner || usable.length === 0) { setAvail(null); return; }
     let cancelled = false;
@@ -62,6 +65,7 @@ export function useContentTranslation(owner: string | null, lang: Lang, candidat
     setBusy(false);
     if (!res) { setNotice('login'); return; }
     const byKey = new Map(res.results.map((r) => [r.key, r]));
+    setPrivacy(res.results.some((r) => r.reason === 'personal'));
     const next: Record<string, string> = {};
     for (const c of usable) {
       const r = byKey.get(resultKey(c.item));
@@ -76,7 +80,7 @@ export function useContentTranslation(owner: string | null, lang: Lang, candidat
     setShowing(true);
   }
 
-  return { visible, mock: !!avail?.mock, showing, busy, notice, translated: showing && map ? map : undefined, toggle };
+  return { visible, mock: !!avail?.mock, showing, busy, notice, privacy, translated: showing && map ? map : undefined, toggle };
 }
 
 /** 翻訳ボタンと注記（プロフ帳の上・回答の下に置く） */
@@ -101,6 +105,7 @@ export function TranslateBar({ tr, lang, compact = false }: { tr: ContentTransla
         </span>
       )}
       {note && <span role="status" className="text-[11px] font-bold leading-snug text-muted">{note}</span>}
+      {tr.privacy && <span role="status" className="text-[11px] font-bold leading-snug text-muted" data-translate-privacy>{t('tr_privacy', lang)}</span>}
     </div>
   );
 }
@@ -196,9 +201,10 @@ function ConsentSheet({ lang, mode, current, onClose, onDone }: {
 
   async function submit() {
     setBusy(true); setError('');
-    const r = mode === 'edit' ? await setTranslationItems(chosen) : await grantTranslationConsent(CONSENT_VERSION, locale, chosen);
+    const r = mode === 'edit' ? await setTranslationItems(chosen) : await grantTranslationConsent(CONSENT_VERSION, locale, Number(year), Number(month), chosen);
     setBusy(false);
-    if (r.ok) onDone(T.saved); else setError(T.failed);
+    if (r.ok) onDone(T.saved);
+    else setError(r.reason === 'age' ? T.ageUnder : r.reason === 'age_locked' ? T.ageLocked : r.reason === 'age_invalid' ? T.ageInvalid : T.failed);
   }
 
   // 画面の下のタブバーより手前に出すため、body の直下に出す（マイページの中に置くと、スマホで許可ボタンがタブバーに隠れる）
@@ -237,6 +243,7 @@ function ConsentSheet({ lang, mode, current, onClose, onDone }: {
                         <span className="min-w-0">
                           <span className="block text-[12px] font-black text-ink">{labelOf(c)}</span>
                           <span className="block break-words text-[11px] font-bold text-muted">{c.preview}</span>
+                          {c.blocked && <span className="mt-0.5 block text-[11px] font-black text-amber-900" data-blocked={c.blocked}>⚠ {T.blocked[c.blocked]}</span>}
                         </span>
                       </label>
                     </li>

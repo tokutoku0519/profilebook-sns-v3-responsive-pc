@@ -5,7 +5,9 @@
 //  ・本番（VERCEL_ENV=production）は、TRANSLATION_ENABLED=true を明示しない限り止まっている
 //  ・本番では仮の翻訳（mock）は使わない
 //  ・実際の翻訳（Claude Haiku 5.5）は TRANSLATION_ENGINE=anthropic と TRANSLATION_ALLOW_PAID=true の両方と
-//    ANTHROPIC_API_KEY がそろったときだけ。さらに予算を DB で数える（TRANSLATION_STORE=db）ときだけ
+//    ANTHROPIC_API_KEY がそろったときだけ。さらに予算・同意・記録を DB で持つ（TRANSLATION_STORE=db）ときだけ
+//  ・さらに、翻訳専用ワークスペースが米国だけに制限されていることを運営者が確かめた印（TRANSLATION_WORKSPACE_GEO=us）が必要
+//    （Console の Workspace geo = US・allowed_inference_geos = ["us"]。scripts/translate-eval/check-workspace.mjs で確認）
 //  ・プレビュー・手元では、何も設定しなくても「仮の翻訳＋メモリ保存」で動く（外部への送信なし）
 // ============================================================
 
@@ -27,6 +29,10 @@ export type TranslationConfig = {
   maxEstimateUsd: number;
   /** Anthropic で推論する地域。外国の名称（アメリカ合衆国）を特定するため us に固定する（既定の global は国が決まらない） */
   inferenceGeo: 'us';
+  /** 1 つの文で API を呼ぶ最大の回数（接続エラー・429・529 のときだけ 1 回やり直す。やり直しも送信として記録する） */
+  maxAttempts: number;
+  /** テスト用（仮の翻訳でだけ使う。本番では仮の翻訳は使わない）：応答の地域・失敗・事前確認の結果をまねる */
+  mockFault: { geo?: string; fail?: 'timeout' | 'error' | 'overloaded_once'; preflight?: 'fail' };
   /** 料金（米ドル / 100 万トークン）。inference_geo=us の 1.1 倍を含めた額 */
   price: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
@@ -52,6 +58,12 @@ export function translationConfig(env: NodeJS.ProcessEnv = process.env): Transla
     ownerDailyLimit: num(env.TRANSLATION_OWNER_DAILY_LIMIT, 60),
     maxEstimateUsd: 0.002,
     inferenceGeo: 'us' as const,
+    maxAttempts: 2,
+    mockFault: isProduction ? {} : {
+      geo: env.TRANSLATION_MOCK_GEO || undefined,
+      fail: (['timeout', 'error', 'overloaded_once'] as const).find((x) => x === env.TRANSLATION_MOCK_FAIL),
+      preflight: env.TRANSLATION_MOCK_PREFLIGHT === 'fail' ? 'fail' as const : undefined,
+    },
     // Claude Haiku 5.5 の公式料金（2026-10 時点）× 米国内での推論（inference_geo: us）の 1.1 倍。変わったら環境変数で上書きする
     price: {
       input: num(env.TRANSLATION_PRICE_INPUT, 0.10 * US_GEO_MULTIPLIER),
@@ -71,7 +83,8 @@ export function translationConfig(env: NodeJS.ProcessEnv = process.env): Transla
   if (engine === 'anthropic') {
     if (env.TRANSLATION_ALLOW_PAID !== 'true') return off('有料 API の利用が許可されていない（TRANSLATION_ALLOW_PAID）');
     if (!env.ANTHROPIC_API_KEY) return off('ANTHROPIC_API_KEY がない');
-    if (store !== 'db') return off('有料 API は予算を DB で数えるとき（TRANSLATION_STORE=db）だけ使う');
+    if (store !== 'db') return off('有料 API は予算・同意・記録を DB で持つとき（TRANSLATION_STORE=db）だけ使う');
+    if (env.TRANSLATION_WORKSPACE_GEO !== 'us') return off('翻訳専用ワークスペースが米国だけに制限されていることを確認していない（TRANSLATION_WORKSPACE_GEO=us）');
   }
   if (store === 'db' && !env.SUPABASE_SERVICE_ROLE_KEY) return off('SUPABASE_SERVICE_ROLE_KEY がない');
   return { ...base, enabled: true, reason: '' };

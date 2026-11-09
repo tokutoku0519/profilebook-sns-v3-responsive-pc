@@ -21,22 +21,33 @@ import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   consentItemKey, isTranslatableProfilePath, permissionKeyOf, TRANSLATABLE_PROFILE_FIELDS,
-  type ConsentCandidate, type ConsentItem, type TranslateItem,
+  type ConsentCandidate, type ConsentItem, type KeptReason, type TranslateItem,
 } from '../shared';
-import { CONSENT_TEXT, CONSENT_VERSION, type ConsentLocale } from '../consentText';
+import { ageBandOf, ageFrom, AGE_RETRY_DAYS, CONSENT_TEXT, CONSENT_VERSION, MIN_CONSENT_AGE, type AgeBand, type ConsentLocale } from '../consentText';
 import { costUsd, type TranslationConfig, type Usage } from './config';
 
 export type Source = { ownerId: string; text: string; hash: string; context?: string };
-export type Cached = { status: 'done' | 'kept'; text?: string };
-export type SaveInput = { status: 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; usage: Usage | null; costUsd: number };
+export type Cached = { status: 'done' | 'kept'; text?: string; keptReason?: KeptReason | null };
+export type SaveInput = { status: 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; usage: Usage | null; costUsd: number; keptReason?: KeptReason };
 export type ReserveResult = { result: 'ok' | 'disabled' | 'budget' | 'user_limit' | 'owner_limit' | 'bad_estimate' | 'error'; id?: string };
 export type UsageReport = { month: string; spentUsd: number; reservedUsd: number; requests: number; cacheHits: number; inputTokens: number; outputTokens: number; capUsd: number; targetUsd: number };
 export type ConsentState = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[] };
-export type GrantInput = { version: string; locale: ConsentLocale; ageCheck: 'self_declared_16_plus'; items: ConsentItem[] };
-export type GrantResult = { ok: true } | { ok: false; reason: 'old_version' | 'age' | 'no_items' | 'not_public' };
-export type ProvisionInput = { ownerId: string; item: TranslateItem; lang: string; inferenceGeo: string };
+/** 生まれた年月はサーバー（と SQL）で年齢の確認にだけ使い、保存しない。記録には年齢の区分だけを残す */
+export type GrantInput = { version: string; locale: ConsentLocale; birthYear: number; birthMonth: number; items: ConsentItem[] };
+export type GrantResult = { ok: true } | { ok: false; reason: 'old_version' | 'age' | 'age_locked' | 'age_invalid' | 'no_items' | 'not_public' };
+/** 外国への送信の記録。送る直前に「送信中」で作り、結果が分かったら書きかえる（送った事実は消さない） */
+export type ProvisionStart = { ownerId: string; item: TranslateItem; lang: string; requestedGeo: string; model: string; attempt: number };
+/** completed：応答あり・米国で処理／geo_mismatch：応答はあったが米国と確認できない（結果は使わない）／
+ *  error_response：API がエラーを返した／unknown：タイムアウトなどで届いたか分からない（sending のまま残ったものも同じ扱い） */
+export type ProvisionOutcome = 'completed' | 'geo_mismatch' | 'error_response' | 'unknown';
+export type ProvisionFinish = { outcome: ProvisionOutcome; reportedGeo: string | null; requestId?: string; errorCode?: string };
+/** 同意画面の候補（checkText はサーバーの中だけで使う。個人情報のチェックにかけて blocked を付けたら捨てる） */
+export type CandidateRow = ConsentCandidate & { checkText?: string };
 /** 記録の件数（プレビュー・テストの確認用。本番は SQL Editor で見る） */
-export type RecordCounts = { consentEvents: number; provisions: number; dailyRows: number; reservationsWithIds: number };
+export type RecordCounts = {
+  consentEvents: number; provisions: number; provisionsByOutcome: Record<string, number>; dailyRows: number; reservationsWithIds: number;
+  ageLocks: number; halted: string | null; birthDataStored: boolean;
+};
 
 export interface TranslationStore {
   getCached(it: TranslateItem, lang: string): Promise<Cached | null | 'unavailable'>;
@@ -45,10 +56,14 @@ export interface TranslationStore {
   save(it: TranslateItem, lang: string, hash: string, r: SaveInput): Promise<boolean>;
   reserve(userId: string, ownerId: string, estimateUsd: number): Promise<ReserveResult>;
   settle(id: string, usage: Usage): Promise<number | null>;
-  /** 外国にある第三者への提供の記録（送る直前に書く。文章そのものは残さない） */
-  recordProvision(p: ProvisionInput): Promise<boolean>;
+  /** 外国にある第三者への提供の記録を「送信中」で作る（文章そのものは残さない）。許可がない・止まっているときは null（送らない） */
+  beginProvision(p: ProvisionStart): Promise<string | null>;
+  /** 送信の結果を書く（送信中の記録だけ。記録そのものは消さない） */
+  finishProvision(id: string, f: ProvisionFinish): Promise<void>;
+  /** 新しい翻訳を止める（米国以外で処理された・事前確認に失敗したとき）。再開は運営者が DB の設定で行う */
+  halt(reason: string): Promise<void>;
   getConsent(userId: string): Promise<ConsentState>;
-  candidates(userId: string): Promise<ConsentCandidate[]>;
+  candidates(userId: string): Promise<CandidateRow[]>;
   grantConsent(userId: string, g: GrantInput): Promise<GrantResult>;
   setConsentItems(userId: string, items: ConsentItem[]): Promise<GrantResult>;
   revokeConsent(userId: string): Promise<void>;
@@ -59,11 +74,13 @@ export interface TranslationStore {
 
 export const md5 = (s: string) => createHash('md5').update(s, 'utf8').digest('hex');
 /** 同意の記録に残す「表示した説明文」のハッシュ。クライアントの申告ではなく、サーバーが持つ文面から計算する */
-export const consentTextSha256 = (version: string, locale: ConsentLocale) => {
+/** 同意の前に表示した説明（版ごと・言語ごと）。ハッシュと一緒に DB に残し、どの文面に同意したかを後から確かめられるようにする */
+export const consentNotice = (version: string, locale: ConsentLocale) => {
   const T = CONSENT_TEXT[locale];
-  const notice = { title: T.title, lead: T.lead, sections: T.sections, itemsHelp: T.itemsHelp, ageHelp: T.ageHelp, agree: T.agree };
-  return createHash('sha256').update(JSON.stringify({ version, locale, notice }), 'utf8').digest('hex');
+  return { version, locale, notice: { title: T.title, lead: T.lead, sections: T.sections, itemsHelp: T.itemsHelp, ageHelp: T.ageHelp, agree: T.agree } };
 };
+export const consentTextSha256 = (version: string, locale: ConsentLocale) =>
+  createHash('sha256').update(JSON.stringify(consentNotice(version, locale)), 'utf8').digest('hex');
 
 const monthOf = (d = new Date()) => d.toISOString().slice(0, 7) + '-01';
 const dayOf = (d = new Date()) => d.toISOString().slice(0, 10);
@@ -95,14 +112,25 @@ function firstText(v: unknown): string | null {
   return null;
 }
 
+/** セクションの中の文字列をすべてつなぐ（同意画面で、個人情報のチェックにかけるため） */
+function allText(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return v.map(allText).join('\n');
+  if (v && typeof v === 'object') return Object.entries(v).filter(([k]) => k !== 'monthKey').map(([, x]) => allText(x)).join('\n');
+  return '';
+}
+
 // ============================================================
 // MemoryStore
 // ============================================================
-type MemRow = { status: 'pending' | 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; at: number };
+type MemRow = { status: 'pending' | 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; at: number; keptReason?: KeptReason };
 type MemReservation = { id: string; month: string; estimate: number; actual?: number; status: 'reserved' | 'settled' | 'expired'; createdAt: number };
 type MemConsent = { allow: boolean; version: string; grantedAt: string; items: Map<string, ConsentItem>; eventId: number };
-type MemEvent = { id: number; userId: string; action: 'grant' | 'revoke' | 'scope_update'; version: string | null; textSha256: string | null; locale: string | null; ageCheck: string | null; scope: string[]; at: string };
-type MemProvision = { ownerId: string; sourceType: string; sourcePath: string; lang: string; recipient: string; inferenceGeo: string; consentEventId: number | null; at: string };
+type MemEvent = { id: number; userId: string; action: 'grant' | 'revoke' | 'scope_update'; version: string | null; textSha256: string | null; locale: string | null; ageCheck: string | null; ageBand: AgeBand | null; scope: string[]; at: string };
+type MemProvision = {
+  id: string; ownerId: string; sourceType: string; sourcePath: string; lang: string; recipient: string; requestedGeo: string; reportedGeo: string | null;
+  model: string; attempt: number; outcome: 'sending' | ProvisionOutcome; requestId?: string; errorCode?: string; consentEventId: number | null; at: string; completedAt?: string;
+};
 
 export class MemoryStore implements TranslationStore {
   private anon: SupabaseClient;
@@ -113,6 +141,8 @@ export class MemoryStore implements TranslationStore {
   private reservations = new Map<string, MemReservation>(); // ③ 費用（ID を持たない）
   private months = new Map<string, { spent: number; reserved: number; requests: number; cacheHits: number; input: number; output: number }>();
   private daily = new Map<string, number>();             // ③ 回数制限 `user|id|day`（2 日で消す）
+  private ageLocks = new Map<string, number>();          // 16 歳未満と入力した人の、再入力できるまでの時刻（生年月は残さない）
+  private halted: string | null = null;
   private seq = 0;
 
   constructor(private cfg: TranslationConfig, url: string, anonKey: string, private now = () => Date.now()) {
@@ -183,7 +213,7 @@ export class MemoryStore implements TranslationStore {
     const row = this.rows.get(this.key(it, src.ownerId, lang, src.hash));
     if (!row || (row.status !== 'done' && row.status !== 'kept')) return null;
     this.month().cacheHits++;
-    return { status: row.status, text: row.text };
+    return { status: row.status, text: row.text, keptReason: row.keptReason ?? null };
   }
 
   async claim(it: TranslateItem, lang: string) {
@@ -208,12 +238,13 @@ export class MemoryStore implements TranslationStore {
     const k = this.key(it, src.ownerId, lang, hash);
     const row = this.rows.get(k);
     if (!row || row.status !== 'pending') return false;
-    this.rows.set(k, { status: r.status, text: r.status === 'done' ? r.text : undefined, keptTerms: r.keptTerms, at: this.now() });
+    this.rows.set(k, { status: r.status, text: r.status === 'done' ? r.text : undefined, keptTerms: r.keptTerms, at: this.now(), keptReason: r.status === 'kept' ? r.keptReason : undefined });
     return true;
   }
 
   async reserve(userId: string, ownerId: string, estimate: number): Promise<ReserveResult> {
     // 確保の判定は await をはさまず一度に行う（同時アクセスでも上限を超えない）
+    if (this.halted) return { result: 'disabled' };
     if (!(estimate > 0) || estimate > this.cfg.maxEstimateUsd) return { result: 'bad_estimate' };
     const now = this.now();
     for (const r of this.reservations.values()) {
@@ -249,16 +280,24 @@ export class MemoryStore implements TranslationStore {
     return actual;
   }
 
-  async recordProvision(p: ProvisionInput) {
+  async beginProvision(p: ProvisionStart) {
     const c = this.currentConsent(p.ownerId);
-    if (!c || p.inferenceGeo !== 'us') return false;                         // 米国内での推論でなければ送らない
+    if (!c || p.requestedGeo !== 'us' || this.halted) return null;          // 許可がない・米国指定でない・止まっている → 送らない
+    const id = `p${++this.seq}`;
     this.provisions.push({
-      ownerId: p.ownerId, sourceType: p.item.kind === 'answer' ? 'answer' : 'profile_field',
+      id, ownerId: p.ownerId, sourceType: p.item.kind === 'answer' ? 'answer' : 'profile_field',
       sourcePath: p.item.kind === 'answer' ? p.item.id : p.item.path, lang: p.lang,
-      recipient: 'Anthropic, PBC (United States)', inferenceGeo: p.inferenceGeo, consentEventId: c.eventId, at: new Date(this.now()).toISOString(),
+      recipient: 'Anthropic, PBC (United States)', requestedGeo: p.requestedGeo, reportedGeo: null, model: p.model, attempt: p.attempt,
+      outcome: 'sending', consentEventId: c.eventId, at: new Date(this.now()).toISOString(),
     });
-    return true;
+    return id;
   }
+  async finishProvision(id: string, f: ProvisionFinish) {
+    const row = this.provisions.find((x) => x.id === id);
+    if (!row || row.outcome !== 'sending') return;
+    Object.assign(row, { outcome: f.outcome, reportedGeo: f.reportedGeo, requestId: f.requestId, errorCode: f.errorCode, completedAt: new Date(this.now()).toISOString() });
+  }
+  async halt(reason: string) { this.halted = this.halted ?? reason; }
 
   async getConsent(userId: string): Promise<ConsentState> {
     const c = this.consents.get(userId);
@@ -266,20 +305,21 @@ export class MemoryStore implements TranslationStore {
     return { allow: true, version: c.version, current: c.version === CONSENT_VERSION, grantedAt: c.grantedAt, items: [...c.items.values()] };
   }
 
-  async candidates(userId: string): Promise<ConsentCandidate[]> {
+  async candidates(userId: string): Promise<CandidateRow[]> {
     const username = await this.usernameOf(userId);
     if (!username) return [];
-    const out: ConsentCandidate[] = [];
+    const out: CandidateRow[] = [];
     const { data: book } = await this.anon.rpc('get_visible_book', { target: username });   // 未ログインの人に見える内容だけ
     if (book && typeof book === 'object') {
       for (const key of TRANSLATABLE_PROFILE_FIELDS) {
-        const t = firstText((book as Record<string, unknown>)[key]);
-        if (t) out.push({ item: { kind: 'profile_section', key }, preview: clip(t) });
+        const v = (book as Record<string, unknown>)[key];
+        const t = firstText(v);
+        if (t) out.push({ item: { kind: 'profile_section', key }, preview: clip(t), checkText: allText(v).slice(0, 4000) });
       }
     }
     const { data: answers } = await this.anon.from('answers').select('id,question_title,body,visibility').eq('user_id', userId).eq('visibility', 'public').limit(100);
     for (const a of (answers as Array<{ id: string; question_title?: string; body?: string; visibility?: string }> | null) ?? []) {
-      if (a.visibility === 'public' && typeof a.body === 'string' && a.body.trim()) out.push({ item: { kind: 'answer', id: a.id }, preview: clip(a.body), question: a.question_title?.slice(0, 60) });
+      if (a.visibility === 'public' && typeof a.body === 'string' && a.body.trim()) out.push({ item: { kind: 'answer', id: a.id }, preview: clip(a.body), question: a.question_title?.slice(0, 60), checkText: a.body.slice(0, 4000) });
     }
     return out;
   }
@@ -291,12 +331,18 @@ export class MemoryStore implements TranslationStore {
 
   async grantConsent(userId: string, g: GrantInput): Promise<GrantResult> {
     if (g.version !== CONSENT_VERSION) return { ok: false, reason: 'old_version' };
-    if (g.ageCheck !== 'self_declared_16_plus') return { ok: false, reason: 'age' };
+    // 年齢はサーバーで計算する（ブラウザの判定は信用しない）。16 歳未満と入力されたら、しばらく再入力できない
+    const lockedUntil = this.ageLocks.get(userId);
+    if (lockedUntil && lockedUntil > this.now()) return { ok: false, reason: 'age_locked' };
+    const age = ageFrom(g.birthYear, g.birthMonth, new Date(this.now()));
+    if (age == null) return { ok: false, reason: 'age_invalid' };
+    const band = ageBandOf(age);
+    if (age < MIN_CONSENT_AGE || !band) { this.ageLocks.set(userId, this.now() + AGE_RETRY_DAYS * 86_400_000); return { ok: false, reason: 'age' }; }
     if (!g.items.length) return { ok: false, reason: 'no_items' };
     const items = await this.validItems(userId, g.items);
     if (!items) return { ok: false, reason: 'not_public' };
     const at = new Date(this.now()).toISOString();
-    const ev: MemEvent = { id: ++this.seq, userId, action: 'grant', version: g.version, textSha256: consentTextSha256(g.version, g.locale), locale: g.locale, ageCheck: g.ageCheck, scope: items.map(consentItemKey), at };
+    const ev: MemEvent = { id: ++this.seq, userId, action: 'grant', version: g.version, textSha256: consentTextSha256(g.version, g.locale), locale: g.locale, ageCheck: 'self_declared_16_plus', ageBand: band, scope: items.map(consentItemKey), at };
     this.events.push(ev);
     this.consents.set(userId, { allow: true, version: g.version, grantedAt: at, items: new Map(items.map((i) => [consentItemKey(i), i])), eventId: ev.id });
     return { ok: true };
@@ -316,7 +362,7 @@ export class MemoryStore implements TranslationStore {
       this.purgeOwner(userId, (rk) => (kind === 'answer' ? rk.startsWith(`answer|${userId}|${id}|`) : rk.startsWith('profile_field|') && rk.split('|')[2].split('.')[0] === id));
     }
     for (const i of valid) c.items.set(consentItemKey(i), i);
-    const ev: MemEvent = { id: ++this.seq, userId, action: 'scope_update', version: c.version, textSha256: null, locale: null, ageCheck: null, scope: [...keep], at: new Date(this.now()).toISOString() };
+    const ev: MemEvent = { id: ++this.seq, userId, action: 'scope_update', version: c.version, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [...keep], at: new Date(this.now()).toISOString() };
     this.events.push(ev);
     c.eventId = ev.id;
     return { ok: true };
@@ -325,7 +371,7 @@ export class MemoryStore implements TranslationStore {
   async revokeConsent(userId: string) {
     this.consents.delete(userId);
     this.purgeOwner(userId);                                                  // ① 翻訳キャッシュは削除
-    this.events.push({ id: ++this.seq, userId, action: 'revoke', version: null, textSha256: null, locale: null, ageCheck: null, scope: [], at: new Date(this.now()).toISOString() }); // ② 記録は残す
+    this.events.push({ id: ++this.seq, userId, action: 'revoke', version: null, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [], at: new Date(this.now()).toISOString() }); // ② 記録は残す
   }
 
   async ownerAllows(username: string) {
@@ -341,7 +387,14 @@ export class MemoryStore implements TranslationStore {
     return { month: mk, spentUsd: round6(m.spent), reservedUsd: round6(m.reserved), requests: m.requests, cacheHits: m.cacheHits, inputTokens: m.input, outputTokens: m.output, capUsd: this.cfg.monthlyCapUsd, targetUsd: this.cfg.monthlyTargetUsd };
   }
   async recordCounts(): Promise<RecordCounts> {
-    return { consentEvents: this.events.length, provisions: this.provisions.length, dailyRows: this.daily.size, reservationsWithIds: 0 };
+    const byOutcome: Record<string, number> = {};
+    for (const p of this.provisions) byOutcome[p.outcome] = (byOutcome[p.outcome] ?? 0) + 1;
+    return {
+      consentEvents: this.events.length, provisions: this.provisions.length, provisionsByOutcome: byOutcome, dailyRows: this.daily.size, reservationsWithIds: 0,
+      ageLocks: [...this.ageLocks.values()].filter((t) => t > this.now()).length, halted: this.halted,
+      // 生年月を残していないことの確認（記録のどこにも birth の項目がない）
+      birthDataStored: JSON.stringify(this.events).includes('birth'),
+    };
   }
 }
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
@@ -363,10 +416,10 @@ export class DbStore implements TranslationStore {
   async getCached(it: TranslateItem, lang: string): Promise<Cached | null | 'unavailable'> {
     const { data, error } = await this.admin.rpc('get_translation', this.vargs(it, lang));
     if (error) return 'unavailable';
-    const row = (data as Array<{ available: boolean; status: string | null; translated_text: string | null }>)?.[0];
+    const row = (data as Array<{ available: boolean; status: string | null; translated_text: string | null; kept_reason: KeptReason | null }>)?.[0];
     if (!row?.available) return 'unavailable';
     if (row.status !== 'done' && row.status !== 'kept') return null;
-    return { status: row.status, text: row.translated_text ?? undefined };
+    return { status: row.status, text: row.translated_text ?? undefined, keptReason: row.kept_reason };
   }
   async claim(it: TranslateItem, lang: string, engine: string) {
     const { data, error } = await this.admin.rpc('claim_translation', { ...this.vargs(it, lang), p_engine: engine });
@@ -382,6 +435,7 @@ export class DbStore implements TranslationStore {
     const { data, error } = await this.admin.rpc('store_translation', {
       ...this.vargs(it, lang), p_hash: hash, p_status: r.status, p_text: r.text ?? null, p_kept_terms: r.keptTerms,
       p_input: r.usage?.input ?? null, p_output: r.usage?.output ?? null, p_cost: r.costUsd,
+      p_kept_reason: r.status === 'kept' ? r.keptReason ?? null : null,
     });
     return !error && data === true;
   }
@@ -395,12 +449,21 @@ export class DbStore implements TranslationStore {
     const { data, error } = await this.admin.rpc('settle_translation', { p_reservation_id: Number(id), p_input: u.input, p_output: u.output, p_cache_read: u.cacheRead, p_cache_write: u.cacheWrite });
     return error || data == null ? null : Number(data);
   }
-  async recordProvision(p: ProvisionInput) {
-    const { data, error } = await this.admin.rpc('record_translation_provision', {
+  async beginProvision(p: ProvisionStart) {
+    const { data, error } = await this.admin.rpc('begin_translation_provision', {
       p_owner: p.ownerId, p_type: p.item.kind === 'answer' ? 'answer' : 'profile_field',
-      p_path: p.item.kind === 'answer' ? p.item.id : p.item.path, p_lang: p.lang, p_inference_geo: p.inferenceGeo, p_current_version: CONSENT_VERSION,
+      p_path: p.item.kind === 'answer' ? p.item.id : p.item.path, p_lang: p.lang, p_requested_geo: p.requestedGeo,
+      p_model: p.model, p_attempt: p.attempt, p_current_version: CONSENT_VERSION,
     });
-    return !error && data === true;
+    return error || data == null ? null : String(data);
+  }
+  async finishProvision(id: string, f: ProvisionFinish) {
+    await this.admin.rpc('finish_translation_provision', {
+      p_id: Number(id), p_outcome: f.outcome, p_reported_geo: f.reportedGeo, p_request_id: f.requestId ?? null, p_error: f.errorCode ?? null,
+    });
+  }
+  async halt(reason: string) {
+    await this.admin.rpc('halt_translation', { p_reason: reason });
   }
   async getConsent(userId: string): Promise<ConsentState> {
     const { data } = await this.admin.rpc('get_translation_consent', { p_user: userId, p_current_version: CONSENT_VERSION });
@@ -408,18 +471,19 @@ export class DbStore implements TranslationStore {
     if (!row?.allow) return { allow: false, version: null, current: false, grantedAt: null, items: [] };
     return { allow: true, version: row.version, current: row.is_current, grantedAt: row.granted_at, items: row.items ?? [] };
   }
-  async candidates(userId: string): Promise<ConsentCandidate[]> {
+  async candidates(userId: string): Promise<CandidateRow[]> {
     const { data } = await this.admin.rpc('translation_candidates', { p_user: userId });
-    return ((data as Array<{ kind: string; item_key: string; preview: string; question: string | null }>) ?? []).map((r) => ({
+    return ((data as Array<{ kind: string; item_key: string; preview: string; question: string | null; check_text: string | null }>) ?? []).map((r) => ({
       item: (r.kind === 'answer' ? { kind: 'answer', id: r.item_key } : { kind: 'profile_section', key: r.item_key }) as ConsentItem,
-      preview: clip(r.preview), question: r.question ?? undefined,
+      preview: clip(r.preview), question: r.question ?? undefined, checkText: r.check_text ?? undefined,
     }));
   }
   async grantConsent(userId: string, g: GrantInput): Promise<GrantResult> {
     if (g.version !== CONSENT_VERSION) return { ok: false, reason: 'old_version' };
+    // 生まれた年月は SQL の中でも年齢を計算し直すために渡すだけ（SQL も保存しない）
     const { data, error } = await this.admin.rpc('grant_translation_consent', {
       p_user: userId, p_version: g.version, p_locale: g.locale, p_text_sha256: consentTextSha256(g.version, g.locale),
-      p_age_check: g.ageCheck, p_items: g.items,
+      p_notice: consentNotice(g.version, g.locale), p_birth_year: g.birthYear, p_birth_month: g.birthMonth, p_items: g.items,
     });
     const row = (data as Array<{ ok: boolean; reason: string | null }>)?.[0];
     if (error || !row) return { ok: false, reason: 'not_public' };

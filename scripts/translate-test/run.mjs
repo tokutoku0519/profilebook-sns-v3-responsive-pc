@@ -25,7 +25,8 @@ const section = (t) => results.push(`\n■ ${t}`);
 
 async function startApp(extraEnv = {}) {
   const env = { ...process.env, PORT: String(APP_PORT), NEXT_PUBLIC_SUPABASE_URL: SB, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-test-key', ...extraEnv };
-  for (const k of ['VERCEL_ENV', 'TRANSLATION_ENABLED', 'TRANSLATION_ENGINE', 'TRANSLATION_STORE', 'TRANSLATION_ALLOW_PAID', 'ANTHROPIC_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY']) if (!(k in extraEnv)) delete env[k];
+  for (const k of ['VERCEL_ENV', 'TRANSLATION_ENABLED', 'TRANSLATION_ENGINE', 'TRANSLATION_STORE', 'TRANSLATION_ALLOW_PAID', 'ANTHROPIC_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
+    'TRANSLATION_WORKSPACE_GEO', 'TRANSLATION_MOCK_GEO', 'TRANSLATION_MOCK_FAIL', 'TRANSLATION_MOCK_PREFLIGHT', 'ADMIN_NOTIFY_WEBHOOK_URL']) if (!(k in extraEnv)) delete env[k];
   const child = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/bin/next'), 'start', '-p', String(APP_PORT)], { cwd: root, env, stdio: 'ignore' });
   for (let i = 0; i < 60; i++) {
     try { const r = await fetch(`${BASE}/api/translate`); if (r.ok) return child; } catch {}
@@ -54,32 +55,52 @@ const setAnswer = (id, patch) => fetch(`${SB}/__test/answer`, { method: 'POST', 
 // 同意（翻訳してよい項目）
 const items = (sections, answers = []) => [...sections.map((key) => ({ kind: 'profile_section', key })), ...answers.map((id) => ({ kind: 'answer', id }))];
 const SECTIONS = ['dream', 'specialty', 'catchphrase', 'message', 'wantToGo', 'collection', 'charmPoint', '__questions', '__best3'];
-const grant = (who, its, extra = {}) => api(who, { action: 'grant_consent', version: CONSENT_VERSION, locale: 'ja', ageConfirmed16: true, items: its, ...extra });
+const grant = (who, its, extra = {}) => api(who, { action: 'grant_consent', version: CONSENT_VERSION, locale: 'ja', birthYear: 1996, birthMonth: 4, items: its, ...extra });
+const thisYear = Number(new Intl.DateTimeFormat('en', { timeZone: 'Asia/Tokyo', year: 'numeric' }).format(new Date()));
+const del = async (who, method = 'GET', body) => {
+  const r = await fetch(`${BASE}/api/account-deletion`, { method, headers: { 'content-type': 'application/json', ...(who ? { authorization: `Bearer ${tokenFor(IDS[who])}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  return { status: r.status, json: await r.json().catch(() => ({})) };
+};
 const records = async () => (await status('?usage=1')).records;
 
 // ── 個人情報の伏せ字（サーバーの部品を直接確かめる。pii.ts は import なしの 1 ファイル）──
 async function piiUnit() {
   const ts = require(path.join(root, 'node_modules/typescript'));
   const src = fs.readFileSync(path.join(root, 'src/lib/translation/server/pii.ts'), 'utf8');
-  const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 }
 
 const mock = await startMockSupabase(SB_PORT);
 try {
   // ============================================================
-  section('0. 個人情報の伏せ字・送らない判定（サーバーの部品）');
+  section('0. 個人情報の伏せ字・送らない判定（サーバーの部品・架空の文で評価）');
   const { screenPersonalInfo, restoreMasked } = await piiUnit();
-  const m1 = screenPersonalInfo('連絡は alice@example.com か 090-1234-5678、Insta は @alice_123 まで。https://example.com/me も見てね 〒150-0001');
-  check('メール・電話・@ID・URL・郵便番号は伏せ字にして送る', m1.ok && !/alice@example\.com|090-1234-5678|@alice_123|https:\/\/example\.com|150-0001/.test(m1.text) && m1.tokens.length === 5, m1.ok ? m1.text : m1.reason);
-  check('訳文の伏せ字を元に戻す', m1.ok && restoreMasked(`[en] ${m1.text}`, m1.tokens)?.includes('alice@example.com'));
-  check('伏せ字が訳文から消えていたら失敗扱い（null）', m1.ok && restoreMasked('[en] contact me', m1.tokens) === null);
-  const m2 = screenPersonalInfo('東京都渋谷区神宮前1丁目2-3 に住んでます');
-  check('住所らしい文は送らない（address）', !m2.ok && m2.reason === 'address', JSON.stringify(m2));
-  const m3 = screenPersonalInfo('持病があって通院しています');
-  check('健康・信条などに関わる語を含む文は送らない（sensitive）', !m3.ok && m3.reason === 'sensitive', JSON.stringify(m3));
-  const m4 = screenPersonalInfo('パン屋さん in Paris');
-  check('ふつうの文はそのまま', m4.ok && m4.text === 'パン屋さん in Paris' && m4.tokens.length === 0);
+  const corpus = JSON.parse(fs.readFileSync(path.join(root, 'scripts/translate-test/pii-cases.json'), 'utf8'));
+  const tally = {};
+  const misses = [];
+  for (const c of corpus.cases) {
+    const r = screenPersonalInfo(c.text);
+    const got = r.ok ? (r.tokens.length ? 'mask' : 'send') : r.reason;
+    tally[c.expect] = tally[c.expect] ?? { ok: 0, n: 0 };
+    tally[c.expect].n++;
+    if (got === c.expect) tally[c.expect].ok++; else misses.push(`${c.text} → ${got}`);
+  }
+  for (const [k, v] of Object.entries(tally)) check(`判定「${k}」の評価文 ${v.n} 件`, v.ok === v.n, `${v.ok}/${v.n}`);
+  check('誤検出・見落としなし（架空の文 ' + corpus.cases.length + ' 件）', misses.length === 0, misses.join(' / '));
+  const m = screenPersonalInfo('Insta は @miri_fan_01、ブログは https://example.com/miri です');
+  check('URL・@ID はランダムな記号に置きかえて送る（元の文字列は送らない）', m.ok && m.tokens.length === 2 && !/@miri_fan_01|example\.com/.test(m.text) && m.tokens.every((x) => /^⟦[0-9a-f]{4}\d+⟧$/.test(x.token)), m.ok ? m.text : '');
+  const [t1, t2] = m.ok ? m.tokens.map((x) => x.token) : ['', ''];
+  const mutated = {
+    keep: `Insta ${t1}, blog ${t2}`, drop: `Insta ${t1}, blog`, duplicate: `Insta ${t1} ${t1}, blog ${t2}`,
+    alter: `Insta ${t1.replace(/\d⟧$/, '9⟧')}, blog ${t2}`, half: `Insta ${t1.slice(0, -1)}, blog ${t2}`, extra: `Insta ${t1}, blog ${t2} ⟦ffff9⟧`, reorder: `blog ${t2}, Insta ${t1}`,
+  };
+  for (const c of corpus.restore) {
+    const out = restoreMasked(mutated[c.mutate], m.ok ? m.tokens : []);
+    const ok = c.expect === 'ok' ? out != null && out.includes('@miri_fan_01') && out.includes('https://example.com/miri') && !/[⟦⟧]/.test(out) : out === null;
+    check(`伏せ字を戻す：${c.case} → ${c.expect === 'ok' ? '戻す' : '失敗にして原文を出す'}`, ok, String(out));
+  }
+  check('原文にもともと ⟦ ⟧ があれば送らない（戻すときに区別できないため）', !screenPersonalInfo('⟦これは記号⟧').ok);
 
   // ============================================================
   section('A. 既定の設定（プレビューと同じ：仮の翻訳・メモリ保存）');
@@ -104,10 +125,18 @@ try {
 
   // 直接オンにはできない
   check('以前の「オン／オフだけ」の操作（set_consent）は受け付けない', (await api('alice', { action: 'set_consent', allow: true })).status === 400);
-  check('16 歳以上の確認がなければ 400', (await grant('alice', items(['dream']), { ageConfirmed16: undefined })).status === 400);
+  let g;
+  check('生まれた年月がなければ 400（年齢不明は許可しない）', (await grant('alice', items(['dream']), { birthYear: undefined, birthMonth: undefined })).status === 400);
+  check('ブラウザの判定（ageConfirmed16: true）だけでは許可されない', (await grant('alice', items(['dream']), { birthYear: undefined, birthMonth: undefined, ageConfirmed16: true })).status === 400);
+  g = await grant('dave', items(['dream']), { birthYear: thisYear + 1, birthMonth: 1 });
+  check('未来の年は年齢不明として 400', g.status === 400 && g.json.reason === 'age_invalid', JSON.stringify(g.json));
+  g = await grant('dave', items(['dream']), { birthYear: thisYear - 15, birthMonth: 1 });
+  check('16 歳未満はサーバーで断る（409 age）', g.status === 409 && g.json.reason === 'age', JSON.stringify(g.json));
+  g = await grant('dave', items(['dream']), { birthYear: 1990, birthMonth: 1 });
+  check('16 歳未満と入力したあと、すぐに大人の年を入れ直しても断る（age_locked）', g.status === 409 && g.json.reason === 'age_locked', JSON.stringify(g.json));
   check('項目を選ばなければ 400', (await grant('alice', [])).status === 400);
   check('表示した言語が ja / en 以外なら 400', (await grant('alice', items(['dream']), { locale: 'fr' })).status === 400);
-  let g = await grant('alice', items(['dream']), { version: '2020-01-old' });
+  g = await grant('alice', items(['dream']), { version: '2020-01-old' });
   check('古い版の説明への同意は受け付けない（409 old_version）', g.status === 409 && g.json.reason === 'old_version', JSON.stringify(g));
   g = await grant('alice', items(['dream', 'motto']));
   check('フォロワー限定の項目を含む同意は受け付けない（409 not_public）', g.status === 409 && g.json.reason === 'not_public');
@@ -121,7 +150,7 @@ try {
   check('説明の版・言語・16 歳以上・項目がそろえば許可できる', g.status === 200 && g.json.ok === true, JSON.stringify(g));
   c = (await api('alice', { action: 'get_consent' })).json;
   check('本人の状態（allow・いまの版・選んだ項目）', c.allow && c.current && c.version === CONSENT_VERSION && c.items.length === SECTIONS.length + 1 && !!c.grantedAt);
-  check('同意の記録を 1 件作る', (await records()).consentEvents === 1);
+  check('同意の記録を 1 件作る（生年月は残さない）', (await records()).consentEvents === 1 && (await records()).birthDataStored === false);
   check('許可後は ownerAllows = true', (await status('?owner=alice')).ownerAllows === true);
   const u0 = (await status('?usage=1')).usage;
   const rec0 = await records();
@@ -164,6 +193,7 @@ try {
   check('翻訳した回数＝API を呼んだ回数', u2.requests - u0.requests === 10, `${u2.requests - u0.requests} 回`);
   let rec = await records();
   check('外国への送信の記録は、API を呼んだ回数と同じ（翻訳済み・送らない文は記録しない）', rec.provisions - rec0.provisions === u2.requests - u0.requests, `送信の記録 ${rec.provisions - rec0.provisions} 件`);
+  check('送信の記録はすべて結果つき（completed）', (rec.provisionsByOutcome.completed ?? 0) === rec.provisions && !rec.provisionsByOutcome.sending, JSON.stringify(rec.provisionsByOutcome));
   check('費用の確保に個人の ID を持たない／回数制限の記録はある', rec.reservationsWithIds === 0 && rec.dailyRows > 0, JSON.stringify(rec));
   r = await tr('bob', 'ja', [pf('dream')]);
   check('表示言語と同じ言語（日本語の文を日本語で）は API を呼ばない', r[k('dream')]?.status === 'kept' && (await status('?usage=1')).usage.requests === u2.requests);
@@ -172,14 +202,19 @@ try {
 
   // 個人情報（ほかの人の情報を含みうる）
   const book = defaultBooks().alice;
-  await setBook('alice', { ...book, message: 'メールは alice@example.com まで', catchphrase: '東京都渋谷区神宮前1丁目2-3 に住んでます', specialty: '持病があって通院しています' });
+  await setBook('alice', { ...book, message: 'メールは alice@example.com まで', catchphrase: '東京都渋谷区神宮前1丁目2-3 に住んでます', specialty: '持病があって通院しています', dream: 'ブログは https://example.com/miri です' });
   const uP = (await status('?usage=1')).usage;
-  r = await tr('erin', 'en', [pf('message'), pf('catchphrase'), pf('specialty')]);
+  r = await tr('erin', 'en', [pf('message'), pf('catchphrase'), pf('specialty'), pf('dream')]);
   const uQ = (await status('?usage=1')).usage;
-  check('メールアドレスは伏せ字で送り、訳文に元のまま戻す', r[k('message')]?.status === 'done' && r[k('message')].text.includes('alice@example.com'), r[k('message')]?.text);
-  check('住所らしい文は送らずに原文のまま', r[k('catchphrase')]?.status === 'kept');
-  check('健康などに関わる文は送らずに原文のまま', r[k('specialty')]?.status === 'kept');
-  check('送らなかった文は API を呼ばない（3 件中 1 件だけ呼ぶ）', uQ.requests - uP.requests === 1, `${uQ.requests - uP.requests} 回`);
+  check('メールアドレスを含む文は送らずに原文のまま（理由 personal）', r[k('message')]?.status === 'kept' && r[k('message')].reason === 'personal', JSON.stringify(r[k('message')]));
+  check('住所らしい文は送らずに原文のまま', r[k('catchphrase')]?.status === 'kept' && r[k('catchphrase')].reason === 'personal');
+  check('健康などを本人のこととして書いた文は送らずに原文のまま', r[k('specialty')]?.status === 'kept' && r[k('specialty')].reason === 'personal');
+  check('URL は伏せ字で送り、訳文に元のまま戻す', r[k('dream')]?.status === 'done' && r[k('dream')].text.includes('https://example.com/miri'), r[k('dream')]?.text);
+  check('送らなかった文は API を呼ばない（4 件中 1 件だけ呼ぶ）', uQ.requests - uP.requests === 1, `${uQ.requests - uP.requests} 回`);
+  const cb = (await api('alice', { action: 'list_candidates' })).json.candidates ?? [];
+  const bl = Object.fromEntries(cb.filter((x) => x.blocked).map((x) => [x.item.key ?? x.item.id, x.blocked]));
+  check('本人の同意画面の候補に「翻訳されない理由」が付く（連絡先・住所・配慮が必要な内容）', bl.message === 'contact' && bl.catchphrase === 'address' && bl.specialty === 'sensitive' && !bl.dream, JSON.stringify(bl));
+  check('候補にチェック用の全文（checkText）は含めない（見本は本人の文の先頭 40 文字だけ）', !JSON.stringify(cb).includes('checkText') && cb.every((x) => [...x.preview].length <= 41));
 
   // 原文の編集・公開範囲の変更・回答の変更
   await setBook('alice', { ...book, dream: 'ケーキ屋さん' });
@@ -267,6 +302,71 @@ try {
   await setBook('alice', book);
 
   // ============================================================
+  section('F. 送信の記録（米国以外の応答・タイムアウト・やり直し・事前確認の失敗）');
+  for (const [env, label, expect] of [
+    [{ TRANSLATION_MOCK_GEO: 'eu' }, '応答の地域が us でない', 'geo'],
+    [{ TRANSLATION_MOCK_GEO: '' , TRANSLATION_MOCK_FAIL: 'timeout' }, 'タイムアウト（届いたか分からない）', 'timeout'],
+    [{ TRANSLATION_MOCK_FAIL: 'overloaded_once' }, '1 回目が 529（混雑）で、2 回目は成功', 'retry'],
+    [{ TRANSLATION_MOCK_FAIL: 'error' }, 'API がエラーを返した（500。やり直さない）', 'error'],
+    [{ TRANSLATION_MOCK_PREFLIGHT: 'fail' }, '送る前の確認（米国だけに制限されているか）に失敗', 'preflight'],
+  ]) {
+    app = await startApp(env);
+    await grant('alice', items(SECTIONS));
+    r = await tr('bob', 'en', [pf('dream')]);
+    const rc = await records();
+    const by = rc.provisionsByOutcome;
+    if (expect === 'geo') {
+      check(`${label}：訳文を使わず原文を表示`, r[k('dream')]?.status === 'original');
+      check(`${label}：送った事実は記録に残す（geo_mismatch 1 件）`, by.geo_mismatch === 1 && rc.provisions === 1, JSON.stringify(by));
+      check(`${label}：新しい翻訳を自動で止める（${rc.halted}）`, !!rc.halted && rc.halted.startsWith('geo_mismatch'));
+      const again = await tr('carol', 'en', [pf('catchphrase')]);
+      check(`${label}：止まったあとは送らない（記録も増えない）`, again[k('catchphrase')]?.status === 'original' && (await records()).provisions === 1);
+      check(`${label}：同じ文を頼み直しても、保存されていない（キャッシュに入らない）`, (await tr('erin', 'en', [pf('dream')]))[k('dream')]?.status === 'original');
+    } else if (expect === 'timeout') {
+      check(`${label}：原文を表示`, r[k('dream')]?.status === 'original');
+      check(`${label}：やり直しを含めて 2 回分を「unknown」で記録`, by.unknown === 2 && rc.provisions === 2, JSON.stringify(by));
+      check(`${label}：使用量が分からないので精算せず、見込み額を確保したまま（少なく数えない）`, (await status('?usage=1')).usage.reservedUsd > 0);
+    } else if (expect === 'retry') {
+      check(`${label}：2 回目の結果で翻訳`, r[k('dream')]?.status === 'done');
+      check(`${label}：1 回目（error_response）と 2 回目（completed）を別々に記録`, by.error_response === 1 && by.completed === 1 && rc.provisions === 2, JSON.stringify(by));
+    } else if (expect === 'error') {
+      check(`${label}：原文を表示・記録は 1 件（error_response）`, r[k('dream')]?.status === 'original' && by.error_response === 1 && rc.provisions === 1, JSON.stringify(by));
+    } else {
+      check(`${label}：送らない（送信の記録 0 件）・原文を表示`, r[k('dream')]?.status === 'original' && rc.provisions === 0, JSON.stringify(by));
+      check(`${label}：新しい翻訳を止める（${rc.halted}）`, !!rc.halted);
+    }
+    await stopApp(app);
+  }
+  app = await startApp();
+  await grant('alice', items(SECTIONS));
+  const same = await Promise.all(['bob', 'carol', 'erin'].map((w) => api(w, { action: 'translate', target: 'ko', items: [pf('dream')] })));
+  const recS = await records();
+  check('同じ文・同じ言語を 3 人が同時に頼んでも、送るのは 1 回（送信の記録 1 件）', recS.provisions === 1, `${recS.provisions} 件 / ${same.map((x) => x.json.results?.[0]?.status).join(',')}`);
+  await stopApp(app);
+
+  // ============================================================
+  section('G. 退会・データ削除の申請（/api/account-deletion）');
+  app = await startApp({ ADMIN_NOTIFY_WEBHOOK_URL: `${SB}/__test/notify` });
+  check('ログインなしは 401', (await del(null)).status === 401 && (await del(null, 'POST', { note: 'x' })).status === 401);
+  let d = await del('carol');
+  check('申請前は pending = false', d.status === 200 && d.json.pending === false, JSON.stringify(d.json));
+  d = await del('carol', 'POST', { note: 'お願いします' });
+  check('申請すると受付日時つきで pending', d.json.ok && d.json.pending && !!d.json.requestedAt && d.json.via === 'table', JSON.stringify(d.json));
+  const d2 = await del('carol', 'POST', { note: 'もう一度' });
+  check('受付中にもう一度押しても二重に作らない', d2.json.ok && mock.state.deletionRequests.filter((x) => x.user_id === IDS.carol).length === 1);
+  check('GET で受付中と受付日時が分かる', (await del('carol')).json.pending === true);
+  check('ほかの人には自分の申請しか見えない（RLS）', (await del('dave')).json.pending === false);
+  check('申請の記録に本人の ID・名前・メモ、状態 received', mock.state.deletionRequests[0]?.user_id === IDS.carol && mock.state.deletionRequests[0]?.status === 'received');
+  check('運営者への通知を送る（個人情報は含めない）', mock.state.notices.length >= 1 && !JSON.stringify(mock.state.notices).includes('carol') && !JSON.stringify(mock.state.notices).includes(IDS.carol));
+  await fetch(`${SB}/__test/deletion-table`, { method: 'POST', body: JSON.stringify({ exists: false }) });
+  d = await del('dave', 'POST', { note: '' });
+  check('テーブルを適用する前の本番では、既存の feedback に記録する', d.json.ok && d.json.via === 'feedback' && mock.state.feedback.some((x) => x.user_id === IDS.dave && x.kind === 'account_deletion'), JSON.stringify(d.json));
+  check('feedback でも受付中なら二重に作らない', (await del('dave', 'POST', {})).json.ok && mock.state.feedback.filter((x) => x.user_id === IDS.dave).length === 1);
+  await fetch(`${SB}/__test/deletion-table`, { method: 'POST', body: JSON.stringify({ exists: true }) });
+  await stopApp(app);
+  mock.state.writes.length = 0;
+
+  // ============================================================
   section('D. 本番の設定');
   const prodCases = [
     [{ VERCEL_ENV: 'production' }, '本番は TRANSLATION_ENABLED を設定しなければ止まる'],
@@ -274,6 +374,8 @@ try {
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', ANTHROPIC_API_KEY: 'sk-test' }, '有料 API は TRANSLATION_ALLOW_PAID がなければ使わない'],
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true' }, 'API キーがなければ使わない'],
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test' }, '予算・同意・記録を DB で持たない（メモリ）なら有料 API は使わない'],
+    [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test', TRANSLATION_STORE: 'db', SUPABASE_SERVICE_ROLE_KEY: 'x' }, '翻訳専用ワークスペースが米国だけと確認した印（TRANSLATION_WORKSPACE_GEO=us）がなければ有料 API は使わない'],
+    [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_MOCK_GEO: 'eu', TRANSLATION_MOCK_FAIL: 'error' }, '本番では仮の翻訳の失敗のまね（テスト用の変数）を使わない（そもそも仮の翻訳を使わない）'],
     [{ TRANSLATION_ENABLED: 'false' }, 'TRANSLATION_ENABLED=false なら止まる（プレビューでも）'],
   ];
   for (const [env, label] of prodCases) {
@@ -292,7 +394,7 @@ try {
     const regrant = () => grant('alice', items(SECTIONS, [ANSWER_IDS.public]));
     await regrant();
     const { runUi } = await import('./ui.mjs');
-    await runUi({ BASE, SB, check, sessionFor: (await import('./mock-supabase.mjs')).sessionFor, IDS, ANSWER_IDS, require, regrant, records });
+    await runUi({ BASE, SB, check, sessionFor: (await import('./mock-supabase.mjs')).sessionFor, IDS, ANSWER_IDS, require, regrant, records, setBook, book, mock });
     await stopApp(app);
   }
 } finally {

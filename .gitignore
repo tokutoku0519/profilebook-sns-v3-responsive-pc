@@ -30,3 +30,4 @@ npm-debug.log*
 !.claude/settings.json
 node_modules/
 .next/
+scripts/translate-eval/results/

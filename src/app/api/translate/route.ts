@@ -3,6 +3,7 @@ import type { Lang } from '@/lib/i18n';
 import { parseConsentItem, parseTranslateItem, TRANSLATION_LANGS, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
 import { CONSENT_VERSION } from '@/lib/translation/consentText';
 import { getRuntime, translateMany, userIdFromToken } from '@/lib/translation/server/service';
+import { screenPersonalInfo } from '@/lib/translation/server/pii';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,8 @@ export const dynamic = 'force-dynamic';
 //  POST { action: 'translate', target, items } … 翻訳（ログイン必須。文章は受け取らない。原文はサーバーが DB から読む）
 //  POST { action: 'get_consent' }                          … 自分の許可の状態（版・選んだ項目）
 //  POST { action: 'list_candidates' }                      … 翻訳の対象に選べる、いま公開中の自分の項目・回答
-//  POST { action: 'grant_consent', version, locale, ageConfirmed16, items } … 説明を確認して許可（直接オンにはできない）
+//  POST { action: 'grant_consent', version, locale, birthYear, birthMonth, items } … 説明を確認して許可（直接オンにはできない）
+//        年齢はサーバー（と SQL）で計算する。生まれた年月は保存しない。16 歳未満・不明は許可しない
 //  POST { action: 'set_items', items }                     … 翻訳してよい項目を変える
 //  POST { action: 'revoke_consent' }                       … 許可を取り消す（翻訳キャッシュは削除、法定の記録は残す）
 // 1 つの関数にまとめているのは、プレビューのメモリ保存（許可・翻訳・予算）を同じインスタンスで共有するため。
@@ -63,14 +65,26 @@ export async function POST(req: NextRequest) {
     return items.every((x): x is ConsentItem => !!x) ? items : null;
   };
   if (body.action === 'get_consent') return NextResponse.json({ ...(await rt.store.getConsent(userId)), currentVersion: CONSENT_VERSION });
-  if (body.action === 'list_candidates') return NextResponse.json({ candidates: await rt.store.candidates(userId) });
+  if (body.action === 'list_candidates') {
+    // 本人向け：個人情報のチェックで送られない項目には理由を付ける（チェックに使った文はブラウザに返さない）
+    const rows = await rt.store.candidates(userId);
+    const candidates = rows.map(({ checkText, ...c }) => {
+      const sc = checkText ? screenPersonalInfo(checkText) : null;
+      return sc && !sc.ok ? { ...c, blocked: sc.reason } : c;
+    });
+    return NextResponse.json({ candidates });
+  }
   if (body.action === 'grant_consent') {
     const items = parseItems(body.items);
-    if (!items || body.ageConfirmed16 !== true || (body.locale !== 'ja' && body.locale !== 'en') || typeof body.version !== 'string') {
+    const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+    const birthYear = int(body.birthYear), birthMonth = int(body.birthMonth);
+    if (!items || (body.locale !== 'ja' && body.locale !== 'en') || typeof body.version !== 'string') {
       return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
     }
-    const r = await rt.store.grantConsent(userId, { version: body.version, locale: body.locale, ageCheck: 'self_declared_16_plus', items });
-    return NextResponse.json(r, { status: r.ok ? 200 : 409 });
+    // 年齢が分からない（入力なし・形がおかしい）ときは許可しない
+    if (birthYear == null || birthMonth == null) return NextResponse.json({ ok: false, reason: 'age_invalid' }, { status: 400 });
+    const r = await rt.store.grantConsent(userId, { version: body.version, locale: body.locale, birthYear, birthMonth, items });
+    return NextResponse.json(r, { status: r.ok ? 200 : r.reason === 'age_invalid' ? 400 : 409 });
   }
   if (body.action === 'set_items') {
     const items = parseItems(body.items);

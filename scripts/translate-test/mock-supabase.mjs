@@ -8,6 +8,7 @@
 //  ・profile_book は本人だけ
 // アクセストークンは署名なしの JWT（sub＝ユーザー ID）。auth/v1/user はその sub のユーザーを返す。
 // テスト用の操作：POST /__test/book {username, book} ・ POST /__test/answer {id, patch} ・ GET /__test/writes
+//               POST /__test/deletion-table {exists}（退会の申請テーブルを適用前・適用後のどちらにするか）
 // ============================================================
 import http from 'node:http';
 
@@ -64,6 +65,10 @@ export function startMockSupabase(port) {
       { id: ANSWER_IDS.daily, user_id: IDS.alice, question_key: 'daily_2026-11-01', question_title: '今日のお題：朝ごはんは？', question_category: 'デイリー', body: 'トーストと牛乳', sticker: null, visibility: 'public', created_at: now },
     ],
     writes: [],
+    deletionTable: true,
+    deletionRequests: [],
+    feedback: [],
+    notices: [],
   };
   const userByName = (n) => state.profiles.find((p) => p.username === n);
   const viewerOf = (req) => {
@@ -122,6 +127,34 @@ export function startMockSupabase(port) {
     if (p === '/__test/answer') { const b = JSON.parse(body); Object.assign(state.answers.find((a) => a.id === b.id), b.patch); return json(200, {}); }
     if (p === '/__test/writes') return json(200, state.writes);
     if (p === '/__test/reset') { state.books = defaultBooks(); return json(200, {}); }
+    if (p === '/__test/notify') { state.notices.push(JSON.parse(body || '{}')); return json(200, {}); }
+    if (p === '/__test/deletion-table') { state.deletionTable = !!JSON.parse(body).exists; return json(200, {}); }
+
+    // 退会・データ削除の申請（RLS：本人の行だけ読める・作れる。受付中は 1 人 1 件）
+    if (p === '/rest/v1/account_deletion_requests') {
+      if (!state.deletionTable) return json(404, { code: 'PGRST205', message: "Could not find the table 'public.account_deletion_requests' in the schema cache" });
+      if (req.method === 'GET') return send(filt(state.deletionRequests.filter((r) => r.user_id === viewer), url.searchParams).map((r) => ({ ...r })));
+      if (req.method === 'POST') {
+        state.writes.push({ m: req.method, p, body });
+        const row = JSON.parse(body || '{}');
+        if (!viewer || row.user_id !== viewer || (row.status && row.status !== 'received')) return json(403, { code: '42501', message: 'new row violates row-level security policy' });
+        if (state.deletionRequests.some((r) => r.user_id === viewer && ['received', 'in_progress'].includes(r.status))) return json(409, { code: '23505', message: 'duplicate key' });
+        const rec = { id: `del-${state.deletionRequests.length + 1}`, status: 'received', requested_at: new Date().toISOString(), ...row };
+        state.deletionRequests.push(rec);
+        return single ? json(201, rec) : json(201, [rec]);
+      }
+      return json(403, { code: '42501', message: 'permission denied' });
+    }
+    if (p === '/rest/v1/feedback') {
+      if (req.method === 'GET') return send(filt(state.feedback.filter((r) => r.user_id === viewer), url.searchParams));
+      if (req.method === 'POST') {
+        state.writes.push({ m: req.method, p, body });
+        const row = JSON.parse(body || '{}');
+        if (!viewer || row.user_id !== viewer) return json(403, { code: '42501', message: 'new row violates row-level security policy' });
+        state.feedback.push({ id: `fb-${state.feedback.length + 1}`, status: 'new', created_at: new Date().toISOString(), ...row });
+        return json(201, undefined);
+      }
+    }
 
     if (p === '/auth/v1/user') {
       const u = state.profiles.find((x) => x.id === viewer);

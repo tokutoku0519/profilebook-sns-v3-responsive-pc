@@ -11,14 +11,21 @@ import { GLOSSARY, glossaryHits, type GlossaryEntry } from '../shared';
 import { MAX_OUTPUT_TOKENS, type TranslationConfig, type Usage } from './config';
 
 export type EngineInput = { text: string; context?: string; source: Lang; target: Lang; glossary: GlossaryEntry[] };
+/** 送信の結果（外国への提供の記録に残す）
+ *  response：応答を受け取った／error_response：API がエラーを返した（文章は相手に届いている）／
+ *  unknown：タイムアウト・接続断など、届いたか分からない（届いたものとして扱う） */
+export type Transport = 'response' | 'error_response' | 'unknown';
 export type EngineOutput =
   /** inferenceGeo：実際に推論した地域（Anthropic の応答の usage.inference_geo） */
-  | { ok: true; decision: 'translated' | 'kept_original'; text: string; keptTerms: string[]; usage: Usage; inferenceGeo?: string | null }
-  /** usage が null：課金されたか分からない（タイムアウトなど）→ 精算せず、見込み額で確定させる */
-  | { ok: false; error: string; usage: Usage | null };
+  | { ok: true; decision: 'translated' | 'kept_original'; text: string; keptTerms: string[]; usage: Usage; inferenceGeo: string | null; requestId?: string; transport: 'response' }
+  /** usage が null：課金されたか分からない（タイムアウトなど）→ 精算せず、見込み額で確定させる。
+   *  retryable：接続エラー・429・529 のとき（1 回だけやり直す） */
+  | { ok: false; error: string; usage: Usage | null; inferenceGeo?: string | null; requestId?: string; transport: Transport; retryable?: boolean };
 
 export interface TranslationEngine {
   id: string;
+  /** 送る前の確認：推論を米国に限る設定で、ワークスペースが米国以外を断ることを確かめる（1 時間ごと） */
+  preflight(): Promise<{ ok: true } | { ok: false; reason: string }>;
   translate(input: EngineInput): Promise<EngineOutput>;
 }
 
@@ -32,20 +39,38 @@ const MOCK_EN: Record<string, string> = {
   '推し活': 'Supporting my fave', 'なし': 'None', '夏🍉 花火大会が最高': 'Summer🍉 Fireworks festivals are the best',
   'なんとかなる': "It'll work out somehow", 'パン屋さん in Paris': 'A bakery in Paris',
 };
-export const mockEngine: TranslationEngine = {
-  id: 'mock',
-  async translate({ text, target, glossary }) {
+export function mockEngineFor(cfg: Pick<TranslationConfig, 'mockFault'>): TranslationEngine {
+  const fault = cfg.mockFault;
+  let overloadedOnce = fault.fail === 'overloaded_once';
+  let seq = 0;
+  return {
+    id: 'mock',
+    async preflight() { return fault.preflight === 'fail' ? { ok: false, reason: 'mock_preflight_fail' } : { ok: true }; },
+    async translate(input) {
+      const requestId = `req_mock_${++seq}`;
+      if (fault.fail === 'timeout') return { ok: false, error: 'connection', usage: null, transport: 'unknown', retryable: true };
+      if (fault.fail === 'error') return { ok: false, error: 'api_500', usage: ZERO, transport: 'error_response', requestId, retryable: false };
+      if (overloadedOnce) { overloadedOnce = false; return { ok: false, error: 'api_529', usage: ZERO, transport: 'error_response', requestId, retryable: true }; }
+      const out = await mockTranslate(input);
+      return { ...out, requestId, inferenceGeo: fault.geo ?? 'us' };
+    },
+  };
+}
+export const mockEngine = mockEngineFor({ mockFault: {} });
+
+async function mockTranslate({ text, target, glossary }: EngineInput): Promise<Extract<EngineOutput, { ok: true }>> {
+  {
     const keptTerms = glossary.filter((g) => g.keep).map((g) => g.term);
     if (GLOSSARY.some((g) => g.keep && g.term === text.trim())) {
-      return { ok: true, decision: 'kept_original', text, keptTerms, usage: { ...ZERO, input: 700, output: 20 }, inferenceGeo: 'us' };
+      return { ok: true, decision: 'kept_original', text, keptTerms, usage: { ...ZERO, input: 700, output: 20 }, inferenceGeo: 'us', transport: 'response' };
     }
     let out = target === 'en' && MOCK_EN[text] ? MOCK_EN[text] : `[mock:${target}] ${text}`;
     // 正式な海外名がある作品・ブランドは置きかえる（仮の翻訳でも用語集の動きを確かめられるように）
     for (const g of glossary) if (!g.keep && g.official?.[target]) out = out.split(g.term).join(g.official[target]!);
     const chars = [...text].length;
-    return { ok: true, decision: 'translated', text: out, keptTerms, usage: { input: 700 + chars * 2, output: 20 + chars * 2, cacheRead: 0, cacheWrite: 0 }, inferenceGeo: 'us' };
-  },
-};
+    return { ok: true, decision: 'translated', text: out, keptTerms, usage: { input: 700 + chars * 2, output: 20 + chars * 2, cacheRead: 0, cacheWrite: 0 }, inferenceGeo: 'us', transport: 'response' };
+  }
+}
 
 // ── Claude Haiku 5.5 ─────────────────────────────────────────
 // system は毎回同じ文（プロンプトキャッシュの対象。言語や用語集など変わる内容は user 側に置く）。
@@ -64,7 +89,7 @@ Rules:
 5. Slang, abbreviations and coined words: translate the meaning naturally when it is clear (エモい -> nostalgic, emotional; 推し活 -> supporting my fave). If the meaning depends on context you do not have, use "kept_original".
 6. Very short or ambiguous text (one word that could mean several things, a lone symbol, a reaction like 草 or ぴえん): use "kept_original" instead of guessing.
 7. Do not romanize Japanese as a substitute for translating it. Do not add explanations, notes, quotation marks or furigana.
-8. Keep line breaks, emoji, kaomoji, decoration marks such as [♥] or ☆, and placeholders such as ⟦1⟧ exactly as they are.
+8. Keep line breaks, emoji, kaomoji, decoration marks such as [♥] or ☆, and placeholders such as ⟦a1b20⟧ exactly as they are (never change, translate, merge or duplicate them).
 9. Keep the tone: casual stays casual, polite stays polite. Keep it about as long as the original.
 10. Terms listed in <glossary> must follow the instruction given there.
 
@@ -105,11 +130,28 @@ export function buildUserMessage({ text, context, source, target, glossary }: En
 }
 
 export function anthropicEngine(cfg: TranslationConfig, apiKey: string): TranslationEngine {
-  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
+  // SDK の自動のやり直しは止める（やり直しも「送信」なので、service.ts で 1 回ずつ記録してから送る）
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 0 });
+  let checked: { at: number; result: { ok: true } | { ok: false; reason: string } } | null = null;
   return {
     id: cfg.model,
+    async preflight() {
+      if (checked && Date.now() - checked.at < 3600_000) return checked.result;
+      // ワークスペースの allowed_inference_geos が ["us"] なら、global を指定した呼び出しはエラーになる（Data residency の記載）。
+      // 送る内容は固定の「ping」だけ（利用者の文章は送らない）。エラーは課金されない。
+      let result: { ok: true } | { ok: false; reason: string };
+      try {
+        await client.messages.create({ model: cfg.model, max_tokens: 1, inference_geo: 'global', messages: [{ role: 'user', content: 'ping' }] });
+        result = { ok: false, reason: 'workspace_allows_global' };   // 通ってしまった＝米国以外でも推論できる設定
+      } catch (e) {
+        if (e instanceof Anthropic.APIError && e.status === 400 && /geo/i.test(e.message)) result = { ok: true };
+        else result = { ok: false, reason: e instanceof Anthropic.APIError ? `preflight_api_${e.status}` : 'preflight_connection' };
+      }
+      checked = { at: Date.now(), result };
+      return result;
+    },
     async translate(input) {
-      let res: Anthropic.Message;
+      let res: Anthropic.Message & { _request_id?: string | null };
       try {
         res = await client.messages.create({
           model: cfg.model,
@@ -123,12 +165,15 @@ export function anthropicEngine(cfg: TranslationConfig, apiKey: string): Transla
           messages: [{ role: 'user', content: buildUserMessage(input) }],
         });
       } catch (e) {
-        // タイムアウト・接続エラーは課金されたか分からない → 精算しない（見込み額で確定）
-        if (e instanceof Anthropic.APIConnectionError) return { ok: false, error: 'connection', usage: null };
-        // 4xx / 5xx の応答（上限到達の 400・429 なども）は課金されない
-        if (e instanceof Anthropic.APIError) return { ok: false, error: `api_${e.status ?? 'unknown'}`, usage: ZERO };
-        return { ok: false, error: 'unknown', usage: null };
+        // タイムアウト・接続エラー：届いたか分からない（届いたものとして記録する）。課金も分からない → 精算しない
+        if (e instanceof Anthropic.APIConnectionError) return { ok: false, error: 'connection', usage: null, transport: 'unknown', retryable: true };
+        // 4xx / 5xx の応答：文章は相手に届いている。課金はされない。429・529 だけやり直す
+        if (e instanceof Anthropic.APIError) {
+          return { ok: false, error: `api_${e.status ?? 'unknown'}`, usage: ZERO, transport: 'error_response', requestId: e.requestID ?? undefined, retryable: e.status === 429 || e.status === 529 };
+        }
+        return { ok: false, error: 'unknown', usage: null, transport: 'unknown' };
       }
+      const requestId = res._request_id ?? undefined;
       const inferenceGeo = res.usage.inference_geo ?? null;
       const usage: Usage = {
         input: res.usage.input_tokens,
@@ -136,26 +181,26 @@ export function anthropicEngine(cfg: TranslationConfig, apiKey: string): Transla
         cacheRead: res.usage.cache_read_input_tokens ?? 0,
         cacheWrite: res.usage.cache_creation_input_tokens ?? 0,
       };
-      // 米国以外で推論された（設定どおりでない）ときは、結果を使わない
-      if (inferenceGeo && inferenceGeo !== cfg.inferenceGeo) return { ok: false, error: `geo_${inferenceGeo}`, usage };
+      // 推論した地域が us だと確認できないときは、結果を使わない（地域が書かれていない場合も含む）
+      if (inferenceGeo !== cfg.inferenceGeo) return { ok: false, error: 'geo_mismatch', usage, inferenceGeo, requestId, transport: 'response' };
       // refusal（安全性の判定で断られた）・max_tokens（途中で切れた）は失敗として原文を出す
-      if (res.stop_reason !== 'end_turn') return { ok: false, error: `stop_${res.stop_reason}`, usage };
+      if (res.stop_reason !== 'end_turn') return { ok: false, error: `stop_${res.stop_reason}`, usage, inferenceGeo, requestId, transport: 'response' };
       const block = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
       try {
         const parsed = JSON.parse(block?.text ?? '');
         if ((parsed.decision !== 'translated' && parsed.decision !== 'kept_original') || typeof parsed.translation !== 'string' || !Array.isArray(parsed.kept_terms)) {
-          return { ok: false, error: 'bad_json', usage };
+          return { ok: false, error: 'bad_json', usage, inferenceGeo, requestId, transport: 'response' };
         }
-        return { ok: true, decision: parsed.decision, text: parsed.translation, keptTerms: parsed.kept_terms.filter((x: unknown) => typeof x === 'string'), usage, inferenceGeo };
+        return { ok: true, decision: parsed.decision, text: parsed.translation, keptTerms: parsed.kept_terms.filter((x: unknown) => typeof x === 'string'), usage, inferenceGeo, requestId, transport: 'response' };
       } catch {
-        return { ok: false, error: 'bad_json', usage };
+        return { ok: false, error: 'bad_json', usage, inferenceGeo, requestId, transport: 'response' };
       }
     },
   };
 }
 
 export function engineFor(cfg: TranslationConfig, env: NodeJS.ProcessEnv = process.env): TranslationEngine {
-  return cfg.engine === 'anthropic' && env.ANTHROPIC_API_KEY ? anthropicEngine(cfg, env.ANTHROPIC_API_KEY) : mockEngine;
+  return cfg.engine === 'anthropic' && env.ANTHROPIC_API_KEY ? anthropicEngine(cfg, env.ANTHROPIC_API_KEY) : mockEngineFor(cfg);
 }
 
 // ── 結果の検証（どのエンジンでも同じ）────────────────────────────

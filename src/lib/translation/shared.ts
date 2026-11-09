@@ -76,10 +76,14 @@ export function parseConsentItem(raw: unknown): ConsentItem | null {
 }
 
 /** 同意画面に出す候補（いま公開されていて、翻訳できる中身があるもの）。preview は本人にだけ見せる短い抜粋 */
-export type ConsentCandidate = { item: ConsentItem; preview: string; question?: string };
+/** blocked：本人向けの表示。この項目は個人情報のチェックで送られない（翻訳されない）理由 */
+export type ConsentCandidate = { item: ConsentItem; preview: string; question?: string; blocked?: 'contact' | 'address' | 'sensitive' };
 
 export type TranslateStatus = 'done' | 'kept' | 'original' | 'pending';
-export type TranslateResult = { key: string; status: TranslateStatus; text?: string };
+/** reason：kept のうち、個人情報・配慮が必要な内容の可能性があるため送らなかったもの（閲覧者には分類を出さず、まとめて知らせる） */
+export type TranslateResult = { key: string; status: TranslateStatus; text?: string; reason?: 'personal' };
+/** 原文のままにした理由（翻訳キャッシュに残す）。same_lang：表示言語と同じ／no_engine：記号・残す語だけ／model：AI が原文のままを選んだ／personal：個人情報のチェック */
+export type KeptReason = 'same_lang' | 'no_engine' | 'model' | 'personal';
 
 // ── 言語の見分け（文字の種類だけで判断。迷うときは「同じ言語かもしれない」側に倒す）──
 export type Script = 'ja' | 'ko' | 'th' | 'ar' | 'hi' | 'ru' | 'han' | 'latin' | 'none';
