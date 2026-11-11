@@ -24,7 +24,7 @@ insert into public.answers (id, user_id, question_key, question_title, body, vis
 set role anon; set request.jwt.claims = '{"role":"anon"}';
 do $$ declare t text; begin
   foreach t in array array['translation_settings','translation_consents','translation_item_permissions','translation_consent_events','translation_consent_notices',
-                           'translation_provision_log','content_translations','translation_budget','translation_reservations','translation_daily','translation_age_gate'] loop
+                           'translation_provision_log','translation_send_log','content_translations','translation_budget','translation_reservations','translation_daily','translation_age_gate'] loop
     begin execute format('select 1 from public.%I limit 1', t); raise notice 'FAIL anon が % を読めた', t;
     exception when insufficient_privilege then raise notice 'PASS anon は % を読めない', t; end;
   end loop;
@@ -50,6 +50,7 @@ do $$ declare f text; begin
     'select public.get_translation_consent(''aaaaaaaa-0000-4000-8000-000000000001''::uuid,''v1'')',
     'select public.owner_allows_translation(''alice'',''v1'')',
     'select public.purge_translation_legal_records()',
+    'select public.purge_translation_send_log()',
     'select public.purge_translation_cost_records()',
     'select public.purge_translation_cache()',
     'update public.translation_provision_log set outcome = ''completed''',
@@ -194,9 +195,15 @@ do $$ declare r record; ok boolean; n int; pid bigint; pl public.translation_pro
     case when pid is not null and pl.outcome = 'sending' and pl.recipient like 'Anthropic%United States%' and pl.source_path = 'dream' and pl.target_lang = 'en'
       and pl.requested_geo = 'us' and pl.consent_basis like '%art28%' and pl.consent_event_id is not null and pl.retain_until > now() + interval '2 years 11 months' then 'PASS' else 'FAIL' end,
     pl.recipient, pl.source_path, pl.target_lang, pl.requested_geo, pl.consent_basis, pl.consent_event_id;
-  perform public.finish_translation_provision(pid, 'completed', 'us', 'req_test_1', null);
+  perform public.finish_translation_provision(pid, 'completed', 'us', 'req_test_1', null, 'wrkspc_test', 420);
   select * into pl from public.translation_provision_log where id = pid;
-  raise notice '% 応答のあとに結果を書く（completed・応答の地域 us・request-id）', case when pl.outcome = 'completed' and pl.reported_geo = 'us' and pl.request_id = 'req_test_1' and pl.completed_at is not null then 'PASS' else 'FAIL' end;
+  raise notice '% 応答のあとに法定の記録へ結果を書く（completed・応答の地域 us）', case when pl.outcome = 'completed' and pl.reported_geo = 'us' and pl.completed_at is not null then 'PASS' else 'FAIL' end;
+  select count(*) into n from public.translation_send_log s
+   where s.provision_id = pid and s.request_id = 'req_test_1' and s.workspace_id = 'wrkspc_test' and s.latency_ms = 420 and s.model = 'claude-haiku-5-5' and s.attempt = 1
+     and s.retain_until < now() + interval '14 months' and s.retain_until > now() + interval '12 months';
+  raise notice '% 技術的な送信ログは別の表に（request-id・ワークスペース・時間・モデル・回数。13 か月）', case when n = 1 then 'PASS' else 'FAIL' end;
+  select count(*) into n from information_schema.columns where table_name = 'translation_provision_log' and column_name in ('request_id','error_code','model','attempt','workspace_id','latency_ms');
+  raise notice '% 法定の記録には技術的な項目を持たない', case when n = 0 then 'PASS' else 'FAIL' end;
   perform public.finish_translation_provision(pid, 'unknown', null, null, 'x');
   select * into pl from public.translation_provision_log where id = pid;
   raise notice '% 結果を書いたあとは書きかえない', case when pl.outcome = 'completed' then 'PASS' else 'FAIL' end;
@@ -204,6 +211,10 @@ do $$ declare r record; ok boolean; n int; pid bigint; pl public.translation_pro
   perform public.finish_translation_provision(pid, 'geo_mismatch', 'eu', 'req_test_2', 'geo_mismatch');
   select count(*) into n from public.translation_provision_log where outcome = 'geo_mismatch' and reported_geo = 'eu';
   raise notice '% 米国以外で処理されたと返ってきても、送った事実の記録は残す（geo_mismatch）', case when n = 1 then 'PASS' else 'FAIL' end;
+  pid := public.begin_translation_provision('aaaaaaaa-0000-4000-8000-000000000001','profile_field','dream','zh','us','claude-haiku-5-5',1,'v1');
+  perform public.finish_translation_provision(pid, 'workspace_mismatch', 'us', 'req_test_3', 'workspace_mismatch', 'wrkspc_other', 300);
+  select count(*) into n from public.translation_provision_log where id = pid and outcome = 'workspace_mismatch';
+  raise notice '% 別のワークスペースから応答しても、送った事実の記録は残す（workspace_mismatch）', case when n = 1 then 'PASS' else 'FAIL' end;
   pid := public.begin_translation_provision('aaaaaaaa-0000-4000-8000-000000000001','profile_field','dream','th','us','claude-haiku-5-5',1,'v1');
   raise notice '% 結果が書かれないまま残った記録は「送信中」のまま（届いたか不明として扱う）', case when (select outcome from public.translation_provision_log where id = pid) = 'sending' then 'PASS' else 'FAIL' end;
   select * into ev from public.translation_consent_events where id = (select consent_event_id from public.translation_provision_log where id = pid);
@@ -365,7 +376,7 @@ do $$ declare r record; ok boolean; n int; m int; begin
   raise notice '% 取り消し後は owner_allows_translation = false', case when public.owner_allows_translation('alice','v1') then 'FAIL' else 'PASS' end;
   select count(*) into n from public.translation_consent_events where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
   select count(*) into m from public.translation_provision_log where owner_id = 'aaaaaaaa-0000-4000-8000-000000000001';
-  raise notice '% 法定の記録は残る（同意・変更・取り消し % 件、送信 % 件）', case when n = 4 and m = 3 then 'PASS' else 'FAIL' end, n, m;
+  raise notice '% 法定の記録は残る（同意・変更・取り消し % 件、送信 % 件）', case when n = 4 and m = 4 then 'PASS' else 'FAIL' end, n, m;
   select * into r from public.get_translation_consent('aaaaaaaa-0000-4000-8000-000000000001','v1');
   raise notice '% 本人の状態は allow = false', case when not r.allow then 'PASS' else 'FAIL' end;
   select * into r from public.grant_translation_consent('aaaaaaaa-0000-4000-8000-000000000001','v2','en',repeat('b',64),'{"t":"notice"}'::jsonb,2000,4,'[{"kind":"profile_section","key":"dream"}]');
@@ -396,7 +407,7 @@ do $$ declare n int; m int; begin
   raise notice '% 退会で、いまの許可と選んだ項目も消える: % / %', case when n = 0 and m = 0 then 'PASS' else 'FAIL' end, n, m;
   select count(*) into n from public.translation_consent_events where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
   select count(*) into m from public.translation_provision_log where owner_id = 'aaaaaaaa-0000-4000-8000-000000000001';
-  raise notice '% 退会しても、保存期限内の法定の記録は残る（同意 % 件、送信 % 件）', case when n = 2 and m = 3 then 'PASS' else 'FAIL' end, n, m;
+  raise notice '% 退会しても、保存期限内の法定の記録は残る（同意 % 件、送信 % 件）', case when n = 2 and m = 4 then 'PASS' else 'FAIL' end, n, m;
 end $$;
 set role service_role; set request.jwt.claims = '{"role":"service_role"}';
 do $$ declare r record; begin
@@ -409,8 +420,8 @@ set role service_role; set request.jwt.claims = '{"role":"service_role"}';
 do $$ declare r record; n int; begin
   select * into r from public.purge_translation_legal_records();
   select count(*) into n from public.translation_consent_events;
-  raise notice '% 送信の記録は 1 件ごとの期限で消す。参照がなくなった期限切れの同意の記録も消す（送信 %・同意 %・残り %）',
-    case when r.provisions = 3 and r.consent_events = 1 and n = 1 then 'PASS' else 'FAIL' end, r.provisions, r.consent_events, n;
+  raise notice '% 送信の記録は 1 件ごとの期限で消す（技術ログも一緒に消える）。参照がなくなった期限切れの同意の記録も消す（送信 %・同意 %・残り %）',
+    case when r.provisions = 4 and r.consent_events = 1 and n = 1 and (select count(*) from public.translation_send_log) = 0 then 'PASS' else 'FAIL' end, r.provisions, r.consent_events, n;
 end $$;
 reset role;
 update public.translation_consent_events set retain_until = now() - interval '1 day';
@@ -497,14 +508,17 @@ insert into public.translation_reservations (month, estimate_usd, status, create
 insert into public.content_translations (source_type, owner_id, source_path, source_hash, target_lang, status, engine, updated_at)
   values ('profile_field', :B, 'dream', md5('x'), 'en', 'pending', 'x', now() - interval '2 days');
 update public.translation_age_gate set locked_until = now() - interval '1 minute';
-insert into public.translation_provision_log (owner_id, source_type, source_path, target_lang, requested_geo, model, outcome) values (:B, 'profile_field', 'dream', 'en', 'us', 'm', 'completed');
+insert into public.translation_provision_log (owner_id, source_type, source_path, target_lang, requested_geo, outcome) values (:B, 'profile_field', 'dream', 'en', 'us', 'completed');
+insert into public.translation_send_log (provision_id, model, request_id, retain_until)
+  select id, 'm', 'req_old', now() - interval '1 day' from public.translation_provision_log where owner_id = :B;
 set role service_role; set request.jwt.claims = '{"role":"service_role"}';
 do $$ declare r record; q record; n int; begin
   select * into r from public.purge_translation_cost_records();
   raise notice '% 費用：確保の明細は 13 か月で消す（%件）。月の合計は残す', case when r.reservations = 1 and (select count(*) from public.translation_budget) >= 2 then 'PASS' else 'FAIL' end, r.reservations;
   select * into q from public.purge_translation_cache();
   raise notice '% キャッシュ：翻訳中のまま 1 日たった行と、期限の過ぎた年齢の再入力制限を消す（% 件・% 件）', case when q.stale_rows = 1 and q.age_gates = 1 then 'PASS' else 'FAIL' end, q.stale_rows, q.age_gates;
+  raise notice '% 技術的な送信ログは 13 か月で消す（% 件）', case when public.purge_translation_send_log() = 1 then 'PASS' else 'FAIL' end, 1;
   select count(*) into n from public.translation_provision_log;
-  raise notice '% 費用・キャッシュの削除は法定の記録に触れない', case when n = 1 then 'PASS' else 'FAIL' end;
+  raise notice '% 費用・キャッシュ・技術ログの削除は法定の記録に触れない', case when n = 1 then 'PASS' else 'FAIL' end;
 end $$;
 reset role;

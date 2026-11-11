@@ -1,7 +1,8 @@
 // ============================================================
 // 翻訳の流れ（サーバー専用）
-//   権限の確認 → 翻訳済みを返す → 目印を取る → API を呼ばない判定 → 個人情報のチェック → 送る前の確認（米国だけ）
-//   → [予算の確保 → 送信の記録（送信中）→ 送信 → 記録に結果を書く → 精算]（やり直しは 1 回まで）
+//   権限の確認 → 翻訳済みを返す → 目印を取る → API を呼ばない判定 → 個人情報のチェック → 米国の指定の確認
+//   → [予算の確保 → 送信の記録（送信中）→ 送信 → 応答の地域・ワークスペースを照合 → 記録に結果を書く → 精算]
+//   （やり直しは 429・529 のときだけ 1 回）
 //   → 検証・伏せ字を戻す → 保存 → もう一度確認して返す
 // どこで止まっても、画面は原文を表示する（status: 'original'）。
 // ============================================================
@@ -74,14 +75,9 @@ export async function translateOne(rt: Runtime, viewerId: string, target: Lang, 
     return keptResult('personal');
   }
 
-  // 5. 送る前の確認：推論を米国に限る設定で、ワークスペースが米国以外を断ること（1 時間ごと）。確かめられなければ送らない
+  // 5. 米国の指定がなければ送らない（設定の誤りに備えた確認。API の呼び出しはしない）
+  //    ワークスペースの制限（allowed_inference_geos = ["us"]）は運営者が 1 回確認し、毎回の応答で地域とワークスペースを照合する
   if (rt.cfg.inferenceGeo !== 'us') { await store.release(it, target, src.hash); return original; }
-  const pre = await rt.engine.preflight();
-  if (!pre.ok) {
-    if (pre.reason === 'workspace_allows_global' || pre.reason === 'mock_preflight_fail') await store.halt(`preflight:${pre.reason}`);
-    await store.release(it, target, src.hash);
-    return original;
-  }
 
   // 6. 送る（やり直しは接続エラー・429・529 のときだけ 1 回。1 回ごとに予算の確保と送信の記録をしてから送る）
   const input = { text: body.text, context: ctx?.text, source: sourceLangOf(src.text) ?? 'ja', target, glossary: glossaryHits(body.text) } as const;
@@ -97,17 +93,32 @@ export async function translateOne(rt: Runtime, viewerId: string, target: Lang, 
     out = await rt.engine.translate(input);
     // エンジンが何を返しても、応答に書かれた地域が us でなければ「地域の不一致」として扱う（二重の確認）
     if (out.transport === 'response' && out.inferenceGeo !== rt.cfg.inferenceGeo) {
-      out = { ok: false, error: 'geo_mismatch', usage: out.usage, inferenceGeo: out.inferenceGeo ?? null, requestId: out.requestId, transport: 'response' };
+      out = { ok: false, error: 'geo_mismatch', usage: out.usage, transport: 'response', inferenceGeo: out.inferenceGeo ?? null, workspaceId: out.workspaceId, requestId: out.requestId, latencyMs: out.latencyMs };
     }
-    // 送った事実は消さない。結果（応答あり・地域の不一致・エラー・届いたか不明）を書く
+    // 応答が翻訳専用ワークスペース以外から返ってきた → キー・ワークスペースの取り違え。
+    //  成功した応答はワークスペースの ID が必ず一致すること。エラーの応答は、別のワークスペースの ID が書かれているときだけ
+    //  （無効なキーの 401 などはワークスペースの ID が付かないことがあり、それは取り違えではないので止めない）
+    const wsWrong = !!rt.cfg.workspaceId && (
+      (out.transport === 'response' && out.workspaceId !== rt.cfg.workspaceId) ||
+      (out.transport === 'error_response' && out.workspaceId != null && out.workspaceId !== rt.cfg.workspaceId));
+    if (wsWrong) {
+      out = { ok: false, error: 'workspace_mismatch', usage: out.usage, transport: out.transport, inferenceGeo: out.inferenceGeo ?? null, workspaceId: out.workspaceId, requestId: out.requestId, latencyMs: out.latencyMs };
+    }
+    // 送った事実は消さない。結果（応答あり・地域やワークスペースの不一致・エラー・届いたか不明）を書く
+    const mismatch = !out.ok && (out.error === 'geo_mismatch' || out.error === 'workspace_mismatch');
     await store.finishProvision(pid, {
-      outcome: out.transport === 'unknown' ? 'unknown' : out.transport === 'error_response' ? 'error_response' : out.ok ? 'completed' : out.error === 'geo_mismatch' ? 'geo_mismatch' : 'completed',
+      outcome: mismatch ? (out as { error: string }).error as 'geo_mismatch' | 'workspace_mismatch'
+        : out.transport === 'unknown' ? 'unknown' : out.transport === 'error_response' ? 'error_response' : 'completed',
       reportedGeo: out.inferenceGeo ?? null, requestId: out.requestId, errorCode: out.ok ? undefined : out.error,
+      workspaceId: out.workspaceId ?? null, latencyMs: out.latencyMs,
     });
     // 精算（実際の使用量から）。使用量が分からないときは精算せず、15 分後に見込み額で確定させる
     if (out.usage) cost += (await store.settle(rsv.id, out.usage)) ?? costUsd(rt.cfg, out.usage);
-    // 米国で処理されたと確認できない → 結果は使わず、新しい翻訳を止める（運営者が確認してから再開）
-    if (!out.ok && out.error === 'geo_mismatch') { await store.halt(`geo_mismatch:${out.inferenceGeo ?? 'none'}`); out = null; break; }
+    // 米国・翻訳専用ワークスペースで処理されたと確認できない → 結果は使わず、新しい翻訳を止める（運営者が確認してから再開）
+    if (mismatch) {
+      await store.halt(`${(out as { error: string }).error}:${out.inferenceGeo ?? 'none'}:${out.workspaceId ?? 'none'}`);
+      out = null; break;
+    }
     if (out.ok || !out.retryable) break;
   }
   if (!out) { await store.release(it, target, src.hash); return original; }

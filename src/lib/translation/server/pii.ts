@@ -22,17 +22,24 @@ export type Screened =
   | { ok: true; text: string; tokens: Array<{ token: string; value: string }> }
   | { ok: false; reason: BlockReason };
 
-// 全角・半角をそろえ、数字のあいだのいろいろな横棒（− ー ‐ – など）を「-」にそろえる
-const nfkc = (s: string) => s.normalize('NFKC').replace(/(?<=\d)\s?[‐‑‒–—―−ーｰ－]\s?(?=\d)/g, '-');
+// 全角・半角をそろえ、漢数字（〇一二…九。3 文字以上続くときだけ）を数字に、数字のあいだのいろいろな横棒（− ー ‐ – など）を「-」にそろえる
+const KANJI_DIGIT: Record<string, string> = { '〇': '0', '零': '0', '一': '1', '二': '2', '三': '3', '四': '4', '五': '5', '六': '6', '七': '7', '八': '8', '九': '9' };
+const nfkc = (s: string) => s.normalize('NFKC')
+  .replace(/[〇零一二三四五六七八九](?:[\s\-ー－−]?[〇零一二三四五六七八九]){2,}/g, (m) => m.replace(/[〇零一二三四五六七八九]/g, (c) => KANJI_DIGIT[c]))
+  .replace(/(?<=\d)\s?[‐‑‒–—―−ーｰ－]\s?(?=\d)/g, '-');
 
 // ── 連絡先（見つけたら送らない）────────────────────────────────
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
 // 「alice at example dot com」「アットマーク」のような書き方
 const EMAIL_SPELLED = /[A-Za-z0-9._%+-]{2,}\s*(?:\(at\)|\[at\]|\sat\s|アット(?:マーク)?|あっと)\s*[A-Za-z0-9-]{2,}\s*(?:\(dot\)|\[dot\]|\sdot\s|ドット|どっと|\.)\s*[A-Za-z]{2,}/i;
-// 電話番号：0 から始まる 10〜11 桁、または +81。区切り（- 空白 括弧 ．）を許す。数字だけ数えて判定する
-const PHONE_CANDIDATE = /(?<![\d])(?:\+81[\s-]?|0)\d(?:[\s\-().]?\d){8,11}(?![\d])/g;
+// 電話番号：0 から始まる 10〜11 桁、または +81。区切り（- 空白 括弧 ． 「の」）を許す。数字だけ数えて判定する
+const PHONE_CANDIDATE = /(?<![\d])(?:\+81[\s-]?|0)[\s\-().の]?\d(?:[\s\-().の]?\d){8,11}(?![\d])/g;
 const POSTAL = /(?:〒\s?\d{3}-?\d{4}|(?<![\d-])\d{3}-\d{4}(?![\d-]))/;
 const MESSENGER_ID = /(?:LINE|ライン|らいん|カカオ|kakao|wechat|ウィーチャット|discord|ディスコ|telegram|テレグラム|skype)\s*(?:ID|ＩＤ|アイディー|id)?\s*[:：は]?\s*[A-Za-z0-9._-]{3,}/i;
+// SNS のアカウント名（@ なし）：「インスタ: miri_fan」「X は miri123」など。名前の前に SNS 名と区切りがあるときだけ
+const SNS_HANDLE = /(?:インスタ(?:グラム)?|instagram|insta|ツイッター|twitter|tiktok|ティックトック|threads|スレッズ|youtube|ユーチューブ|(?<![A-Za-z])X)\s*(?:の)?\s*(?:ID|ＩＤ|アカ(?:ウント)?|垢)?\s*[:：は]\s*[A-Za-z0-9._]{3,30}/i;
+// カード番号・マイナンバー・口座番号など、区切りを含めて 12〜19 桁の数字の並び（電話番号より長い）
+const LONG_NUMBER = /(?<![\d])\d(?:[\s-]?\d){11,18}(?![\d])/;
 
 function hasPhone(t: string): boolean {
   for (const m of t.match(PHONE_CANDIDATE) ?? []) {
@@ -51,6 +58,7 @@ const ADDRESS_RULES: RegExp[] = [
   /\d{1,4}\s?番地\s?\d{0,4}/,                                                                       // 12番地
   /\S{1,20}(?:マンション|ハイツ|アパート|荘|コーポ|レジデンス|ビル)\s?\d{1,4}\s?(?:号室|号|階)/,     // 〜マンション203号室
   /\d{2,4}\s?号室/,
+  /\S{1,15}(?:小学校?|中学校?|高校|高等学校|学園|学院)\s?の?\s?\d\s?年\s?\d{1,2}\s?組/,                  // 〇〇中学の2年3組（学校とクラスで本人が分かる）
 ];
 
 // ── 要配慮の内容 ───────────────────────────────────────────
@@ -92,7 +100,7 @@ const TOKEN_RE = /⟦[^⟦⟧]*⟧/g;
 
 export function screenPersonalInfo(text: string): Screened {
   const t = nfkc(text);
-  if (EMAIL.test(t) || EMAIL_SPELLED.test(t) || hasPhone(t) || POSTAL.test(t) || MESSENGER_ID.test(t)) return { ok: false, reason: 'contact' };
+  if (EMAIL.test(t) || EMAIL_SPELLED.test(t) || hasPhone(t) || POSTAL.test(t) || MESSENGER_ID.test(t) || SNS_HANDLE.test(t) || LONG_NUMBER.test(t)) return { ok: false, reason: 'contact' };
   if (ADDRESS_RULES.some((re) => re.test(t))) return { ok: false, reason: 'address' };
   if (sensitive(t)) return { ok: false, reason: 'sensitive' };
   // 原文にもともと ⟦ ⟧ があると、戻すときに区別できないので送らない（ふつうは使われない記号）

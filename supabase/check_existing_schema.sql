@@ -4,7 +4,14 @@
 -- 使い方：Supabase → SQL Editor → New query に全文を貼って Run。何も書きかえない（SELECT だけ）。
 -- 結果の表（check・ok・detail）をコピーして共有してください。ok が false の行があれば、適用しないでください。
 -- 前提にしている定義：supabase/schema.sql・supabase/security_patch_A.sql（get_visible_book）
+--
+-- 読み取りだけであることの確認
+--  ・下の 1 行目「set transaction read only」で、この実行の中では書きこみが一切できなくなる（もし書きこもうとすればエラーで止まる）
+--  ・本文は SELECT（WITH ... SELECT）1 つだけ。insert / update / delete / create / drop / alter / grant はない
+--  ・読むのはスキーマの情報（列・関数の定義・ポリシー・トリガー・拡張機能）と、件数・公開範囲の値の種類だけ。
+--    利用者の文章・メールアドレスなどの中身は結果に出さない
 -- ============================================================
+set transaction read only;
 with
 cols as (
   select table_name, column_name, data_type from information_schema.columns where table_schema = 'public'
@@ -65,6 +72,12 @@ checks(ord, check_name, ok, detail) as (
   union all select 40, 'gen_random_uuid() が使える', exists (select 1 from pg_proc where proname = 'gen_random_uuid'), ''
   union all select 41, 'pg_cron（記録の自動削除に使う。なければダッシュボードで有効にする）', true,
          coalesce((select extversion from pg_extension where extname = 'pg_cron'), '(未有効)')
+  union all select 46, '有効な拡張機能（参考）', true,
+         coalesce((select string_agg(extname || ' ' || extversion, ', ' order by extname) from pg_extension), '')
+  union all select 47, 'auth.users と profiles の件数が一致（サインアップ時の自動作成が動いている）', true,
+         (select count(*)::text from auth.users) || ' / ' || (select count(*)::text from public.profiles)
+  union all select 48, 'サインアップ時に profiles を作るトリガー（on_auth_user_created）がある',
+         exists (select 1 from information_schema.triggers where event_object_schema = 'auth' and event_object_table = 'users' and trigger_name = 'on_auth_user_created'), ''
   union all select 42, 'ロール anon・authenticated・service_role がある',
          (select count(*) from pg_roles where rolname in ('anon','authenticated','service_role')) = 3, ''
   union all select 43, 'データベースの時刻帯（年齢は Asia/Tokyo で計算するので影響しない）', true, current_setting('TimeZone')

@@ -7,6 +7,8 @@ import { screenPersonalInfo } from '@/lib/translation/server/pii';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// GET の中の fetch（Supabase への問い合わせ）を Next.js にキャッシュさせない（申請の件数・状態・翻訳の可否が古くならないように）
+export const fetchCache = 'force-no-store';
 
 // 自由回答の翻訳 API（Phase B）
 //  GET  /api/translate?owner=<username> … 使えるか・その人が翻訳を許可しているか（ボタンを出すかどうか）

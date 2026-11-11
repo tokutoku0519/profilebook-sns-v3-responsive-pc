@@ -38,15 +38,18 @@ export type GrantResult = { ok: true } | { ok: false; reason: 'old_version' | 'a
 /** 外国への送信の記録。送る直前に「送信中」で作り、結果が分かったら書きかえる（送った事実は消さない） */
 export type ProvisionStart = { ownerId: string; item: TranslateItem; lang: string; requestedGeo: string; model: string; attempt: number };
 /** completed：応答あり・米国で処理／geo_mismatch：応答はあったが米国と確認できない（結果は使わない）／
+ *  workspace_mismatch：翻訳専用ワークスペース以外から応答（キーの取り違え。結果は使わない）／
  *  error_response：API がエラーを返した／unknown：タイムアウトなどで届いたか分からない（sending のまま残ったものも同じ扱い） */
-export type ProvisionOutcome = 'completed' | 'geo_mismatch' | 'error_response' | 'unknown';
-export type ProvisionFinish = { outcome: ProvisionOutcome; reportedGeo: string | null; requestId?: string; errorCode?: string };
+export type ProvisionOutcome = 'completed' | 'geo_mismatch' | 'workspace_mismatch' | 'error_response' | 'unknown';
+/** 法定の記録（outcome・reportedGeo）と、技術的な送信ログ（requestId・errorCode・workspaceId・latencyMs）に分けて書く */
+export type ProvisionFinish = { outcome: ProvisionOutcome; reportedGeo: string | null; requestId?: string; errorCode?: string; workspaceId?: string | null; latencyMs?: number };
 /** 同意画面の候補（checkText はサーバーの中だけで使う。個人情報のチェックにかけて blocked を付けたら捨てる） */
 export type CandidateRow = ConsentCandidate & { checkText?: string };
 /** 記録の件数（プレビュー・テストの確認用。本番は SQL Editor で見る） */
 export type RecordCounts = {
   consentEvents: number; provisions: number; provisionsByOutcome: Record<string, number>; dailyRows: number; reservationsWithIds: number;
   ageLocks: number; halted: string | null; birthDataStored: boolean;
+  sendLog?: number; sendLogWithRequestId?: number; legalRecordHasTechFields?: boolean;
 };
 
 export interface TranslationStore {
@@ -129,15 +132,18 @@ type MemConsent = { allow: boolean; version: string; grantedAt: string; items: M
 type MemEvent = { id: number; userId: string; action: 'grant' | 'revoke' | 'scope_update'; version: string | null; textSha256: string | null; locale: string | null; ageCheck: string | null; ageBand: AgeBand | null; scope: string[]; at: string };
 type MemProvision = {
   id: string; ownerId: string; sourceType: string; sourcePath: string; lang: string; recipient: string; requestedGeo: string; reportedGeo: string | null;
-  model: string; attempt: number; outcome: 'sending' | ProvisionOutcome; requestId?: string; errorCode?: string; consentEventId: number | null; at: string; completedAt?: string;
+  outcome: 'sending' | ProvisionOutcome; consentEventId: number | null; at: string; completedAt?: string;
 };
+/** 技術的な送信ログ（法定の記録とは別。原因の調査・費用の照合用。13 か月で消す） */
+type MemSendLog = { provisionId: string; model: string; attempt: number; requestId?: string; errorCode?: string; workspaceId?: string | null; latencyMs?: number; at: string };
 
 export class MemoryStore implements TranslationStore {
   private anon: SupabaseClient;
   private rows = new Map<string, MemRow>();              // ① 翻訳キャッシュ `${type}|${owner}|${path}|${lang}|${hash}`
   private consents = new Map<string, MemConsent>();      // 本人の許可（いまの状態）
   private events: MemEvent[] = [];                       // ② 同意・取り消しの記録
-  private provisions: MemProvision[] = [];               // ② 外国への送信の記録
+  private provisions: MemProvision[] = [];               // ② 外国への送信の記録（法定）
+  private sendLog: MemSendLog[] = [];                    // 技術的な送信ログ（法定の記録とは別）
   private reservations = new Map<string, MemReservation>(); // ③ 費用（ID を持たない）
   private months = new Map<string, { spent: number; reserved: number; requests: number; cacheHits: number; input: number; output: number }>();
   private daily = new Map<string, number>();             // ③ 回数制限 `user|id|day`（2 日で消す）
@@ -287,15 +293,18 @@ export class MemoryStore implements TranslationStore {
     this.provisions.push({
       id, ownerId: p.ownerId, sourceType: p.item.kind === 'answer' ? 'answer' : 'profile_field',
       sourcePath: p.item.kind === 'answer' ? p.item.id : p.item.path, lang: p.lang,
-      recipient: 'Anthropic, PBC (United States)', requestedGeo: p.requestedGeo, reportedGeo: null, model: p.model, attempt: p.attempt,
+      recipient: 'Anthropic, PBC (United States)', requestedGeo: p.requestedGeo, reportedGeo: null,
       outcome: 'sending', consentEventId: c.eventId, at: new Date(this.now()).toISOString(),
     });
+    this.sendLog.push({ provisionId: id, model: p.model, attempt: p.attempt, at: new Date(this.now()).toISOString() });
     return id;
   }
   async finishProvision(id: string, f: ProvisionFinish) {
     const row = this.provisions.find((x) => x.id === id);
     if (!row || row.outcome !== 'sending') return;
-    Object.assign(row, { outcome: f.outcome, reportedGeo: f.reportedGeo, requestId: f.requestId, errorCode: f.errorCode, completedAt: new Date(this.now()).toISOString() });
+    Object.assign(row, { outcome: f.outcome, reportedGeo: f.reportedGeo, completedAt: new Date(this.now()).toISOString() });
+    const log = this.sendLog.find((x) => x.provisionId === id);
+    if (log) Object.assign(log, { requestId: f.requestId, errorCode: f.errorCode, workspaceId: f.workspaceId, latencyMs: f.latencyMs });
   }
   async halt(reason: string) { this.halted = this.halted ?? reason; }
 
@@ -391,6 +400,8 @@ export class MemoryStore implements TranslationStore {
     for (const p of this.provisions) byOutcome[p.outcome] = (byOutcome[p.outcome] ?? 0) + 1;
     return {
       consentEvents: this.events.length, provisions: this.provisions.length, provisionsByOutcome: byOutcome, dailyRows: this.daily.size, reservationsWithIds: 0,
+      sendLog: this.sendLog.length, sendLogWithRequestId: this.sendLog.filter((x) => x.requestId).length,
+      legalRecordHasTechFields: this.provisions.some((x) => 'requestId' in x || 'errorCode' in x),
       ageLocks: [...this.ageLocks.values()].filter((t) => t > this.now()).length, halted: this.halted,
       // 生年月を残していないことの確認（記録のどこにも birth の項目がない）
       birthDataStored: JSON.stringify(this.events).includes('birth'),
@@ -460,6 +471,7 @@ export class DbStore implements TranslationStore {
   async finishProvision(id: string, f: ProvisionFinish) {
     await this.admin.rpc('finish_translation_provision', {
       p_id: Number(id), p_outcome: f.outcome, p_reported_geo: f.reportedGeo, p_request_id: f.requestId ?? null, p_error: f.errorCode ?? null,
+      p_workspace_id: f.workspaceId ?? null, p_latency_ms: f.latencyMs ?? null,
     });
   }
   async halt(reason: string) {

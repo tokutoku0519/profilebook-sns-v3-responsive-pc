@@ -7,14 +7,14 @@
 with
 expected_tables(name) as (values
   ('translation_settings'),('translation_consents'),('translation_item_permissions'),('translation_consent_events'),
-  ('translation_consent_notices'),('translation_provision_log'),('content_translations'),('translation_budget'),
+  ('translation_consent_notices'),('translation_provision_log'),('translation_send_log'),('content_translations'),('translation_budget'),
   ('translation_reservations'),('translation_daily'),('translation_age_gate')),
 expected_functions(name) as (values
   ('translation_consent_current'),('translation_first_text'),('translatable_source'),('get_translation'),('claim_translation'),
   ('release_translation'),('store_translation'),('begin_translation_provision'),('finish_translation_provision'),('halt_translation'),
   ('reserve_translation'),('settle_translation'),('translation_candidates'),('translation_items_valid'),('translation_replace_items'),
   ('grant_translation_consent'),('set_translation_items'),('revoke_translation_consent'),('get_translation_consent'),
-  ('owner_allows_translation'),('purge_translation_legal_records'),('purge_translation_cost_records'),('purge_translation_cache')),
+  ('owner_allows_translation'),('purge_translation_legal_records'),('purge_translation_send_log'),('purge_translation_cost_records'),('purge_translation_cache')),
 t as (
   select e.name, c.oid, c.relrowsecurity,
          has_table_privilege('anon', c.oid, 'select') or has_table_privilege('authenticated', c.oid, 'select')
@@ -26,13 +26,13 @@ f as (
          coalesce(has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'), false) as client_exec
     from expected_functions e left join pg_proc p on p.proname = e.name and p.pronamespace = 'public'::regnamespace),
 checks(ord, check_name, ok, detail) as (
-  select 1, 'テーブルが 11 個ある', (select count(*) from t where oid is not null) = 11,
+  select 1, 'テーブルが 12 個ある', (select count(*) from t where oid is not null) = 12,
          coalesce((select string_agg(name, ',') from t where oid is null), '')
   union all select 2, 'すべて RLS 有効・ポリシーなし', not exists (select 1 from t where not relrowsecurity or policies > 0),
          coalesce((select string_agg(name, ',') from t where not relrowsecurity or policies > 0), '')
   union all select 3, 'anon・authenticated から読み書きできない', not exists (select 1 from t where client_access),
          coalesce((select string_agg(name, ',') from t where client_access), '')
-  union all select 4, '関数が 23 個ある', (select count(distinct name) from f where oid is not null) = 23,
+  union all select 4, '関数が 24 個ある', (select count(distinct name) from f where oid is not null) = 24,
          coalesce((select string_agg(name, ',') from f where oid is null), '')
   union all select 5, '関数はすべて SECURITY DEFINER（translation_first_text を除く）・search_path 固定',
          not exists (select 1 from f where oid is not null and name <> 'translation_first_text' and (not prosecdef or not (proconfig::text like '%search_path=public%'))), ''
@@ -53,6 +53,9 @@ checks(ord, check_name, ok, detail) as (
                       and table_name in ('translation_budget','translation_reservations') and column_name in ('user_id','owner_id')), ''
   union all select 14, '翻訳のテーブルに生年月の列がない',
          not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name like 'translation%' and column_name ~ 'birth'), ''
+  union all select 19, '法定の記録に技術的な項目（request-id など）がない（技術ログは別の表で 13 か月）',
+         not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'translation_provision_log'
+                      and column_name in ('request_id','error_code','model','attempt','workspace_id','latency_ms')), ''
   union all select 15, '法定の記録は外部キーなし（退会後も残る）',
          not exists (select 1 from pg_constraint where contype = 'f'
                       and conrelid in ('public.translation_consent_events'::regclass, 'public.translation_provision_log'::regclass)), ''

@@ -10,6 +10,7 @@
 -- 1. 記録の書き出し（SQL Editor で実行し、結果を CSV で保存する）
 -- select * from public.translation_consent_events order by id;
 -- select * from public.translation_provision_log order by id;
+-- select * from public.translation_send_log order by provision_id;
 -- select * from public.translation_consent_notices;
 
 -- 2. 削除
@@ -20,6 +21,7 @@ drop function if exists public.purge_answer_translations();
 drop function if exists public.purge_profile_translations();
 drop function if exists public.purge_translation_cache();
 drop function if exists public.purge_translation_cost_records();
+drop function if exists public.purge_translation_send_log();
 drop function if exists public.purge_translation_legal_records();
 drop function if exists public.owner_allows_translation(text, text);
 drop function if exists public.get_translation_consent(uuid, text);
@@ -32,7 +34,7 @@ drop function if exists public.translation_candidates(uuid);
 drop function if exists public.settle_translation(bigint, integer, integer, integer, integer);
 drop function if exists public.reserve_translation(uuid, uuid, numeric);
 drop function if exists public.halt_translation(text);
-drop function if exists public.finish_translation_provision(bigint, text, text, text, text);
+drop function if exists public.finish_translation_provision(bigint, text, text, text, text, text, integer);
 drop function if exists public.begin_translation_provision(uuid, text, text, text, text, text, integer, text);
 drop function if exists public.store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric, text, text);
 drop function if exists public.release_translation(text, text, text, text, text);
@@ -46,6 +48,7 @@ drop table if exists public.translation_daily;
 drop table if exists public.translation_reservations;
 drop table if exists public.translation_budget;
 drop table if exists public.content_translations;
+drop table if exists public.translation_send_log;
 drop table if exists public.translation_provision_log;
 drop table if exists public.translation_consent_notices;
 drop table if exists public.translation_consent_events;

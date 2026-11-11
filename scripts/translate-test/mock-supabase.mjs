@@ -74,6 +74,7 @@ export function startMockSupabase(port) {
   const viewerOf = (req) => {
     const h = req.headers.authorization || '';
     const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
+    if (tok === 'service-role-test') return '__service__';   // service_role（RLS を通らない）
     try { const p = JSON.parse(Buffer.from(tok.split('.')[1] || '', 'base64url').toString()); return p.sub || null; } catch { return null; }
   };
   const isFollower = (viewer, owner) => state.follows.some((f) => f.follower_id === viewer && f.following_id === owner);
@@ -133,7 +134,7 @@ export function startMockSupabase(port) {
     // 退会・データ削除の申請（RLS：本人の行だけ読める・作れる。受付中は 1 人 1 件）
     if (p === '/rest/v1/account_deletion_requests') {
       if (!state.deletionTable) return json(404, { code: 'PGRST205', message: "Could not find the table 'public.account_deletion_requests' in the schema cache" });
-      if (req.method === 'GET') return send(filt(state.deletionRequests.filter((r) => r.user_id === viewer), url.searchParams).map((r) => ({ ...r })));
+      if (req.method === 'GET') return send(filt(state.deletionRequests.filter((r) => viewer === '__service__' || r.user_id === viewer), url.searchParams).map((r) => ({ ...r })));
       if (req.method === 'POST') {
         state.writes.push({ m: req.method, p, body });
         const row = JSON.parse(body || '{}');
@@ -146,7 +147,7 @@ export function startMockSupabase(port) {
       return json(403, { code: '42501', message: 'permission denied' });
     }
     if (p === '/rest/v1/feedback') {
-      if (req.method === 'GET') return send(filt(state.feedback.filter((r) => r.user_id === viewer), url.searchParams));
+      if (req.method === 'GET') return send(filt(state.feedback.filter((r) => viewer === '__service__' || r.user_id === viewer), url.searchParams));
       if (req.method === 'POST') {
         state.writes.push({ m: req.method, p, body });
         const row = JSON.parse(body || '{}');

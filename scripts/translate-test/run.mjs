@@ -26,7 +26,7 @@ const section = (t) => results.push(`\n■ ${t}`);
 async function startApp(extraEnv = {}) {
   const env = { ...process.env, PORT: String(APP_PORT), NEXT_PUBLIC_SUPABASE_URL: SB, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-test-key', ...extraEnv };
   for (const k of ['VERCEL_ENV', 'TRANSLATION_ENABLED', 'TRANSLATION_ENGINE', 'TRANSLATION_STORE', 'TRANSLATION_ALLOW_PAID', 'ANTHROPIC_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
-    'TRANSLATION_WORKSPACE_GEO', 'TRANSLATION_MOCK_GEO', 'TRANSLATION_MOCK_FAIL', 'TRANSLATION_MOCK_PREFLIGHT', 'ADMIN_NOTIFY_WEBHOOK_URL']) if (!(k in extraEnv)) delete env[k];
+    'TRANSLATION_WORKSPACE_GEO', 'TRANSLATION_WORKSPACE_ID', 'NEXT_PUBLIC_DB_LABEL', 'TRANSLATION_ALLOW_PROD_DB_FROM_PREVIEW', 'CRON_SECRET', 'TRANSLATION_MOCK_GEO', 'TRANSLATION_MOCK_WORKSPACE', 'TRANSLATION_MOCK_FAIL', 'ADMIN_NOTIFY_WEBHOOK_URL']) if (!(k in extraEnv)) delete env[k];
   const child = spawn(process.execPath, [path.join(root, 'node_modules/next/dist/bin/next'), 'start', '-p', String(APP_PORT)], { cwd: root, env, stdio: 'ignore' });
   for (let i = 0; i < 60; i++) {
     try { const r = await fetch(`${BASE}/api/translate`); if (r.ok) return child; } catch {}
@@ -64,12 +64,13 @@ const del = async (who, method = 'GET', body) => {
 const records = async () => (await status('?usage=1')).records;
 
 // ── 個人情報の伏せ字（サーバーの部品を直接確かめる。pii.ts は import なしの 1 ファイル）──
-async function piiUnit() {
+async function tsUnit(file) {
   const ts = require(path.join(root, 'node_modules/typescript'));
-  const src = fs.readFileSync(path.join(root, 'src/lib/translation/server/pii.ts'), 'utf8');
+  const src = fs.readFileSync(path.join(root, file), 'utf8');
   const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 }
+const piiUnit = () => tsUnit('src/lib/translation/server/pii.ts');
 
 const mock = await startMockSupabase(SB_PORT);
 try {
@@ -101,6 +102,28 @@ try {
     check(`伏せ字を戻す：${c.case} → ${c.expect === 'ok' ? '戻す' : '失敗にして原文を出す'}`, ok, String(out));
   }
   check('原文にもともと ⟦ ⟧ があれば送らない（戻すときに区別できないため）', !screenPersonalInfo('⟦これは記号⟧').ok);
+
+  // ── 年齢（生まれた年月だけで判定・日本時間・誕生月は「月末生まれ」として少なめに数える）──
+  const { ageFrom, ageBandOf } = await tsUnit('src/lib/translation/consentText.ts');
+  const at = (iso) => new Date(iso);
+  const ageCases = [
+    // [生まれた年, 月, いまの時刻（UTC）, 期待する満年齢, 説明]
+    [2010, 11, '2026-11-30T14:59:59Z', 15, '誕生月の最終日（日本時間 11/30 23:59）でも、16 歳になった日が分からないので 15 歳'],
+    [2010, 11, '2026-11-30T15:00:00Z', 16, '日本時間で翌月（12/1 0:00）になったら 16 歳'],
+    [2010, 10, '2026-11-01T00:00:00Z', 16, '誕生月の翌月なら 16 歳'],
+    [2010, 12, '2026-11-15T00:00:00Z', 15, '誕生月の前なら 15 歳'],
+    [2011, 1, '2026-12-31T14:59:59Z', 15, '年をまたぐ前（日本時間 12/31 23:59）'],
+    [2010, 12, '2027-01-01T00:00:00Z', 16, '年をまたいだあと（12 月生まれは翌年 1 月に 16 歳）'],
+    [2008, 11, '2026-12-01T00:00:00Z', 18, '18 歳（区分 18_plus）'],
+    [2009, 11, '2026-12-01T00:00:00Z', 17, '17 歳（区分 16_17）'],
+  ];
+  for (const [y, mo, now, want, label] of ageCases) {
+    const got = ageFrom(y, mo, at(now));
+    check(`年齢：${label}`, got === want, `${y}/${mo} @ ${now} → ${got}`);
+  }
+  check('年齢の区分：15 歳は区分なし（許可しない）・16〜17 歳・18 歳以上', ageBandOf(15) === null && ageBandOf(16) === '16_17' && ageBandOf(17) === '16_17' && ageBandOf(18) === '18_plus');
+  check('年齢不明：月 0・13、未来の年月、121 歳以上は null',
+    [ageFrom(2000, 0, at('2026-11-11T00:00:00Z')), ageFrom(2000, 13, at('2026-11-11T00:00:00Z')), ageFrom(2026, 12, at('2026-11-11T00:00:00Z')), ageFrom(1900, 1, at('2026-11-11T00:00:00Z')), ageFrom(2000.5, 1, at('2026-11-11T00:00:00Z'))].every((x) => x === null));
 
   // ============================================================
   section('A. 既定の設定（プレビューと同じ：仮の翻訳・メモリ保存）');
@@ -302,13 +325,16 @@ try {
   await setBook('alice', book);
 
   // ============================================================
-  section('F. 送信の記録（米国以外の応答・タイムアウト・やり直し・事前確認の失敗）');
+  section('F. 送信の記録（米国以外の応答・別のワークスペース・タイムアウト・やり直し）');
+  const WS = { TRANSLATION_WORKSPACE_ID: 'wrkspc_test01' };
   for (const [env, label, expect] of [
-    [{ TRANSLATION_MOCK_GEO: 'eu' }, '応答の地域が us でない', 'geo'],
-    [{ TRANSLATION_MOCK_GEO: '' , TRANSLATION_MOCK_FAIL: 'timeout' }, 'タイムアウト（届いたか分からない）', 'timeout'],
-    [{ TRANSLATION_MOCK_FAIL: 'overloaded_once' }, '1 回目が 529（混雑）で、2 回目は成功', 'retry'],
-    [{ TRANSLATION_MOCK_FAIL: 'error' }, 'API がエラーを返した（500。やり直さない）', 'error'],
-    [{ TRANSLATION_MOCK_PREFLIGHT: 'fail' }, '送る前の確認（米国だけに制限されているか）に失敗', 'preflight'],
+    [{ ...WS, TRANSLATION_MOCK_GEO: 'eu' }, '応答の地域が us でない', 'geo'],
+    [{ ...WS, TRANSLATION_MOCK_WORKSPACE: 'wrkspc_other99' }, '翻訳専用ワークスペース以外から応答（キーの取り違え）', 'workspace'],
+    [{ ...WS, TRANSLATION_MOCK_FAIL: 'timeout' }, 'タイムアウト（届いたか分からない）', 'timeout'],
+    [{ ...WS, TRANSLATION_MOCK_FAIL: 'overloaded_once' }, '1 回目が 529（混雑）で、2 回目は成功', 'retry'],
+    [{ ...WS, TRANSLATION_MOCK_FAIL: 'error' }, 'API がエラーを返した（500。やり直さない）', 'error'],
+    [{ ...WS, TRANSLATION_MOCK_FAIL: 'auth' }, '無効なキー（401。ワークスペースの ID なし）', 'auth'],
+    [{ ...WS }, '正常（米国・翻訳専用ワークスペース）', 'ok'],
   ]) {
     app = await startApp(env);
     await grant('alice', items(SECTIONS));
@@ -322,18 +348,27 @@ try {
       const again = await tr('carol', 'en', [pf('catchphrase')]);
       check(`${label}：止まったあとは送らない（記録も増えない）`, again[k('catchphrase')]?.status === 'original' && (await records()).provisions === 1);
       check(`${label}：同じ文を頼み直しても、保存されていない（キャッシュに入らない）`, (await tr('erin', 'en', [pf('dream')]))[k('dream')]?.status === 'original');
+    } else if (expect === 'workspace') {
+      check(`${label}：訳文を使わず原文を表示`, r[k('dream')]?.status === 'original');
+      check(`${label}：送った事実は記録に残す（workspace_mismatch 1 件）`, by.workspace_mismatch === 1 && rc.provisions === 1, JSON.stringify(by));
+      check(`${label}：新しい翻訳を自動で止める（${rc.halted}）`, !!rc.halted && rc.halted.startsWith('workspace_mismatch'));
     } else if (expect === 'timeout') {
       check(`${label}：原文を表示`, r[k('dream')]?.status === 'original');
-      check(`${label}：やり直しを含めて 2 回分を「unknown」で記録`, by.unknown === 2 && rc.provisions === 2, JSON.stringify(by));
+      check(`${label}：やり直さない（二重の送信・課金を避ける）。1 回分を「unknown」で記録`, by.unknown === 1 && rc.provisions === 1, JSON.stringify(by));
       check(`${label}：使用量が分からないので精算せず、見込み額を確保したまま（少なく数えない）`, (await status('?usage=1')).usage.reservedUsd > 0);
     } else if (expect === 'retry') {
       check(`${label}：2 回目の結果で翻訳`, r[k('dream')]?.status === 'done');
       check(`${label}：1 回目（error_response）と 2 回目（completed）を別々に記録`, by.error_response === 1 && by.completed === 1 && rc.provisions === 2, JSON.stringify(by));
+    } else if (expect === 'auth') {
+      check(`${label}：原文を表示・記録は error_response 1 件`, r[k('dream')]?.status === 'original' && by.error_response === 1 && rc.provisions === 1, JSON.stringify(by));
+      check(`${label}：ワークスペースの取り違えとは扱わず、翻訳を止めない（キーを直せば再開できる）`, !rc.halted, String(rc.halted));
     } else if (expect === 'error') {
       check(`${label}：原文を表示・記録は 1 件（error_response）`, r[k('dream')]?.status === 'original' && by.error_response === 1 && rc.provisions === 1, JSON.stringify(by));
     } else {
-      check(`${label}：送らない（送信の記録 0 件）・原文を表示`, r[k('dream')]?.status === 'original' && rc.provisions === 0, JSON.stringify(by));
-      check(`${label}：新しい翻訳を止める（${rc.halted}）`, !!rc.halted);
+      check(`${label}：翻訳して、送信の記録は completed 1 件`, r[k('dream')]?.status === 'done' && by.completed === 1 && rc.provisions === 1, JSON.stringify(by));
+      check(`${label}：米国の確認のための追加の呼び出し（ping）はしない（API の呼び出しは 1 回）`, (await status('?usage=1')).usage.requests === 1);
+      check(`${label}：法定の記録と技術的な送信ログを分けて持つ（法定の記録に request-id などがない）`,
+        rc.sendLog === 1 && rc.sendLogWithRequestId === 1 && rc.legalRecordHasTechFields === false, JSON.stringify({ sendLog: rc.sendLog, tech: rc.legalRecordHasTechFields }));
     }
     await stopApp(app);
   }
@@ -364,6 +399,23 @@ try {
   check('feedback でも受付中なら二重に作らない', (await del('dave', 'POST', {})).json.ok && mock.state.feedback.filter((x) => x.user_id === IDS.dave).length === 1);
   await fetch(`${SB}/__test/deletion-table`, { method: 'POST', body: JSON.stringify({ exists: true }) });
   await stopApp(app);
+  // 見落とし防止：毎日の件数の通知（Vercel Cron → /api/account-deletion/reminder）
+  app = await startApp({ ADMIN_NOTIFY_WEBHOOK_URL: `${SB}/__test/notify`, CRON_SECRET: 'cron-test-secret', SUPABASE_SERVICE_ROLE_KEY: 'service-role-test' });
+  const rem = (auth) => fetch(`${BASE}/api/account-deletion/reminder`, { headers: auth ? { authorization: `Bearer ${auth}` } : {} });
+  check('件数の通知：CRON_SECRET がない・違う呼び出しは 401', (await rem(null)).status === 401 && (await rem('wrong')).status === 401);
+  mock.state.deletionRequests[0].requested_at = new Date(Date.now() - 8 * 86_400_000).toISOString();
+  const n0 = mock.state.notices.length;
+  const rj = await (await rem('cron-test-secret')).json();
+  const note = JSON.stringify(mock.state.notices.slice(n0));
+  check('件数の通知：受付中の件数と 7 日を過ぎた件数を運営者に送る（名前・ID は送らない）',
+    rj.notified === true && rj.open === 1 && rj.overdue === 1 && note.includes('1 件') && !note.includes('carol') && !note.includes(IDS.carol), JSON.stringify(rj));
+  mock.state.deletionRequests[0].status = 'completed';
+  const rj2 = await (await rem('cron-test-secret')).json();
+  check('件数の通知：受付中が 0 件なら送らない', rj2.open === 0 && rj2.notified === false, JSON.stringify({ rj2, rows: mock.state.deletionRequests.map((x) => x.status) }));
+  await stopApp(app);
+  app = await startApp({ CRON_SECRET: 'cron-test-secret' });
+  check('件数の通知：通知先・DB のキーがなければ何もしない（503）', (await rem('cron-test-secret')).status === 503);
+  await stopApp(app);
   mock.state.writes.length = 0;
 
   // ============================================================
@@ -375,8 +427,12 @@ try {
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true' }, 'API キーがなければ使わない'],
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test' }, '予算・同意・記録を DB で持たない（メモリ）なら有料 API は使わない'],
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test', TRANSLATION_STORE: 'db', SUPABASE_SERVICE_ROLE_KEY: 'x' }, '翻訳専用ワークスペースが米国だけと確認した印（TRANSLATION_WORKSPACE_GEO=us）がなければ有料 API は使わない'],
+    [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test', TRANSLATION_STORE: 'db', SUPABASE_SERVICE_ROLE_KEY: 'x', TRANSLATION_WORKSPACE_GEO: 'us' }, '翻訳専用ワークスペースの ID（TRANSLATION_WORKSPACE_ID）がなければ有料 API は使わない'],
+    [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_ENGINE: 'anthropic', TRANSLATION_ALLOW_PAID: 'true', ANTHROPIC_API_KEY: 'sk-test', TRANSLATION_STORE: 'db', SUPABASE_SERVICE_ROLE_KEY: 'x', TRANSLATION_WORKSPACE_GEO: 'us', TRANSLATION_WORKSPACE_ID: 'not-a-workspace' }, 'ワークスペースの ID の形が違えば有料 API は使わない'],
     [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', TRANSLATION_MOCK_GEO: 'eu', TRANSLATION_MOCK_FAIL: 'error' }, '本番では仮の翻訳の失敗のまね（テスト用の変数）を使わない（そもそも仮の翻訳を使わない）'],
     [{ TRANSLATION_ENABLED: 'false' }, 'TRANSLATION_ENABLED=false なら止まる（プレビューでも）'],
+    [{ VERCEL_ENV: 'preview', TRANSLATION_STORE: 'db', SUPABASE_SERVICE_ROLE_KEY: 'x' }, 'プレビューで DB に書く設定でも、検証用 DB の印（NEXT_PUBLIC_DB_LABEL=staging）がなければ止まる'],
+    [{ VERCEL_ENV: 'production', TRANSLATION_ENABLED: 'true', NEXT_PUBLIC_DB_LABEL: 'staging' }, '本番に検証用 DB の印があれば止まる'],
   ];
   for (const [env, label] of prodCases) {
     app = await startApp(env);

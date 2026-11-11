@@ -42,7 +42,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* 検証用のデータベースにつないだプレビューだけに出す目印（本番の取り違えを防ぐ）。操作のじゃまにならないよう、クリックは下に通す */}
+        {process.env.NEXT_PUBLIC_DB_LABEL === 'staging' && (
+          <div aria-hidden className="pointer-events-none fixed left-1/2 top-1 z-[200] -translate-x-1/2 rounded-full bg-amber-900/85 px-3 py-0.5 text-[11px] font-black text-white">
+            検証環境（検証用データベース）
+          </div>
+        )}
+        {children}
+      </body>
     </html>
   );
 }

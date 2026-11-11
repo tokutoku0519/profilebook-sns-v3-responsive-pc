@@ -3,6 +3,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// GET の中の fetch（Supabase への問い合わせ）を Next.js にキャッシュさせない（申請の件数・状態・翻訳の可否が古くならないように）
+export const fetchCache = 'force-no-store';
 
 // ============================================================
 // 退会・データ削除の申請（運営者が確認して削除する。自動では削除しない）
@@ -34,7 +36,7 @@ async function asUser(req: NextRequest): Promise<{ client: SupabaseClient; userI
   if (!url || !anon || !token) return null;
   const client = createClient(url, anon, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    global: { headers: { Authorization: `Bearer ${token}` }, fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   });
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) return null;

@@ -21,6 +21,7 @@
 --  ② 法定の記録：translation_consent_events（同意・項目の変更・撤回の履歴）、translation_provision_log（外国への送信の記録）
 --     翻訳キャッシュとは別に保存する。退会しても保存期間内は残す（外部キーにしない）。
 --     1 行ごとに保存期限（retain_until）と根拠（retention_basis）を持ち、purge_translation_legal_records() で期限後に消す。
+--      ・技術的な送信ログ（request-id・ワークスペース・エラー・時間）は translation_send_log に分け、13 か月で消す
 --      ・送信の記録：送信 1 回ごとに作る（「送信中」→ 結果）。期限＝送信日から 3 年（個人情報保護委員会規則 21 条の
 --        「提供の都度作成する記録」の期間と理解。原文未確認・要法務確認）
 --      ・同意の記録：送信の記録の「本人の同意を得ている旨」を裏づける。期限＝作成から 3 年、かつ、その同意に基づく
@@ -122,17 +123,28 @@ create table if not exists public.translation_provision_log (
   consent_event_id bigint,               -- もとになった同意の記録
   requested_geo    text not null check (requested_geo = 'us'),     -- 指定した推論の地域
   reported_geo     text,                 -- 応答に書かれた推論の地域（応答がなければ null）
-  model            text not null,
-  attempt          smallint not null default 1 check (attempt between 1 and 5),
   -- sending：送る直前に作った（そのまま残ったら「届いたか分からない」として扱う）／completed：応答あり・米国
-  -- geo_mismatch：応答はあったが米国と確認できない（結果は使わない）／error_response：API がエラー／unknown：タイムアウトなど
-  outcome          text not null default 'sending' check (outcome in ('sending','completed','geo_mismatch','error_response','unknown')),
-  request_id       text,                 -- Anthropic の request-id（問い合わせ用）
-  error_code       text,
+  -- geo_mismatch：応答はあったが米国と確認できない／workspace_mismatch：翻訳専用ワークスペース以外から応答（どちらも結果は使わない）
+  -- error_response：API がエラー／unknown：タイムアウトなど
+  outcome          text not null default 'sending'
+                     check (outcome in ('sending','completed','geo_mismatch','workspace_mismatch','error_response','unknown')),
   sent_at          timestamptz not null default now(),
   completed_at     timestamptz,
   retain_until     timestamptz not null default now() + interval '3 years',
   retention_basis  text not null default 'ppc_rule21_per_provision_3y'
+);
+-- 技術的な送信ログ（法定の記録とは別の目的：障害の調査・費用の照合・Anthropic への問い合わせ）。13 か月で消す。
+-- 法定の記録（translation_provision_log）の 1 行に、0 か 1 行が対応する。本文・個人の ID は持たない
+create table if not exists public.translation_send_log (
+  provision_id  bigint primary key references public.translation_provision_log(id) on delete cascade,
+  model         text not null,
+  attempt       smallint not null default 1 check (attempt between 1 and 5),
+  request_id    text,                 -- Anthropic の request-id
+  workspace_id  text,                 -- 応答の anthropic-workspace-id
+  error_code    text,
+  latency_ms    integer,
+  created_at    timestamptz not null default now(),
+  retain_until  timestamptz not null default now() + interval '13 months'
 );
 create index if not exists translation_provision_log_owner_idx on public.translation_provision_log (owner_id, sent_at);
 
@@ -202,7 +214,7 @@ create table if not exists public.translation_daily (
 
 do $$ declare t text; begin
   foreach t in array array['translation_settings','translation_consents','translation_item_permissions','translation_consent_events',
-                           'translation_consent_notices','translation_provision_log','content_translations','translation_budget',
+                           'translation_consent_notices','translation_provision_log','translation_send_log','content_translations','translation_budget',
                            'translation_reservations','translation_daily','translation_age_gate'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from public, anon, authenticated', t);
@@ -420,9 +432,11 @@ begin
   perform 1 from public.translation_consents c where c.user_id = p_owner for share;
   ev := public.translation_consent_current(p_owner, p_current_version);
   if ev is null then return null; end if;
-  insert into public.translation_provision_log (owner_id, source_type, source_path, target_lang, consent_event_id, requested_geo, model, attempt, retain_until)
-  values (p_owner, p_type, p_path, p_lang, ev, p_requested_geo, left(p_model, 60), greatest(1, least(coalesce(p_attempt, 1), 5)), now() + keep)
+  insert into public.translation_provision_log (owner_id, source_type, source_path, target_lang, consent_event_id, requested_geo, retain_until)
+  values (p_owner, p_type, p_path, p_lang, ev, p_requested_geo, now() + keep)
   returning id into pid;
+  insert into public.translation_send_log (provision_id, model, attempt)
+  values (pid, left(p_model, 60), greatest(1, least(coalesce(p_attempt, 1), 5)));
   -- もとになった同意の記録（いまの許可を作った grant から、いまの状態まで）の保存期限を、この送信の記録の期限まで延ばす
   select max(e.id) into g from public.translation_consent_events e where e.user_id = p_owner and e.action = 'grant' and e.id <= ev;
   update public.translation_consent_events e set retain_until = greatest(e.retain_until, now() + keep)
@@ -431,14 +445,23 @@ begin
 end;
 $$;
 
-create or replace function public.finish_translation_provision(p_id bigint, p_outcome text, p_reported_geo text, p_request_id text, p_error text)
+-- 法定の記録には結果と地域だけ、技術的な送信ログには request-id・ワークスペース・エラー・時間を書く
+create or replace function public.finish_translation_provision(p_id bigint, p_outcome text, p_reported_geo text, p_request_id text, p_error text,
+                                                               p_workspace_id text default null, p_latency_ms integer default null)
 returns void
-language sql security definer set search_path = public
+language plpgsql security definer set search_path = public
 as $$
+begin
   update public.translation_provision_log
-     set outcome = p_outcome, reported_geo = left(p_reported_geo, 20), request_id = left(p_request_id, 100),
-         error_code = left(p_error, 60), completed_at = now()
-   where id = p_id and outcome = 'sending' and p_outcome in ('completed','geo_mismatch','error_response','unknown');
+     set outcome = p_outcome, reported_geo = left(p_reported_geo, 20), completed_at = now()
+   where id = p_id and outcome = 'sending' and p_outcome in ('completed','geo_mismatch','workspace_mismatch','error_response','unknown');
+  if found then
+    update public.translation_send_log
+       set request_id = left(p_request_id, 100), workspace_id = left(p_workspace_id, 60), error_code = left(p_error, 60),
+           latency_ms = greatest(0, least(p_latency_ms, 600000))
+     where provision_id = p_id;
+  end if;
+end;
 $$;
 
 -- 新しい翻訳を止める（米国以外での処理・事前確認の失敗）。再開は運営者が原因を確かめてから：
@@ -716,6 +739,13 @@ begin
   return next;
 end;
 $$;
+-- 技術的な送信ログ：13 か月（法定の記録より先に消える。法定の記録が消えると一緒に消える）
+create or replace function public.purge_translation_send_log()
+returns bigint
+language sql security definer set search_path = public
+as $$
+  with d as (delete from public.translation_send_log where retain_until < now() returning 1) select count(*) from d;
+$$;
 -- ③ 費用の集計：回数制限の記録（ID あり）は 2 日、確保の明細（ID なし）は 13 か月。月の合計は残す
 create or replace function public.purge_translation_cost_records()
 returns table (daily_rows bigint, reservations bigint)
@@ -749,12 +779,12 @@ do $$ declare f text; begin
     'release_translation(text, text, text, text, text)',
     'store_translation(text, text, text, text, text, text, text, text[], integer, integer, numeric, text, text)',
     'begin_translation_provision(uuid, text, text, text, text, text, integer, text)',
-    'finish_translation_provision(bigint, text, text, text, text)', 'halt_translation(text)', 'reserve_translation(uuid, uuid, numeric)',
+    'finish_translation_provision(bigint, text, text, text, text, text, integer)', 'halt_translation(text)', 'reserve_translation(uuid, uuid, numeric)',
     'settle_translation(bigint, integer, integer, integer, integer)', 'translation_candidates(uuid)',
     'translation_items_valid(uuid, jsonb)', 'translation_replace_items(uuid, jsonb, bigint)',
     'grant_translation_consent(uuid, text, text, text, jsonb, integer, integer, jsonb)', 'set_translation_items(uuid, text, jsonb)',
     'revoke_translation_consent(uuid)', 'get_translation_consent(uuid, text)', 'owner_allows_translation(text, text)',
-    'purge_translation_legal_records()', 'purge_translation_cost_records()', 'purge_translation_cache()'] loop
+    'purge_translation_legal_records()', 'purge_translation_send_log()', 'purge_translation_cost_records()', 'purge_translation_cache()'] loop
     execute format('revoke all on function public.%s from public, anon, authenticated', f);
     execute format('grant execute on function public.%s to service_role', f);
   end loop;
@@ -833,8 +863,10 @@ commit;
 -- ============================================================
 -- select month, spent_usd, reserved_usd, requests, cache_hits, input_tokens, output_tokens from public.translation_budget order by month desc;
 -- select action, consent_version, age_band, created_at, retain_until from public.translation_consent_events where user_id = '<uuid>' order by created_at;
--- select source_type, source_path, target_lang, recipient, requested_geo, reported_geo, outcome, attempt, sent_at, retain_until
+-- select source_type, source_path, target_lang, recipient, requested_geo, reported_geo, outcome, sent_at, retain_until
 --   from public.translation_provision_log where owner_id = '<uuid>' order by sent_at;
+-- 技術的な送信ログ：select p.sent_at, p.outcome, s.request_id, s.workspace_id, s.error_code, s.latency_ms
+--   from public.translation_provision_log p left join public.translation_send_log s on s.provision_id = p.id order by p.sent_at desc limit 50;
 -- 止まっているか：select enabled, halted_reason from public.translation_settings;
 -- 停止：update public.translation_settings set enabled = false, updated_at = now();
 -- 取り消し（テーブル・関数の削除）：supabase/rollback_content_translations.sql
