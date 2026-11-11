@@ -78,6 +78,9 @@ SQL Editor（左のメニュー → **SQL Editor** → **New query**）で、次
 | 6 | `supabase/patch_perception_votes.sql` | 性格投票 |
 | 7 | `supabase/staging/00_mark_as_staging.sql` | **検証用の印**。@example.com 以外のユーザーが 1 人でもいるデータベースでは付けない（本番は必ず止まる）。テスト用のアカウントは、印を付けたあと（3 章）で作る。結果に `staging` と日時が出れば成功 |
 
+### 8. 本番の今の形に合わせる（2026-11-11 追加）
+`supabase/staging/align_with_production.sql`（検証用だけ。印がなければ止まる）。リポジトリの SQL と本番の違い（handle_new_user・protect_profile_privileged・サークルの方針・古い名前の方針・profile_book の更新の方針・profiles の bio 列）を、本番の定義に合わせる。合わせたあとの違いは、profiles の列の順番と `_miri_environment` だけになる（手元で、本番のハッシュと一致することを確認済み）。
+
 ### 本番と同じ形になったかの確認（どちらも読み取りだけ）
 1. 本番と検証用の両方で `supabase/staging/schema_fingerprint.sql` を実行し、結果を CSV でダウンロードして比べる。
    - 本番でだけ違う行があれば、リポジトリの SQL にない変更が本番にある。その場合は、共有いただければ差分を SQL にします。

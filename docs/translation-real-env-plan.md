@@ -52,10 +52,12 @@ Supabase のダッシュボード → 本番のプロジェクト → 左の **S
 | サークル 5 つの方針（circles・circle_posts の閲覧と投稿・circle_replies・circle_votes の閲覧） | 本番は **schema.sql の前の版**（承認待ちの判定・フォロワー限定サークルの判定がない版）と一致 | なし | **本番では、フォロワー限定のサークルが誰からも見え、承認待ちの人もメンバー限定の投稿を読める可能性**。直すかは別途判断（本番の変更なので要承認） |
 | follows・profiles に古い名前の方針が 3 つずつ（中身は今の方針と同じ） | 以前の SQL の名残 | なし | なし（同じ条件の重複） |
 | profile_book self update | 本番は with check なし | なし | なし（PostgreSQL は using を with check にも使うので同じ動き） |
-| handle_new_user・protect_profile_privileged | リポジトリの**どの版とも一致しない**（過去の版も確認） | 検証用はテスト用アカウントの作成に使う。本番の定義を確認して合わせる | 確認中（`staging/inspect_prod_diff.sql`） |
-| profiles の列 | 不明（列の順番・必須の違いを総当たりしても一致せず） | 翻訳は id・username だけを使う | 確認中（同上） |
+| handle_new_user・protect_profile_privileged | リポジトリのどの版とも一致しない。本番の定義を確認した（`staging/inspect_prod_diff.sql`）：handle_new_user は**称号（先駆者）も profile_book も作らない古い版**。protect は書き方だけ違い、動きは同じ | 検証用を本番に合わせた（`staging/align_with_production.sql`） | 新しく登録した人に「先駆者」の称号が付かない（リポジトリの patch C の意図と違う）。直すかは別途判断 |
+| profiles の列 | 本番にだけ `bio` 列がある（アプリは使っていない）。列の順番も違う | なし。検証用にも bio を足した | なし |
 
-補足：検証用の handle_new_user は patch C の版（登録時に profile_book の行を作らない）。patch A の版（作る）のあとに patch C・schema.sql を流すと、この版に戻る。アプリは保存のときに profile_book を作り直すので大きな問題はないが、本番で schema.sql や patch C を流し直すときは注意。
+補足：align の前の検証用の handle_new_user は patch C の版（登録時に profile_book の行を作らない）。patch A の版（作る）のあとに patch C・schema.sql を流すと、この版に戻る。アプリは保存のときに profile_book を作り直すので大きな問題はないが、本番で schema.sql や patch C を流し直すときは注意。
+
+本番に合わせた検証用（手元で同じ形を作って確認）で、翻訳の SQL・退会の申請の SQL を適用 → verify 18 項目・smoke 23 項目がすべて true。
 
 **読み取りだけであることの確認**
 - 1 行目の `set transaction read only;` により、この実行の中では書きこみがエラーになる（手元で、同じ形で書きこみが拒否されることを確認済み）。
