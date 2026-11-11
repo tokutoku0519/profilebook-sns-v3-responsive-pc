@@ -21,6 +21,7 @@ declare
 begin
   if to_regclass('public._miri_environment') is null then raise exception '検証用の印がありません。本番では実行しないでください'; end if;
   if not exists (select 1 from public._miri_environment where name = 'staging') then raise exception '検証用の印がありません。本番では実行しないでください'; end if;
+  if exists (select 1 from auth.users where email is null or lower(email) not like '%@example.com') then raise exception 'テスト用（@example.com）以外のユーザーがいます。このデータベースでは実行しません'; end if;
   select id into a from public.profiles where username = 'test_alice';
   select id into b from public.profiles where username = 'test_bob';
   select id into d from public.profiles where username = 'test_dave';

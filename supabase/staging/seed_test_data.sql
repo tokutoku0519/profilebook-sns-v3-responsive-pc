@@ -22,6 +22,9 @@ begin
   if not exists (select 1 from public._miri_environment where name = 'staging') then
     raise exception '検証用の印がありません。本番では実行しないでください（00_mark_as_staging.sql を先に）';
   end if;
+  if exists (select 1 from auth.users where email is null or lower(email) not like '%@example.com') then
+    raise exception 'テスト用（@example.com）以外のユーザーがいます。このデータベースでは実行しません';
+  end if;
   select id into a from auth.users where email = 'miri-test-alice@example.com';
   select id into b from auth.users where email = 'miri-test-bob@example.com';
   select id into c from auth.users where email = 'miri-test-carol@example.com';

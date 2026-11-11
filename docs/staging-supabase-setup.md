@@ -8,7 +8,37 @@
 
 ---
 
-## 1. 新しい Supabase プロジェクトを作る
+## 0. すでにあるプロジェクト（本番・デモ用）の扱いを決める
+
+Supabase の Free プランで同時に動かせるプロジェクトは 2 つまでです（私の知識による。最新の条件は Supabase の料金ページで確認してください）。本番とデモ用の 2 つがあると、3 つ目を作れないことがあります。
+
+### 0-1. どのプロジェクトが、どこで使われているかを確かめる（読み取りだけ）
+1. Supabase → 各プロジェクト → **Project Settings → General** の **Project ID**（`abcd…` の 20 文字）を控える。URL は `https://<Project ID>.supabase.co`。
+2. Vercel → プロジェクト → **Settings → Environment Variables** で `NEXT_PUBLIC_SUPABASE_URL` を開き、Production・Preview・Development のそれぞれが、どの Project ID を指しているかを見る。
+3. デモ用のプロジェクトの **SQL Editor** で `supabase/staging/inspect_candidate_project.sql` を実行する（読み取りだけ。件数・日付だけが出る）。結果を共有いただければ判断します。
+
+### 0-2. デモ用をどうするか
+
+| デモ用の状態 | おすすめ | 理由 |
+|---|---|---|
+| ご自身の試しのデータだけ・Vercel のどこからも使っていない・残す必要がない | **A：デモ用を削除して、検証用を新しく作る** | 本番と同じ手順で一から作るので、本番との違いが出にくい。古い SQL の名残がない |
+| 残したいデータや画面がある（人に見せている・あとで使う） | **B：デモ用を一時停止（Pause）して、検証用を新しく作る** | デモ用のデータは残る。テストが終わったら検証用を削除し、デモ用を再開する |
+| デモ用に本人以外（友人など）のアカウント・投稿がある | B（デモ用を検証用には**使わない**） | 本人以外の文章を検証に使うことになるため |
+| 試しのデータを消してよく、作り直さずに使いたい | C：デモ用をそのまま検証用にする | 下の 0-3 の条件をすべて満たすときだけ |
+
+- **A の操作**：デモ用 → **Project Settings → General → Delete project**（元に戻せない）。Vercel の環境変数がデモ用を指していないことを先に確かめる。
+- **B の操作**：デモ用 → **Project Settings → General → Pause project**。再開は同じ画面の **Restore**。止めている間、デモ用を使う画面は動かない。Free プランで止めたプロジェクトを再開できる期限があるので、画面の表示を確認する。
+- どちらも本番のプロジェクトには触れません。**本番のプロジェクトを止める・消すことは絶対にしないでください**（画面上部のプロジェクト名を必ず確認）。
+
+### 0-3. C（デモ用をそのまま使う）の条件
+- `inspect_candidate_project.sql` の 2 行目（@example.com 以外のユーザー）が **0**。0 でなければ、Authentication → Users でそのユーザーを削除してからでないと、検証用の印が付きません（本番に誤って印を付けないための仕組み）。
+- 9 行目（get_visible_book の md5）が本番と同じ `db438c0404da164099340c14fddd810c`。
+- 10 行目（翻訳のテーブル）が「(なし)」。
+- 下の 2 章の確認（`schema_fingerprint.sql` を本番と比べる）で、違いがない。違いがあれば A か B にする。
+
+---
+
+## 1. 新しい Supabase プロジェクトを作る（0-2 で A・B を選んだとき）
 
 | # | 画面 | 操作 |
 |---|---|---|
@@ -27,7 +57,13 @@
 
 本番と同じ「形」だけを、リポジトリの SQL から作ります。データは移しません。
 
-SQL Editor（左のメニュー → **SQL Editor** → **New query**）で、次の順に 1 つずつ全文を貼って **Run**：
+**SQL の全文の取り出し方**：GitHub → `tokutoku0519/profilebook-sns-v3-responsive-pc` → ブランチを `claude/miri-delta-login-fix-tbw4wc` に切り替え → `supabase/` → ファイルを開く → 右上の **Copy raw file**（コピーのアイコン）。貼る前に、内容を確認してください。
+
+**実行する前に毎回**：画面の左上のプロジェクト名が **検証用（`miri-staging`）** であることを確かめる。
+
+SQL Editor（左のメニュー → **SQL Editor** → **New query**）で、次の順に 1 つずつ全文を貼って **Run**（1 ファイルごとに New query で新しいタブにする）。成功すると下に「Success. No rows returned」または結果の表が出ます。赤いエラーが出たら、そこで止めて、エラー文を共有してください。
+
+> 手元の確認は PostgreSQL 16 で、本番は 17.11 です。下の 1〜6 を実際の Supabase で流すのは、この検証用が初めてになります。
 
 | 順 | ファイル | 内容 |
 |---|---|---|
@@ -37,7 +73,7 @@ SQL Editor（左のメニュー → **SQL Editor** → **New query**）で、次
 | 4 | `supabase/security_patch_C.sql` | 称号・公認バッジの保護 |
 | 5 | `supabase/security_patch_followers_reports.sql` | フォロワー限定の回答の RLS・通報 |
 | 6 | `supabase/patch_perception_votes.sql` | 性格投票 |
-| 7 | `supabase/staging/00_mark_as_staging.sql` | **検証用の印**（ユーザーが 10 人を超えるデータベースでは付けない） |
+| 7 | `supabase/staging/00_mark_as_staging.sql` | **検証用の印**。@example.com 以外のユーザーが 1 人でもいるデータベースでは付けない（本番は必ず止まる）。テスト用のアカウントは、印を付けたあと（3 章）で作る。結果に `staging` と日時が出れば成功 |
 
 ### 本番と同じ形になったかの確認（どちらも読み取りだけ）
 1. 本番と検証用の両方で `supabase/staging/schema_fingerprint.sql` を実行し、結果を CSV でダウンロードして比べる。

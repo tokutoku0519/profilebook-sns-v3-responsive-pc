@@ -33,6 +33,17 @@ Supabase のダッシュボード → 本番のプロジェクト → 左の **S
 | 30〜33：feedback | 退会の申請（テーブルを適用する前の受け皿） | 32 が false（kind に制約がある）なら、申請は新しいテーブルを先に適用する |
 | 40〜47：拡張機能・ロール・件数 | 動かすための前提 | pg_cron がなければ、自動削除の予約の前に有効にする |
 
+### 本番の確認結果（2026-11-11 実行・共有いただいたもの）
+- **26 行すべて true。翻訳の SQL 案はそのまま適用できる形**です。
+- get_visible_book の md5 は手元と同じ（`db438c04…`）。本番の定義はリポジトリと同じ。
+- 翻訳のテーブル・関数はまだない（名前のぶつかりなし）。profile_book・answers にトリガーはない。
+- 公開範囲の値は public・private だけ（ほかの値なし）。
+- feedback で退会の申請を受けられる（kind の制約なし・本人だけ insert/select）。
+- **pg_cron が未有効**。本番に適用するとき（要承認）に、Database → Extensions で有効にしてから、自動削除の予約をする。
+- PostgreSQL は **17.11**。手元のテストは 16 なので、検証用の Supabase（同じ 17 系）での確認で差がないことを確かめる。
+- 時刻帯は UTC。年齢は Asia/Tokyo で計算しているので影響なし。
+- ユーザーは 2 人。**人数では本番と検証用を見分けられない**ので、検証用の印の条件を「@example.com 以外のユーザーが 1 人でもいれば付けない」に変えた（本番では必ず止まる）。
+
 **読み取りだけであることの確認**
 - 1 行目の `set transaction read only;` により、この実行の中では書きこみがエラーになる（手元で、同じ形で書きこみが拒否されることを確認済み）。
 - 本文は `WITH ... SELECT` 1 つだけ。
@@ -66,7 +77,8 @@ Supabase のダッシュボード → 本番のプロジェクト → 左の **S
 |---|---|---|
 | `supabase/check_existing_schema.sql` | 本番の確認（26 項目） | しない（read only） |
 | `supabase/staging/schema_fingerprint.sql` | 本番と検証用の形の比較 | しない（read only） |
-| `supabase/staging/00_mark_as_staging.sql` | 検証用の印（ユーザー 10 人超では付けない） | 検証用だけ |
+| `supabase/staging/inspect_candidate_project.sql` | 既存のプロジェクト（デモ用など）を検証用に使えるかの確認 | しない（read only） |
+| `supabase/staging/00_mark_as_staging.sql` | 検証用の印（@example.com 以外のユーザーが 1 人でもいれば付けない） | 検証用だけ |
 | `supabase/staging/seed_test_data.sql` | 架空のデータ（印がなければ止まる） | 検証用だけ |
 | `supabase/staging/smoke_test_translation.sql` | 動作確認 23 項目（実行後に何も残らない） | 検証用だけ（取り消される） |
 | `supabase/proposal_content_translations.sql` | 翻訳：テーブル 12・関数 24・トリガー 2 | する（要承認） |
