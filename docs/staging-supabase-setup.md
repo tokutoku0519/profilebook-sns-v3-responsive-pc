@@ -14,7 +14,9 @@ Supabase の Free プランで同時に動かせるプロジェクトは 2 つ�
 
 ### 0-1. どのプロジェクトが、どこで使われているかを確かめる（読み取りだけ）
 1. Supabase → 各プロジェクト → **Project Settings → General** の **Project ID**（`abcd…` の 20 文字）を控える。URL は `https://<Project ID>.supabase.co`。
-2. Vercel → プロジェクト → **Settings → Environment Variables** で `NEXT_PUBLIC_SUPABASE_URL` を開き、Production・Preview・Development のそれぞれが、どの Project ID を指しているかを見る。
+2. 2026-11-13 に確認した Vercel の状態：Supabase の 2 つの値と `NEXT_PUBLIC_APP_ENV` は **Production だけ**に設定されていて、Preview には設定がない（`NEXT_PUBLIC_SITE_URL` だけが Production and Preview）。そのため、上の 5 つをこのブランチの Preview に新しく追加する。既存の値は編集しない。
+
+Vercel → プロジェクト → **Settings → Environment Variables** で `NEXT_PUBLIC_SUPABASE_URL` を開き、Production・Preview・Development のそれぞれが、どの Project ID を指しているかを見る。
 3. デモ用のプロジェクトの **SQL Editor** で `supabase/staging/inspect_candidate_project.sql` を実行する（読み取りだけ。件数・日付だけが出る）。結果を共有いただければ判断します。
 
 ### 0-2. デモ用をどうするか
@@ -143,9 +145,9 @@ SQL Editor（左のメニュー → **SQL Editor** → **New query**）で、次
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | 本番の URL（いまのまま） | 検証用の Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 本番（いまのまま） | 検証用の anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | 本番（いまのまま。決済で使用中） | 検証用の service_role key |
+| `SUPABASE_SERVICE_ROLE_KEY` | 設定なし（2026-11-13 に確認。いまのまま） | 検証用の service_role key（Secret） |
 | `NEXT_PUBLIC_DB_LABEL` | 設定しない | `staging` |
-| `NEXT_PUBLIC_APP_ENV` | `production`（いまのまま） | `production`（ダミーデータを出さないため） |
+| `NEXT_PUBLIC_APP_ENV` | `production`（いまのまま） | `production`（Preview には設定がなく、開発用のダミーデータが出るため。このブランチに追加する） |
 
 Vercel → プロジェクト → **Settings → Environment Variables** → 変数を追加し、Environment で **Preview** だけを選び、**Git Branch** に `claude/miri-delta-login-fix-tbw4wc` を指定します。こうすると、ほかのブランチのプレビューと本番には影響しません。
 
