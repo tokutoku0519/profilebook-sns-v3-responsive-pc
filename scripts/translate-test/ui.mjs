@@ -109,11 +109,28 @@ export async function runUi({ BASE, SB, check, sessionFor, IDS, require, regrant
     const st = await sheet.innerText().catch(() => '');
     check(`[${W}] 説明に送り先の国名・事業者・米国の制度・取り消し方法が出る`, /United States/.test(st) && /Anthropic/.test(st) && /withdraw|revoke|stop/i.test(st), st.slice(0, 80));
     const submit = sheet.locator('[data-consent-submit]');
-    await sheet.locator('[data-item="profile:dream"]').waitFor({ timeout: 10000 }).catch(() => {});
-    check(`[${W}] 候補に公開の項目が出て、フォロワー限定の項目は出ない`, (await sheet.locator('[data-item="profile:dream"]').count()) === 1 && (await sheet.locator('[data-item="profile:motto"]').count()) === 0);
+    // 390px は「選んだものだけ」、1366px は「すべて（今後のものを含む）」で許可する
+    const useAll = W !== 390;
+    await sheet.locator('[data-scope="all"]').waitFor({ timeout: 10000 }).catch(() => {});
+    check(`[${W}] 最初は範囲（すべて／選んだものだけ）が選ばれておらず、許可ボタンは押せない`, (await sheet.locator('input[data-scope]').count()) === 2 && (await sheet.locator('input[data-scope]:checked').count()) === 0 && (await submit.isDisabled()));
+    await sheet.locator('[data-scope="all"]').check().catch(() => {});
+    await sheet.locator('[data-included="profile:dream"]').waitFor({ timeout: 10000 }).catch(() => {});
+    check(`[${W}] 「すべて」では、いま対象になる公開の項目が一覧に出て、フォロワー限定は出ず、チェック欄はない`,
+      (await sheet.locator('[data-included="profile:dream"]').count()) === 1 && (await sheet.locator('[data-included="profile:motto"]').count()) === 0 && (await sheet.locator('input[data-item]').count()) === 0);
+    check(`[${W}] 「すべて」の説明に、今後のものも含むことと、フォロワー限定・非公開は対象外であることが出る`, /later|future|今後|これから/.test(await sheet.innerText()) && /Followers-only|フォロワー限定/.test(await sheet.innerText()));
     check(`[${W}] 本人には「連絡先を含むため翻訳されません」と理由を出す`, (await sheet.locator('[data-blocked="contact"]').count()) === 1);
-    check(`[${W}] 最初は何も選ばれておらず、許可ボタンは押せない`, (await sheet.locator('input[data-item]:checked').count()) === 0 && (await submit.isDisabled()));
-    await sheet.locator('[data-item="profile:dream"]').check().catch(() => {});
+    if (shots) await sheet.locator('[role="radiogroup"]').locator('xpath=..').screenshot({ path: `${shots}/consent_scope_all_${W}.png` }).catch(() => {});
+    if (!useAll) {
+      await sheet.locator('[data-scope="items"]').check().catch(() => {});
+      await sheet.locator('[data-item="profile:dream"]').waitFor({ timeout: 10000 }).catch(() => {});
+      check(`[${W}] 「選んだものだけ」では、候補に公開の項目が出て、フォロワー限定の項目は出ない`, (await sheet.locator('[data-item="profile:dream"]').count()) === 1 && (await sheet.locator('[data-item="profile:motto"]').count()) === 0);
+      check(`[${W}] 何も選んでいなければ許可ボタンは押せない`, (await sheet.locator('input[data-item]:checked').count()) === 0 && (await submit.isDisabled()));
+      await sheet.locator('[data-select-all]').click().catch(() => {});
+      const nAll = await sheet.locator('input[data-item]:checked').count();
+      check(`[${W}] 「表示中をすべて選ぶ」で、翻訳されない項目（連絡先）以外がすべて選ばれる`, nAll > 1 && nAll === (await sheet.locator('input[data-item]').count()) - 1, String(nAll));
+      await sheet.getByRole('button', { name: /すべて外す|Clear all/ }).click().catch(() => {});
+      await sheet.locator('[data-item="profile:dream"]').check().catch(() => {});
+    }
     const y = new Date().getFullYear();
     await sheet.locator('[data-age-year]').selectOption(String(y - 10)).catch(() => {});
     await sheet.locator('[data-age-month]').selectOption('1').catch(() => {});
@@ -127,6 +144,7 @@ export async function runUi({ BASE, SB, check, sessionFor, IDS, require, regrant
     await submit.click().catch(() => {});
     await me.page.waitForTimeout(1000);
     check(`[${W}] 許可すると「許可中」になり、同意・取り消しの記録が増える`, (await card.getAttribute('data-state').catch(() => null)) === 'on' && (await records()).consentEvents === ev0 + 2);
+    check(`[${W}] カードに選んだ範囲（${useAll ? 'すべて' : '選んだものだけ'}）が出る`, (await card.getAttribute('data-scope').catch(() => null)) === (useAll ? 'all' : 'items') && (!useAll || /今後|future/.test(await card.innerText())));
     if (shots) await card.screenshot({ path: `${shots}/consent_${W}.png` }).catch(() => {});
 
     // 退会・データ削除の申請（1 回目の画面幅で申請し、2 回目の画面幅では「受付中」が表示されることを確かめる）

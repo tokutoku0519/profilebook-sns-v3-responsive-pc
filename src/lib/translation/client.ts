@@ -4,7 +4,7 @@
 // ============================================================
 import type { Lang } from '@/lib/i18n';
 import { getAccessToken } from '@/lib/db';
-import type { ConsentCandidate, ConsentItem, TranslateItem, TranslateResult } from './shared';
+import type { ConsentCandidate, ConsentItem, ScopeMode, TranslateItem, TranslateResult } from './shared';
 import type { ConsentLocale } from './consentText';
 
 export type TranslateAvailability = { enabled: boolean; mock: boolean; ownerAllows?: boolean };
@@ -56,7 +56,7 @@ export async function requestTranslations(target: Lang, items: TranslateItem[]):
   return json;
 }
 
-export type MyConsent = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[]; currentVersion: string };
+export type MyConsent = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[]; scope: ScopeMode; currentVersion: string };
 
 export async function getMyTranslationConsent(): Promise<MyConsent | null> {
   const res = await post({ action: 'get_consent' });
@@ -81,7 +81,7 @@ async function consentCall(body: Record<string, unknown>): Promise<ConsentResult
 }
 /** 説明を確認したうえでの許可（版・表示した言語・生まれた年月・選んだ項目を送る）。
  *  年齢はサーバーで計算し直す（ブラウザの判定だけでは許可されない）。生まれた年月はサーバーで保存しない */
-export const grantTranslationConsent = (version: string, locale: ConsentLocale, birthYear: number, birthMonth: number, items: ConsentItem[]) =>
-  consentCall({ action: 'grant_consent', version, locale, birthYear, birthMonth, items });
-export const setTranslationItems = (items: ConsentItem[]) => consentCall({ action: 'set_items', items });
+export const grantTranslationConsent = (version: string, locale: ConsentLocale, birthYear: number, birthMonth: number, scope: ScopeMode, items: ConsentItem[]) =>
+  consentCall({ action: 'grant_consent', version, locale, birthYear, birthMonth, scope, items: scope === 'all' ? [] : items });
+export const setTranslationItems = (scope: ScopeMode, items: ConsentItem[]) => consentCall({ action: 'set_items', scope, items: scope === 'all' ? [] : items });
 export const revokeTranslationConsent = () => consentCall({ action: 'revoke_consent' });

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { t, type Lang } from '@/lib/i18n';
-import { consentItemKey, differsFromViewer, keepWithoutEngine, type ConsentCandidate, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
+import { consentItemKey, differsFromViewer, keepWithoutEngine, type ConsentCandidate, type ConsentItem, type ScopeMode, type TranslateItem } from '@/lib/translation/shared';
 import { ageFrom, CONSENT_TEXT, CONSENT_VERSION, consentLocaleFor, MIN_CONSENT_AGE } from '@/lib/translation/consentText';
 import {
   fetchTranslateAvailability, getMyTranslationConsent, grantTranslationConsent, listConsentCandidates, requestTranslations,
@@ -140,13 +140,13 @@ export function TranslationConsentCard({ lang }: { lang: Lang }) {
     await reload();
   }
   return (
-    <section className="rounded-3xl bg-white p-4 shadow-card" data-translation-consent data-state={on ? 'on' : state.allow ? 'reconfirm' : 'off'}>
+    <section className="rounded-3xl bg-white p-4 shadow-card" data-translation-consent data-state={on ? 'on' : state.allow ? 'reconfirm' : 'off'} data-scope={on ? state.scope : undefined}>
       <div className="flex items-start gap-3">
         <span aria-hidden className="text-xl">🌐</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-black text-ink">{T.cardTitle}</p>
           <p className="mt-1 text-[12px] font-bold leading-relaxed text-muted">
-            {on ? T.cardOn(state.version ?? '', date, state.items.length) : state.allow ? T.cardReconfirm : T.cardOff}
+            {on ? (state.scope === 'all' ? T.cardOnAll(state.version ?? '', date) : T.cardOn(state.version ?? '', date, state.items.length)) : state.allow ? T.cardReconfirm : T.cardOff}
           </p>
         </div>
       </div>
@@ -170,6 +170,7 @@ export function TranslationConsentCard({ lang }: { lang: Lang }) {
           lang={lang}
           mode={sheet}
           current={state.allow ? state.items : []}
+          currentScope={state.allow ? state.scope : null}
           onClose={() => setSheet(null)}
           onDone={async (msg) => { setSheet(null); setNotice(msg); await reload(); }}
         />
@@ -178,13 +179,15 @@ export function TranslationConsentCard({ lang }: { lang: Lang }) {
   );
 }
 
-function ConsentSheet({ lang, mode, current, onClose, onDone }: {
-  lang: Lang; mode: 'grant' | 'edit'; current: ConsentItem[]; onClose: () => void; onDone: (msg: string) => void;
+function ConsentSheet({ lang, mode, current, currentScope, onClose, onDone }: {
+  lang: Lang; mode: 'grant' | 'edit'; current: ConsentItem[]; currentScope: ScopeMode | null; onClose: () => void; onDone: (msg: string) => void;
 }) {
   const locale = consentLocaleFor(lang);
   const T = CONSENT_TEXT[locale];
   const [candidates, setCandidates] = useState<ConsentCandidate[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(() => new Set(current.map(consentItemKey)));
+  // 翻訳する範囲。初めて許可するときは、どちらかを本人が選ぶまで決めない
+  const [scope, setScope] = useState<ScopeMode | null>(currentScope);
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState('');
   const [month, setMonth] = useState('');
@@ -195,13 +198,15 @@ function ConsentSheet({ lang, mode, current, onClose, onDone }: {
   const age = year && month ? ageFrom(Number(year), Number(month)) : null;
   const ageOk = mode === 'edit' || (age != null && age >= MIN_CONSENT_AGE);
   const chosen = (candidates ?? []).filter((c) => picked.has(consentItemKey(c.item))).map((c) => c.item);
-  const canSubmit = !busy && chosen.length > 0 && ageOk && (mode === 'edit' || agree);
+  const canSubmit = !busy && scope != null && (scope === 'all' || chosen.length > 0) && ageOk && (mode === 'edit' || agree);
+  const selectable = (candidates ?? []).filter((c) => !c.blocked);
   const toggle = (k: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const labelOf = (c: ConsentCandidate) => (c.item.kind === 'answer' ? `${T.answerLabel}${c.question ? `「${c.question}」` : ''}` : T.sectionLabels[c.item.key] ?? c.item.key);
 
   async function submit() {
     setBusy(true); setError('');
-    const r = mode === 'edit' ? await setTranslationItems(chosen) : await grantTranslationConsent(CONSENT_VERSION, locale, Number(year), Number(month), chosen);
+    if (!scope) { setBusy(false); return; }
+    const r = mode === 'edit' ? await setTranslationItems(scope, chosen) : await grantTranslationConsent(CONSENT_VERSION, locale, Number(year), Number(month), scope, chosen);
     setBusy(false);
     if (r.ok) onDone(T.saved);
     else setError(r.reason === 'age' ? T.ageUnder : r.reason === 'age_locked' ? T.ageLocked : r.reason === 'age_invalid' ? T.ageInvalid : T.failed);
@@ -230,26 +235,55 @@ function ConsentSheet({ lang, mode, current, onClose, onDone }: {
           <div className="mt-4 rounded-2xl bg-base p-3">
             <p className="text-[13px] font-black text-ink">{T.itemsHeading}</p>
             <p className="mt-0.5 text-[11px] font-bold leading-relaxed text-muted">{T.itemsHelp}</p>
-            {candidates == null ? null : candidates.length === 0 ? (
+            <div className="mt-2 space-y-1.5" role="radiogroup" aria-label={T.itemsHeading}>
+              {(['all', 'items'] as const).map((m) => (
+                <label key={m} className={`flex min-h-[44px] cursor-pointer items-start gap-2 rounded-xl px-3 py-2 ${scope === m ? 'bg-white ring-2 ring-ink/20' : 'bg-white/70'}`}>
+                  <input type="radio" name="translation-scope" checked={scope === m} onChange={() => setScope(m)} className="mt-0.5 h-4 w-4 shrink-0" data-scope={m} />
+                  <span className="min-w-0">
+                    <span className="block text-[12px] font-black text-ink">{m === 'all' ? T.scopeAll : T.scopeItems}</span>
+                    <span className="block text-[11px] font-bold leading-relaxed text-muted">{m === 'all' ? T.scopeAllHelp : T.scopeItemsHelp}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {scope == null || candidates == null ? null : candidates.length === 0 ? (
               <p className="mt-2 text-[12px] font-bold text-muted">{T.itemsEmpty}</p>
             ) : (
-              <ul className="mt-2 space-y-1.5">
-                {candidates.map((c) => {
-                  const k = consentItemKey(c.item);
-                  return (
-                    <li key={k}>
-                      <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-xl bg-white px-3 py-2">
-                        <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="mt-0.5 h-4 w-4 shrink-0" data-item={k} />
-                        <span className="min-w-0">
-                          <span className="block text-[12px] font-black text-ink">{labelOf(c)}</span>
-                          <span className="block break-words text-[11px] font-bold text-muted">{c.preview}</span>
-                          {c.blocked && <span className="mt-0.5 block text-[11px] font-black text-amber-900" data-blocked={c.blocked}>⚠ {T.blocked[c.blocked]}</span>}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                {scope === 'items' && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setPicked(new Set(selectable.map((c) => consentItemKey(c.item))))} className="min-h-[36px] rounded-full border-2 border-ink/15 bg-white px-3 text-[11px] font-black text-ink" data-select-all>{T.selectAll}</button>
+                    <button type="button" onClick={() => setPicked(new Set())} className="min-h-[36px] rounded-full border-2 border-ink/15 bg-white px-3 text-[11px] font-black text-ink">{T.clearAll}</button>
+                  </div>
+                )}
+                <ul className="mt-2 space-y-1.5" data-scope-list={scope}>
+                  {candidates.map((c) => {
+                    const k = consentItemKey(c.item);
+                    const body = (
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-black text-ink">{labelOf(c)}</span>
+                        <span className="block break-words text-[11px] font-bold text-muted">{c.preview}</span>
+                        {c.blocked && <span className="mt-0.5 block text-[11px] font-black text-amber-900" data-blocked={c.blocked}>⚠ {T.blocked[c.blocked]}</span>}
+                      </span>
+                    );
+                    return (
+                      <li key={k}>
+                        {scope === 'items' ? (
+                          <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-xl bg-white px-3 py-2">
+                            <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="mt-0.5 h-4 w-4 shrink-0" data-item={k} />
+                            {body}
+                          </label>
+                        ) : (
+                          <div className="flex items-start gap-2 rounded-xl bg-white px-3 py-2" data-included={k}>
+                            <span aria-hidden className="mt-0.5 text-[12px]">{c.blocked ? '⚠' : '✓'}</span>
+                            {body}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
           </div>
 

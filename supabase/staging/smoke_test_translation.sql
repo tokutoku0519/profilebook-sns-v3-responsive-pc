@@ -95,6 +95,15 @@ begin
     select count(*) into n from public.translation_consent_events where user_id = a;
     res := res || jsonb_build_array(jsonb_build_object('c', '法定の記録（同意・取り消し）は残る', 'ok', n >= 2, 'd', n::text || ' 件'));
 
+    -- 6b. 範囲「すべて（今後のものを含む）」
+    select * into r from public.grant_translation_consent(a, v, 'ja', repeat('a', 64), '{"t":"smoke"}'::jsonb, 1996, 4, '[]'::jsonb, 'all');
+    res := res || jsonb_build_array(jsonb_build_object('c', '「すべて（今後のものを含む）」で許可できる（項目を選ばない）', 'ok',
+      r.ok and (select scope_mode from public.translation_consents where user_id = a) = 'all', 'd', coalesce(r.reason, '')));
+    perform 1 from public.translatable_source('answer', null, ans_daily::text, v);
+    res := res || jsonb_build_array(jsonb_build_object('c', '「すべて」では、選んでいない公開の回答（デイリー）も取り出せる', 'ok', found, 'd', ''));
+    perform 1 from public.translatable_source('answer', null, ans_fol::text, v);
+    res := res || jsonb_build_array(jsonb_build_object('c', '「すべて」でも、フォロワー限定の回答は取り出せない', 'ok', not found, 'd', ''));
+
     -- 7. 権限（ブラウザのキー・ログイン中のユーザーからは使えない）
     procedure_ok := false;
     begin

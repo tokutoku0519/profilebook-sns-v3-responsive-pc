@@ -296,6 +296,35 @@ try {
   await stopApp(app);
 
   // ============================================================
+  section('A2. 翻訳する範囲「すべて（今後のものを含む）」');
+  app = await startApp();
+  const NEW_ANSWER = '11111111-0000-4000-8000-000000000009';
+  g = await grant('alice', [], { scope: 'bogus' });
+  check('決まっていない範囲は受け付けない（400）', g.status === 400, JSON.stringify(g));
+  g = await grant('alice', [], { scope: 'all' });
+  check('「すべて」は項目を選ばずに許可できる', g.status === 200 && g.json.ok === true, JSON.stringify(g));
+  c = (await api('alice', { action: 'get_consent' })).json;
+  check('本人の状態に「すべて」と出る（項目の一覧は空）', c.allow === true && c.scope === 'all' && c.items.length === 0, JSON.stringify(c));
+  check('「すべて」でも ownerAllows = true', (await status('?owner=alice')).ownerAllows === true);
+  r = await tr('bob', 'en', [pf('dream'), pf('specialty'), ans(ANSWER_IDS.public), ans(ANSWER_IDS.daily), ans(ANSWER_IDS.followers), pf('motto')]);
+  check('選ばなくても、公開の項目と回答（デイリーを含む）は翻訳する', r[k('dream')]?.status === 'done' && r[k('specialty')]?.status === 'done' && r[ak(ANSWER_IDS.public)]?.status === 'done' && r[ak(ANSWER_IDS.daily)]?.status === 'done', JSON.stringify(r));
+  check('「すべて」でもフォロワー限定の回答・項目は翻訳しない', r[ak(ANSWER_IDS.followers)]?.status === 'original' && r[k('motto')]?.status === 'original');
+  await fetch(`${SB}/__test/add-answer`, { method: 'POST', body: JSON.stringify({ id: NEW_ANSWER, user_id: IDS.alice, question_key: 'daily_2026-11-13', question_title: '今日のお題：好きな季節は？', body: '秋がいちばん好き', visibility: 'public' }) });
+  r = await tr('bob', 'en', [ans(NEW_ANSWER)]);
+  check('許可のあとに書いた公開の回答も、選び直さずに翻訳する', r[ak(NEW_ANSWER)]?.status === 'done', JSON.stringify(r));
+  g = await api('alice', { action: 'set_items', scope: 'items', items: items([], [ANSWER_IDS.public]) });
+  r = await tr('carol', 'en', [pf('dream'), ans(NEW_ANSWER), ans(ANSWER_IDS.public)]);
+  check('「選んだものだけ」に変えると、選ばなかった項目・回答は翻訳済みも返さない', g.json.ok === true && r[k('dream')]?.status === 'original' && r[ak(NEW_ANSWER)]?.status === 'original' && r[ak(ANSWER_IDS.public)]?.status === 'done', JSON.stringify(r));
+  g = await api('alice', { action: 'set_items', scope: 'all' });
+  r = await tr('carol', 'en', [pf('dream'), ans(NEW_ANSWER)]);
+  check('「すべて」に戻せる（項目なし）', g.json.ok === true && r[k('dream')]?.status === 'done' && r[ak(NEW_ANSWER)]?.status === 'done', JSON.stringify(g));
+  check('取り消し（「すべて」から）', (await api('alice', { action: 'revoke_consent' })).json.ok === true);
+  r = await tr('bob', 'en', [ans(NEW_ANSWER), pf('dream')]);
+  check('取り消したら「すべて」でも翻訳しない', r[ak(NEW_ANSWER)]?.status === 'original' && r[k('dream')]?.status === 'original' && (await status('?owner=alice')).ownerAllows === false);
+  await setAnswer(NEW_ANSWER, { visibility: 'private' });
+  await stopApp(app);
+
+  // ============================================================
   section('B. 予算の上限（$0.0012。24 件すべてなら約 $0.0021）と同時アクセス');
   await setBook('alice', { ...book, __questions: Array.from({ length: 24 }, (_, i) => ({ q: `質問${i}`, a: `こたえ${i}です` })), __visibility: {} });
   app = await startApp({ TRANSLATION_MONTHLY_CAP_USD: '0.0012' });

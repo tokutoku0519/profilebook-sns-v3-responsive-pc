@@ -10,7 +10,8 @@
 - [x] 段階 1：本番のスキーマの確認（26 行すべて true）
 - [x] 段階 2：検証用 Supabase（`miri-staging`）。本番の今の形に合わせ（形の比較で違いは profiles の列の順番と検証用の印だけ）、翻訳の SQL・退会の申請の SQL を適用。**実際の Supabase で verify 18 項目・smoke 23 項目がすべて true**
 - [x] Vercel の Preview（このブランチだけ）を検証用 DB につなぐ（2026-11-13。ログイン確認・本番に検証環境の表示が出ないことも確認）
-- [ ] 仮の翻訳（無料）で、アプリと検証用 DB の組み合わせを確認（`docs/translation-staging-mock-check.md`）
+- [x] 仮の翻訳（無料）で、アプリと検証用 DB の組み合わせを確認（`docs/translation-staging-mock-check.md`。2026-11-13「大枠は問題ない」）
+- [ ] 2026-11-13 追加：翻訳する範囲「すべて（今後のものを含む）」。検証用 DB に翻訳の SQL を流し直す（上から適用して、それまでの許可は「選んだものだけ」のまま残る）→ verify 18 項目・smoke 26 項目 → 画面で確認
 - [ ] 段階 3：Anthropic のワークスペース
 - [ ] 段階 4：実 API の少額テスト（要承認）
 
@@ -103,12 +104,12 @@ Supabase のダッシュボード → 本番のプロジェクト → 左の **S
 | `supabase/staging/inspect_candidate_project.sql` | 既存のプロジェクト（デモ用など）を検証用に使えるかの確認 | しない（read only） |
 | `supabase/staging/00_mark_as_staging.sql` | 検証用の印（@example.com 以外のユーザーが 1 人でもいれば付けない） | 検証用だけ |
 | `supabase/staging/seed_test_data.sql` | 架空のデータ（印がなければ止まる） | 検証用だけ |
-| `supabase/staging/smoke_test_translation.sql` | 動作確認 23 項目（実行後に何も残らない） | 検証用だけ（取り消される） |
+| `supabase/staging/smoke_test_translation.sql` | 動作確認 26 項目（実行後に何も残らない） | 検証用だけ（取り消される） |
 | `supabase/proposal_content_translations.sql` | 翻訳：テーブル 12・関数 24・トリガー 2 | する（要承認） |
 | `supabase/proposal_account_deletion_requests.sql` | 退会の申請：テーブル 1・RLS・トリガー 1・関数 1 | する（要承認） |
 | `supabase/verify_content_translations.sql` | 適用後の確認（18 項目） | しない |
 | `supabase/rollback_content_translations.sql` | 取り消し | する（要承認） |
-| `supabase/tests/translation/` | 手元の PostgreSQL でのテスト（197 項目） | 手元だけ |
+| `supabase/tests/translation/` | 手元の PostgreSQL でのテスト（217 項目） | 手元だけ |
 
 自動削除の予約（pg_cron を有効にしてから、適用したデータベースで 1 回だけ）：
 ```sql

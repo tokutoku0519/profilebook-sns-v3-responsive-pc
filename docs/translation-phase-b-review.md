@@ -4,6 +4,7 @@
 - **実装済み**：API・画面・予算制御・自動テスト。
 - **外部の翻訳 API**：実接続は無効。テスト用の仮の翻訳（外部へは何も送らない）で動く。
 - **未実施**：本番 DB への SQL 適用、Anthropic API の有料利用、本番での有効化。いずれも承認後に行う。
+- **2026-11-13 更新（翻訳する範囲）**：許可するときに「すべて（今後のものを含む）」か「選んだものだけ」かを選べるようにした。「すべて」は、公開中の項目・回答と、あとから公開したもの（今日のお題など）が対象。フォロワー限定・非公開と、連絡先などの個人情報のチェックは、どちらでも同じ。説明の版は `2026-11-v3-draft`（許可していた人は確認し直すまで新しい翻訳を止める）。テスト：SQL 217 項目・API と画面 256 項目、すべて合格。
 - **2026-11-11 更新（実環境検証の準備）**：検証用 Supabase の手順と SQL（`docs/staging-supabase-setup.md`・`supabase/staging/`）、Anthropic の手順（`docs/anthropic-workspace-setup.md`）、実 API テストの計画（`docs/translation-real-api-test-plan.md`）。法定の記録と技術ログを分けた。毎回の ping を廃止。テスト：SQL 197 項目・API と画面 226 項目、すべて合格（モックと手元の PostgreSQL。実環境では未確認）。
 - **2026-11-09 更新（実環境テスト前の最終修正）**：詳しくは `docs/translation-final-review.md`・`docs/translation-real-env-plan.md`。
   - 送信の記録を「送信中 → 結果（completed / geo_mismatch / error_response / unknown）」にした。

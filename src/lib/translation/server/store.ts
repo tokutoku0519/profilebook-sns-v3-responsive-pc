@@ -21,7 +21,7 @@ import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   consentItemKey, isTranslatableProfilePath, permissionKeyOf, TRANSLATABLE_PROFILE_FIELDS,
-  type ConsentCandidate, type ConsentItem, type KeptReason, type TranslateItem,
+  type ConsentCandidate, type ConsentItem, type KeptReason, type ScopeMode, type TranslateItem,
 } from '../shared';
 import { ageBandOf, ageFrom, AGE_RETRY_DAYS, CONSENT_TEXT, CONSENT_VERSION, MIN_CONSENT_AGE, type AgeBand, type ConsentLocale } from '../consentText';
 import { costUsd, type TranslationConfig, type Usage } from './config';
@@ -31,9 +31,9 @@ export type Cached = { status: 'done' | 'kept'; text?: string; keptReason?: Kept
 export type SaveInput = { status: 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; usage: Usage | null; costUsd: number; keptReason?: KeptReason };
 export type ReserveResult = { result: 'ok' | 'disabled' | 'budget' | 'user_limit' | 'owner_limit' | 'bad_estimate' | 'error'; id?: string };
 export type UsageReport = { month: string; spentUsd: number; reservedUsd: number; requests: number; cacheHits: number; inputTokens: number; outputTokens: number; capUsd: number; targetUsd: number };
-export type ConsentState = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[] };
+export type ConsentState = { allow: boolean; version: string | null; current: boolean; grantedAt: string | null; items: ConsentItem[]; scope: ScopeMode };
 /** 生まれた年月はサーバー（と SQL）で年齢の確認にだけ使い、保存しない。記録には年齢の区分だけを残す */
-export type GrantInput = { version: string; locale: ConsentLocale; birthYear: number; birthMonth: number; items: ConsentItem[] };
+export type GrantInput = { version: string; locale: ConsentLocale; birthYear: number; birthMonth: number; scope: ScopeMode; items: ConsentItem[] };
 export type GrantResult = { ok: true } | { ok: false; reason: 'old_version' | 'age' | 'age_locked' | 'age_invalid' | 'no_items' | 'not_public' };
 /** 外国への送信の記録。送る直前に「送信中」で作り、結果が分かったら書きかえる（送った事実は消さない） */
 export type ProvisionStart = { ownerId: string; item: TranslateItem; lang: string; requestedGeo: string; model: string; attempt: number };
@@ -68,7 +68,7 @@ export interface TranslationStore {
   getConsent(userId: string): Promise<ConsentState>;
   candidates(userId: string): Promise<CandidateRow[]>;
   grantConsent(userId: string, g: GrantInput): Promise<GrantResult>;
-  setConsentItems(userId: string, items: ConsentItem[]): Promise<GrantResult>;
+  setConsentItems(userId: string, scope: ScopeMode, items: ConsentItem[]): Promise<GrantResult>;
   revokeConsent(userId: string): Promise<void>;
   ownerAllows(username: string): Promise<boolean>;
   usage(): Promise<UsageReport | null>;
@@ -128,8 +128,8 @@ function allText(v: unknown): string {
 // ============================================================
 type MemRow = { status: 'pending' | 'done' | 'kept' | 'failed'; text?: string; keptTerms: string[]; at: number; keptReason?: KeptReason };
 type MemReservation = { id: string; month: string; estimate: number; actual?: number; status: 'reserved' | 'settled' | 'expired'; createdAt: number };
-type MemConsent = { allow: boolean; version: string; grantedAt: string; items: Map<string, ConsentItem>; eventId: number };
-type MemEvent = { id: number; userId: string; action: 'grant' | 'revoke' | 'scope_update'; version: string | null; textSha256: string | null; locale: string | null; ageCheck: string | null; ageBand: AgeBand | null; scope: string[]; at: string };
+type MemConsent = { allow: boolean; version: string; grantedAt: string; all: boolean; items: Map<string, ConsentItem>; eventId: number };
+type MemEvent = { id: number; userId: string; action: 'grant' | 'revoke' | 'scope_update'; version: string | null; textSha256: string | null; locale: string | null; ageCheck: string | null; ageBand: AgeBand | null; scope: string[]; scopeMode: ScopeMode | null; at: string };
 type MemProvision = {
   id: string; ownerId: string; sourceType: string; sourcePath: string; lang: string; recipient: string; requestedGeo: string; reportedGeo: string | null;
   outcome: 'sending' | ProvisionOutcome; consentEventId: number | null; at: string; completedAt?: string;
@@ -175,7 +175,7 @@ export class MemoryStore implements TranslationStore {
       const { data: prof } = await this.anon.from('profiles').select('id').eq('username', it.owner).maybeSingle();
       const ownerId = (prof as { id?: string } | null)?.id;
       const consent = ownerId ? this.currentConsent(ownerId) : null;
-      if (!ownerId || !consent || !consent.items.has(permissionKeyOf(it))) return null;
+      if (!ownerId || !consent || !(consent.all || consent.items.has(permissionKeyOf(it)))) return null;
       const { data: book } = await this.anon.rpc('get_visible_book', { target: it.owner });
       const top = it.path.split('.')[0];
       if (!book || typeof book !== 'object' || !(top in (book as object))) {
@@ -196,7 +196,7 @@ export class MemoryStore implements TranslationStore {
       return null;
     }
     const consent = this.currentConsent(row.user_id);
-    if (!consent || !consent.items.has(permissionKeyOf(it))) return null;
+    if (!consent || !(consent.all || consent.items.has(permissionKeyOf(it)))) return null;
     if (row.visibility !== 'public') {
       consent.items.delete(permissionKeyOf(it));
       this.purgeOwner(row.user_id, (k) => k.startsWith(`answer|${row.user_id}|${it.id}|`));
@@ -310,8 +310,8 @@ export class MemoryStore implements TranslationStore {
 
   async getConsent(userId: string): Promise<ConsentState> {
     const c = this.consents.get(userId);
-    if (!c || !c.allow) return { allow: false, version: null, current: false, grantedAt: null, items: [] };
-    return { allow: true, version: c.version, current: c.version === CONSENT_VERSION, grantedAt: c.grantedAt, items: [...c.items.values()] };
+    if (!c || !c.allow) return { allow: false, version: null, current: false, grantedAt: null, items: [], scope: 'items' };
+    return { allow: true, version: c.version, current: c.version === CONSENT_VERSION, grantedAt: c.grantedAt, items: [...c.items.values()], scope: c.all ? 'all' : 'items' };
   }
 
   async candidates(userId: string): Promise<CandidateRow[]> {
@@ -347,47 +347,54 @@ export class MemoryStore implements TranslationStore {
     if (age == null) return { ok: false, reason: 'age_invalid' };
     const band = ageBandOf(age);
     if (age < MIN_CONSENT_AGE || !band) { this.ageLocks.set(userId, this.now() + AGE_RETRY_DAYS * 86_400_000); return { ok: false, reason: 'age' }; }
-    if (!g.items.length) return { ok: false, reason: 'no_items' };
-    const items = await this.validItems(userId, g.items);
+    const all = g.scope === 'all';
+    if (!all && !g.items.length) return { ok: false, reason: 'no_items' };
+    const items = all ? [] : await this.validItems(userId, g.items);
     if (!items) return { ok: false, reason: 'not_public' };
     const at = new Date(this.now()).toISOString();
-    const ev: MemEvent = { id: ++this.seq, userId, action: 'grant', version: g.version, textSha256: consentTextSha256(g.version, g.locale), locale: g.locale, ageCheck: 'self_declared_16_plus', ageBand: band, scope: items.map(consentItemKey), at };
+    const ev: MemEvent = { id: ++this.seq, userId, action: 'grant', version: g.version, textSha256: consentTextSha256(g.version, g.locale), locale: g.locale, ageCheck: 'self_declared_16_plus', ageBand: band, scope: items.map(consentItemKey), scopeMode: g.scope, at };
     this.events.push(ev);
-    this.consents.set(userId, { allow: true, version: g.version, grantedAt: at, items: new Map(items.map((i) => [consentItemKey(i), i])), eventId: ev.id });
+    const prev = this.consents.get(userId);
+    this.consents.set(userId, { allow: true, version: g.version, grantedAt: at, all, items: new Map(items.map((i) => [consentItemKey(i), i])), eventId: ev.id });
+    if (!all && prev) this.purgeUnselected(userId, new Set(items.map(consentItemKey)));
     return { ok: true };
   }
 
-  async setConsentItems(userId: string, items: ConsentItem[]): Promise<GrantResult> {
+  async setConsentItems(userId: string, scope: ScopeMode, items: ConsentItem[]): Promise<GrantResult> {
     const c = this.currentConsent(userId);
     if (!c) return { ok: false, reason: 'old_version' };
-    if (!items.length) return { ok: false, reason: 'no_items' };
-    const valid = await this.validItems(userId, items);
+    const all = scope === 'all';
+    if (!all && !items.length) return { ok: false, reason: 'no_items' };
+    const valid = all ? [] : await this.validItems(userId, items);
     if (!valid) return { ok: false, reason: 'not_public' };
     const keep = new Set(valid.map(consentItemKey));
-    // 外した項目の翻訳は消す
-    for (const k of [...c.items.keys()]) if (!keep.has(k)) {
-      c.items.delete(k);
-      const [kind, id] = k.split(':');
-      this.purgeOwner(userId, (rk) => (kind === 'answer' ? rk.startsWith(`answer|${userId}|${id}|`) : rk.startsWith('profile_field|') && rk.split('|')[2].split('.')[0] === id));
-    }
-    for (const i of valid) c.items.set(consentItemKey(i), i);
-    const ev: MemEvent = { id: ++this.seq, userId, action: 'scope_update', version: c.version, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [...keep], at: new Date(this.now()).toISOString() };
+    c.all = all;
+    c.items = new Map(valid.map((i) => [consentItemKey(i), i]));
+    if (!all) this.purgeUnselected(userId, keep);                             // 選ばなかった項目の翻訳は消す（前が「すべて」でも）
+    const ev: MemEvent = { id: ++this.seq, userId, action: 'scope_update', version: c.version, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [...keep], scopeMode: scope, at: new Date(this.now()).toISOString() };
     this.events.push(ev);
     c.eventId = ev.id;
     return { ok: true };
+  }
+  /** 選んだ項目（keep）に入っていない翻訳を消す */
+  private purgeUnselected(userId: string, keep: Set<string>) {
+    this.purgeOwner(userId, (rk) => {
+      const [type, , path] = rk.split('|');
+      return !keep.has(type === 'answer' ? `answer:${path}` : `profile:${path.split('.')[0]}`);
+    });
   }
 
   async revokeConsent(userId: string) {
     this.consents.delete(userId);
     this.purgeOwner(userId);                                                  // ① 翻訳キャッシュは削除
-    this.events.push({ id: ++this.seq, userId, action: 'revoke', version: null, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [], at: new Date(this.now()).toISOString() }); // ② 記録は残す
+    this.events.push({ id: ++this.seq, userId, action: 'revoke', version: null, textSha256: null, locale: null, ageCheck: null, ageBand: null, scope: [], scopeMode: null, at: new Date(this.now()).toISOString() }); // ② 記録は残す
   }
 
   async ownerAllows(username: string) {
     const { data } = await this.anon.from('profiles').select('id').eq('username', username).maybeSingle();
     const id = (data as { id?: string } | null)?.id;
     const c = id ? this.currentConsent(id) : null;
-    return !!c && c.items.size > 0;
+    return !!c && (c.all || c.items.size > 0);
   }
 
   async usage(): Promise<UsageReport> {
@@ -479,9 +486,9 @@ export class DbStore implements TranslationStore {
   }
   async getConsent(userId: string): Promise<ConsentState> {
     const { data } = await this.admin.rpc('get_translation_consent', { p_user: userId, p_current_version: CONSENT_VERSION });
-    const row = (data as Array<{ allow: boolean; version: string | null; is_current: boolean; granted_at: string | null; items: ConsentItem[] | null }>)?.[0];
-    if (!row?.allow) return { allow: false, version: null, current: false, grantedAt: null, items: [] };
-    return { allow: true, version: row.version, current: row.is_current, grantedAt: row.granted_at, items: row.items ?? [] };
+    const row = (data as Array<{ allow: boolean; version: string | null; is_current: boolean; granted_at: string | null; items: ConsentItem[] | null; scope_mode: string | null }>)?.[0];
+    if (!row?.allow) return { allow: false, version: null, current: false, grantedAt: null, items: [], scope: 'items' };
+    return { allow: true, version: row.version, current: row.is_current, grantedAt: row.granted_at, items: row.items ?? [], scope: row.scope_mode === 'all' ? 'all' : 'items' };
   }
   async candidates(userId: string): Promise<CandidateRow[]> {
     const { data } = await this.admin.rpc('translation_candidates', { p_user: userId });
@@ -496,13 +503,14 @@ export class DbStore implements TranslationStore {
     const { data, error } = await this.admin.rpc('grant_translation_consent', {
       p_user: userId, p_version: g.version, p_locale: g.locale, p_text_sha256: consentTextSha256(g.version, g.locale),
       p_notice: consentNotice(g.version, g.locale), p_birth_year: g.birthYear, p_birth_month: g.birthMonth, p_items: g.items,
+      p_scope_mode: g.scope,
     });
     const row = (data as Array<{ ok: boolean; reason: string | null }>)?.[0];
     if (error || !row) return { ok: false, reason: 'not_public' };
     return row.ok ? { ok: true } : { ok: false, reason: (row.reason as Exclude<GrantResult, { ok: true }>['reason']) ?? 'not_public' };
   }
-  async setConsentItems(userId: string, items: ConsentItem[]): Promise<GrantResult> {
-    const { data, error } = await this.admin.rpc('set_translation_items', { p_user: userId, p_current_version: CONSENT_VERSION, p_items: items });
+  async setConsentItems(userId: string, scope: ScopeMode, items: ConsentItem[]): Promise<GrantResult> {
+    const { data, error } = await this.admin.rpc('set_translation_items', { p_user: userId, p_current_version: CONSENT_VERSION, p_items: items, p_scope_mode: scope });
     const row = (data as Array<{ ok: boolean; reason: string | null }>)?.[0];
     if (error || !row) return { ok: false, reason: 'not_public' };
     return row.ok ? { ok: true } : { ok: false, reason: (row.reason as Exclude<GrantResult, { ok: true }>['reason']) ?? 'not_public' };

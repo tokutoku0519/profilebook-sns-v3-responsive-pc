@@ -12,6 +12,8 @@
 --  2. 本人がその項目を「公開して翻訳してよい」と選んでいる（translation_item_permissions）
 --     プロフ帳はセクション（motto・__questions など）ごと、回答は 1 件ごと。
 --     公開範囲が未設定の項目や、選択なしで公開になった回答（デイリーのお題など）は、選ばれていなければ対象外
+--     ただし本人が「すべて（今後のものを含む）」を選んだとき（translation_consents.scope_mode = 'all'）は、
+--     項目の選択を使わず、そのとき公開しているすべての項目・回答（あとから書いたものを含む）が対象。3・4 はそのまま確かめる
 --  3. いまも「ログインしていない人」に見える（既存の get_visible_book と answers.visibility = 'public' で判定）
 --  4. 翻訳してよい項目・場所の形・文字数の上限
 --
@@ -40,6 +42,12 @@
 -- 取り消し：いちばん下の「ROLLBACK（取り消し）」を別タブで実行。
 -- ============================================================
 begin;
+
+-- 以前の案の関数のうち、引数・戻り値が変わったもの（検証用 DB に前の版を適用していた場合だけ。初めて適用するときは何もしない）
+drop function if exists public.translation_replace_items(uuid, jsonb, bigint);
+drop function if exists public.grant_translation_consent(uuid, text, text, text, jsonb, integer, integer, jsonb);
+drop function if exists public.set_translation_items(uuid, text, jsonb);
+drop function if exists public.get_translation_consent(uuid, text);
 
 -- ── 1. 設定（1 行だけ）──────────────────────────────────────
 create table if not exists public.translation_settings (
@@ -77,8 +85,10 @@ create table if not exists public.translation_consents (
   version       text,                    -- 同意した説明の版
   granted_at    timestamptz,
   last_event_id bigint,                  -- いまの状態を作った履歴（translation_consent_events.id）
+  scope_mode    text not null default 'items' check (scope_mode in ('items','all')),  -- items：選んだ項目だけ／all：公開中のすべて（今後のものを含む）
   updated_at    timestamptz not null default now()
 );
+alter table public.translation_consents add column if not exists scope_mode text not null default 'items' check (scope_mode in ('items','all'));
 create table if not exists public.translation_item_permissions (
   owner_id         uuid not null references public.profiles(id) on delete cascade,
   item_kind        text not null check (item_kind in ('profile_section','answer')),
@@ -98,11 +108,13 @@ create table if not exists public.translation_consent_events (
   locale              text check (locale in ('ja','en')),
   age_check           text check (age_check in ('self_declared_16_plus')),  -- 将来：保護者の同意（'guardian_consent'）を追加
   age_band            text check (age_band in ('16_17','18_plus')),         -- 生年月は残さず、区分だけ
-  scope               jsonb not null default '[]'::jsonb,                   -- 選んだ項目の一覧
+  scope               jsonb not null default '[]'::jsonb,                   -- 選んだ項目の一覧（scope_mode = 'all' のときは空）
+  scope_mode          text check (scope_mode in ('items','all')),            -- all：公開中のすべて（今後のものを含む）に同意した。取り消しは null
   created_at          timestamptz not null default now(),
   retain_until        timestamptz not null default now() + interval '3 years',
   retention_basis     text not null default 'consent_evidence'
 );
+alter table public.translation_consent_events add column if not exists scope_mode text check (scope_mode in ('items','all'));
 -- 同意の前に表示した説明の全文（ハッシュから文面を確かめられるように。個人情報は含まない）
 create table if not exists public.translation_consent_notices (
   sha256        text primary key check (sha256 ~ '^[0-9a-f]{64}$'),
@@ -283,8 +295,9 @@ begin
     select * into a from public.answers x where x.id = p_path::uuid;
     if not found or a.visibility is distinct from 'public' then return; end if;
     if public.translation_consent_current(a.user_id, p_current_version) is null then return; end if;
-    if not exists (select 1 from public.translation_item_permissions ip
-                    where ip.owner_id = a.user_id and ip.item_kind = 'answer' and ip.item_key = p_path) then return; end if;
+    if (select c.scope_mode from public.translation_consents c where c.user_id = a.user_id) is distinct from 'all'
+       and not exists (select 1 from public.translation_item_permissions ip
+                        where ip.owner_id = a.user_id and ip.item_kind = 'answer' and ip.item_key = p_path) then return; end if;
     if a.body is null or btrim(a.body) = '' or char_length(a.body) > s.max_answer_chars then return; end if;
     owner_id := a.user_id; text_value := a.body; source_hash := md5(a.body); context := left(a.question_title, 200);
     return next; return;
@@ -307,8 +320,9 @@ begin
   select p.id into tgt from public.profiles p where p.username = p_owner;
   if tgt is null then return; end if;
   if public.translation_consent_current(tgt, p_current_version) is null then return; end if;
-  if not exists (select 1 from public.translation_item_permissions ip
-                  where ip.owner_id = tgt and ip.item_kind = 'profile_section' and ip.item_key = top) then return; end if;
+  if (select c.scope_mode from public.translation_consents c where c.user_id = tgt) is distinct from 'all'
+     and not exists (select 1 from public.translation_item_permissions ip
+                      where ip.owner_id = tgt and ip.item_kind = 'profile_section' and ip.item_key = top) then return; end if;
   select pb.book into raw from public.profile_book pb where pb.id = tgt;
   if raw is null then return; end if;
   vis := raw -> '__visibility' ->> top;
@@ -591,36 +605,36 @@ as $$
            where c.kind = e ->> 'kind' and c.item_key = coalesce(e ->> 'key', e ->> 'id')))
 $$;
 
--- 選んだ項目を置きかえる（外した項目の翻訳キャッシュは消す）
-create or replace function public.translation_replace_items(p_user uuid, p_items jsonb, p_event bigint)
+-- 翻訳の対象を置きかえる
+--  all：項目の選択は使わない（公開中のすべて・今後のものを含む）。翻訳キャッシュはそのまま使える
+--  items：選んだ項目だけ。選んでいない項目の翻訳キャッシュは消す（前が all だった場合も含む）
+create or replace function public.translation_replace_items(p_user uuid, p_mode text, p_items jsonb, p_event bigint)
 returns void
 language plpgsql security definer set search_path = public
 as $$
-declare r record;
 begin
-  for r in
-    select ip.item_kind, ip.item_key from public.translation_item_permissions ip
-     where ip.owner_id = p_user
-       and not exists (select 1 from jsonb_array_elements(p_items) e
-                        where e ->> 'kind' = ip.item_kind and coalesce(e ->> 'key', e ->> 'id') = ip.item_key)
-  loop
-    if r.item_kind = 'answer' then
-      delete from public.content_translations where source_type = 'answer' and owner_id = p_user and source_path = r.item_key;
-    else
-      delete from public.content_translations where source_type = 'profile_field' and owner_id = p_user and split_part(source_path, '.', 1) = r.item_key;
-    end if;
-  end loop;
   delete from public.translation_item_permissions where owner_id = p_user;
+  if p_mode = 'all' then
+    update public.translation_consents set scope_mode = 'all' where user_id = p_user;
+    return;
+  end if;
+  delete from public.content_translations ct
+   where ct.owner_id = p_user
+     and not exists (select 1 from jsonb_array_elements(p_items) e
+                      where (ct.source_type = 'answer' and e ->> 'kind' = 'answer' and e ->> 'id' = ct.source_path)
+                         or (ct.source_type = 'profile_field' and e ->> 'kind' = 'profile_section' and e ->> 'key' = split_part(ct.source_path, '.', 1)));
   insert into public.translation_item_permissions (owner_id, item_kind, item_key, consent_event_id)
   select p_user, e ->> 'kind', coalesce(e ->> 'key', e ->> 'id'), p_event from jsonb_array_elements(p_items) e
   on conflict do nothing;
+  update public.translation_consents set scope_mode = 'items' where user_id = p_user;
 end;
 $$;
 
 -- 許可。年齢は SQL でも計算し直す（日本時間・誕生月は月末生まれとして少なめに数える）。生まれた年月は保存しない。
 -- 16 歳未満なら一定期間（age_retry）再入力できないようにする。年齢不明（形がおかしい・未来）は許可しない
 create or replace function public.grant_translation_consent(p_user uuid, p_version text, p_locale text, p_text_sha256 text,
-                                                           p_notice jsonb, p_birth_year integer, p_birth_month integer, p_items jsonb)
+                                                           p_notice jsonb, p_birth_year integer, p_birth_month integer, p_items jsonb,
+                                                           p_scope_mode text default 'items')
 returns table (ok boolean, reason text)
 language plpgsql security definer set search_path = public
 as $$
@@ -643,23 +657,27 @@ begin
     ok := false; reason := 'age'; return next; return;
   end if;
   band := case when age >= 18 then '18_plus' else '16_17' end;
-  if p_items is null or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
-  if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  if p_scope_mode is null or p_scope_mode not in ('items','all') then ok := false; reason := 'no_items'; return next; return; end if;
+  if p_scope_mode = 'items' then
+    if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
+    if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  end if;
   if p_notice is not null and p_text_sha256 is not null then
     insert into public.translation_consent_notices (sha256, version, locale, notice) values (p_text_sha256, p_version, p_locale, p_notice)
     on conflict (sha256) do nothing;
   end if;
-  insert into public.translation_consent_events (user_id, action, consent_version, consent_text_sha256, locale, age_check, age_band, scope, retain_until)
-  values (p_user, 'grant', p_version, p_text_sha256, p_locale, 'self_declared_16_plus', band, p_items, now() + s.legal_record_retention) returning id into ev;
+  insert into public.translation_consent_events (user_id, action, consent_version, consent_text_sha256, locale, age_check, age_band, scope, scope_mode, retain_until)
+  values (p_user, 'grant', p_version, p_text_sha256, p_locale, 'self_declared_16_plus', band,
+          case when p_scope_mode = 'all' then '[]'::jsonb else p_items end, p_scope_mode, now() + s.legal_record_retention) returning id into ev;
   insert into public.translation_consents (user_id, allow, version, granted_at, last_event_id, updated_at)
   values (p_user, true, p_version, now(), ev, now())
   on conflict (user_id) do update set allow = true, version = excluded.version, granted_at = now(), last_event_id = ev, updated_at = now();
-  perform public.translation_replace_items(p_user, p_items, ev);
+  perform public.translation_replace_items(p_user, p_scope_mode, p_items, ev);
   ok := true; return next;
 end;
 $$;
 
-create or replace function public.set_translation_items(p_user uuid, p_current_version text, p_items jsonb)
+create or replace function public.set_translation_items(p_user uuid, p_current_version text, p_items jsonb, p_scope_mode text default 'items')
 returns table (ok boolean, reason text)
 language plpgsql security definer set search_path = public
 as $$
@@ -667,13 +685,16 @@ declare ev bigint; cv text;
 begin
   if auth.uid() is not null then ok := false; reason := 'forbidden'; return next; return; end if;
   if public.translation_consent_current(p_user, p_current_version) is null then ok := false; reason := 'old_version'; return next; return; end if;
-  if p_items is null or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
-  if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  if p_scope_mode is null or p_scope_mode not in ('items','all') then ok := false; reason := 'no_items'; return next; return; end if;
+  if p_scope_mode = 'items' then
+    if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then ok := false; reason := 'no_items'; return next; return; end if;
+    if not public.translation_items_valid(p_user, p_items) then ok := false; reason := 'not_public'; return next; return; end if;
+  end if;
   select version into cv from public.translation_consents where user_id = p_user;
-  insert into public.translation_consent_events (user_id, action, consent_version, scope)
-  values (p_user, 'scope_update', cv, p_items) returning id into ev;
+  insert into public.translation_consent_events (user_id, action, consent_version, scope, scope_mode)
+  values (p_user, 'scope_update', cv, case when p_scope_mode = 'all' then '[]'::jsonb else p_items end, p_scope_mode) returning id into ev;
   update public.translation_consents set last_event_id = ev, updated_at = now() where user_id = p_user;
-  perform public.translation_replace_items(p_user, p_items, ev);
+  perform public.translation_replace_items(p_user, p_scope_mode, p_items, ev);
   ok := true; return next;
 end;
 $$;
@@ -687,20 +708,21 @@ declare ev bigint;
 begin
   if auth.uid() is not null then return; end if;
   insert into public.translation_consent_events (user_id, action) values (p_user, 'revoke') returning id into ev;
-  update public.translation_consents set allow = false, last_event_id = ev, updated_at = now() where user_id = p_user;
+  update public.translation_consents set allow = false, scope_mode = 'items', last_event_id = ev, updated_at = now() where user_id = p_user;
   delete from public.translation_item_permissions where owner_id = p_user;
   delete from public.content_translations where owner_id = p_user;
 end;
 $$;
 
 create or replace function public.get_translation_consent(p_user uuid, p_current_version text)
-returns table (allow boolean, version text, is_current boolean, granted_at timestamptz, items jsonb)
+returns table (allow boolean, version text, is_current boolean, granted_at timestamptz, items jsonb, scope_mode text)
 language sql stable security definer set search_path = public
 as $$
   select coalesce(c.allow, false), c.version, coalesce(c.allow and c.version = p_current_version, false), c.granted_at,
          coalesce((select jsonb_agg(case when ip.item_kind = 'answer' then jsonb_build_object('kind','answer','id',ip.item_key)
                                          else jsonb_build_object('kind','profile_section','key',ip.item_key) end)
-                     from public.translation_item_permissions ip where ip.owner_id = p_user), '[]'::jsonb)
+                     from public.translation_item_permissions ip where ip.owner_id = p_user), '[]'::jsonb),
+         coalesce(c.scope_mode, 'items')
     from (select p_user as uid) x left join public.translation_consents c on c.user_id = x.uid
 $$;
 
@@ -712,7 +734,7 @@ as $$
     select 1 from public.profiles p
       join public.translation_consents c on c.user_id = p.id and c.allow and c.version = p_current_version
      where p.username = p_username
-       and exists (select 1 from public.translation_item_permissions ip where ip.owner_id = p.id))
+       and (c.scope_mode = 'all' or exists (select 1 from public.translation_item_permissions ip where ip.owner_id = p.id)))
 $$;
 
 -- ── 保存・削除の条件は 3 種類で分ける（Supabase の pg_cron などで 1 日 1 回ずつ）──────────────
@@ -781,8 +803,8 @@ do $$ declare f text; begin
     'begin_translation_provision(uuid, text, text, text, text, text, integer, text)',
     'finish_translation_provision(bigint, text, text, text, text, text, integer)', 'halt_translation(text)', 'reserve_translation(uuid, uuid, numeric)',
     'settle_translation(bigint, integer, integer, integer, integer)', 'translation_candidates(uuid)',
-    'translation_items_valid(uuid, jsonb)', 'translation_replace_items(uuid, jsonb, bigint)',
-    'grant_translation_consent(uuid, text, text, text, jsonb, integer, integer, jsonb)', 'set_translation_items(uuid, text, jsonb)',
+    'translation_items_valid(uuid, jsonb)', 'translation_replace_items(uuid, text, jsonb, bigint)',
+    'grant_translation_consent(uuid, text, text, text, jsonb, integer, integer, jsonb, text)', 'set_translation_items(uuid, text, jsonb, text)',
     'revoke_translation_consent(uuid)', 'get_translation_consent(uuid, text)', 'owner_allows_translation(text, text)',
     'purge_translation_legal_records()', 'purge_translation_send_log()', 'purge_translation_cost_records()', 'purge_translation_cache()'] loop
     execute format('revoke all on function public.%s from public, anon, authenticated', f);

@@ -126,6 +126,7 @@ export function startMockSupabase(port) {
 
     if (p === '/__test/book') { const b = JSON.parse(body); state.books[b.username] = b.book; return json(200, {}); }
     if (p === '/__test/answer') { const b = JSON.parse(body); Object.assign(state.answers.find((a) => a.id === b.id), b.patch); return json(200, {}); }
+    if (p === '/__test/add-answer') { const b = JSON.parse(body); state.answers.push({ question_category: 'デイリー', sticker: null, created_at: new Date().toISOString(), ...b }); return json(200, {}); }
     if (p === '/__test/writes') return json(200, state.writes);
     if (p === '/__test/reset') { state.books = defaultBooks(); return json(200, {}); }
     if (p === '/__test/notify') { state.notices.push(JSON.parse(body || '{}')); return json(200, {}); }

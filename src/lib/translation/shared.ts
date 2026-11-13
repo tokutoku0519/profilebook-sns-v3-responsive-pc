@@ -61,6 +61,9 @@ export const itemKey = (it: TranslateItem) => (it.kind === 'answer' ? `answer:${
 // 選んでいない項目・回答は、公開されていても翻訳しない（未設定の公開範囲を公開とみなさないため）。
 export type ProfileSection = (typeof TRANSLATABLE_PROFILE_FIELDS)[number];
 export type ConsentItem = { kind: 'profile_section'; key: ProfileSection } | { kind: 'answer'; id: string };
+/** 翻訳の対象の範囲。items：選んだ項目だけ／all：公開中のすべて（あとから公開したものを含む）。どちらも公開以外は送らない */
+export type ScopeMode = 'items' | 'all';
+export const parseScopeMode = (v: unknown): ScopeMode | null => (v === 'all' || v === 'items' ? v : v == null ? 'items' : null);
 export const consentItemKey = (c: ConsentItem) => (c.kind === 'answer' ? `answer:${c.id}` : `profile:${c.key}`);
 /** 翻訳する項目が、どの同意の対象に当たるか */
 export const permissionKeyOf = (it: TranslateItem) => (it.kind === 'answer' ? `answer:${it.id}` : `profile:${it.path.split('.')[0]}`);

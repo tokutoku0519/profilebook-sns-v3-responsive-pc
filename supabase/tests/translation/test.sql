@@ -522,3 +522,76 @@ do $$ declare r record; q record; n int; begin
   raise notice '% 費用・キャッシュ・技術ログの削除は法定の記録に触れない', case when n = 1 then 'PASS' else 'FAIL' end;
 end $$;
 reset role;
+
+\echo '== 9b. すべて（今後のものを含む）の許可'
+reset role;
+insert into public.profiles (id, username) values ('ffffffff-0000-4000-8000-000000000006', 'emi');
+insert into public.profile_book values ('ffffffff-0000-4000-8000-000000000006',
+  '{"dream":"宇宙飛行士","specialty":"けん玉","motto":"一期一会","__visibility":{"dream":"public","specialty":"public","motto":"followers"}}');
+insert into public.answers (id, user_id, question_key, question_title, body, visibility) values
+  ('44444444-0000-4000-8000-000000000001', 'ffffffff-0000-4000-8000-000000000006', 'd1', '好きな季節は？', '秋', 'public'),
+  ('44444444-0000-4000-8000-000000000002', 'ffffffff-0000-4000-8000-000000000006', 'd2', '休みの日は？', '釣り', 'followers');
+set role service_role; set request.jwt.claims = '{"role":"service_role"}';
+do $$ declare r record; n int; ev public.translation_consent_events%rowtype; ok boolean; D uuid := 'ffffffff-0000-4000-8000-000000000006'; begin
+  select * into r from public.grant_translation_consent(D,'v1','ja',repeat('c',64),'{"t":"notice"}'::jsonb,2015,1,'[]'::jsonb,'all');
+  raise notice '% 「すべて」でも年齢の確認はする（16 歳未満は断る）', case when not r.ok and r.reason = 'age' then 'PASS' else 'FAIL' end;
+  delete from public.translation_age_gate where user_id = D;
+  select * into r from public.grant_translation_consent(D,'v1','ja',repeat('c',64),'{"t":"notice"}'::jsonb,2000,4,'[]'::jsonb,'xyz');
+  raise notice '% 決まっていない範囲（xyz）は断る', case when not r.ok then 'PASS' else 'FAIL' end;
+  select * into r from public.grant_translation_consent(D,'v1','ja',repeat('c',64),'{"t":"notice"}'::jsonb,2000,4,'[]'::jsonb,'all');
+  raise notice '% 「すべて」は項目を選ばずに許可できる', case when r.ok then 'PASS' else 'FAIL' end;
+  select * into ev from public.translation_consent_events where user_id = D order by id desc limit 1;
+  raise notice '% 同意の記録に「すべて」と残る（scope_mode=all・項目は空）', case when ev.action = 'grant' and ev.scope_mode = 'all' and ev.scope = '[]'::jsonb then 'PASS' else 'FAIL' end;
+  select count(*) into n from public.translation_item_permissions where owner_id = D;
+  raise notice '% 項目の選択の行は作らない', case when n = 0 then 'PASS' else 'FAIL' end;
+  raise notice '% owner_allows_translation = true', case when public.owner_allows_translation('emi','v1') then 'PASS' else 'FAIL' end;
+  select * into r from public.get_translation_consent(D,'v1');
+  raise notice '% 本人の状態に「すべて」が出る', case when r.allow and r.scope_mode = 'all' then 'PASS' else 'FAIL' end;
+  raise notice '% 公開のプロフ帳の項目は翻訳できる（夢）', case when exists (select 1 from public.translatable_source('profile_field','emi','dream','v1')) then 'PASS' else 'FAIL' end;
+  raise notice '% 公開の回答は翻訳できる', case when exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000001','v1')) then 'PASS' else 'FAIL' end;
+  raise notice '% 「すべて」でもフォロワー限定の項目は翻訳しない（座右の銘）', case when not exists (select 1 from public.translatable_source('profile_field','emi','motto','v1')) then 'PASS' else 'FAIL' end;
+  raise notice '% 「すべて」でもフォロワー限定の回答は翻訳しない', case when not exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000002','v1')) then 'PASS' else 'FAIL' end;
+  raise notice '% 説明の版が変わったら止まる（v2）', case when not exists (select 1 from public.translatable_source('profile_field','emi','dream','v2')) then 'PASS' else 'FAIL' end;
+end $$;
+reset role;
+-- 許可のあとに書いた回答（今日のお題など）
+insert into public.answers (id, user_id, question_key, question_title, body, visibility) values
+  ('44444444-0000-4000-8000-000000000003', 'ffffffff-0000-4000-8000-000000000006', 'daily_2026-11-13', '今日のお題：朝ごはんは？', 'おにぎり', 'public');
+set role service_role; set request.jwt.claims = '{"role":"service_role"}';
+do $$ begin
+  raise notice '% 許可のあとに書いた公開の回答も翻訳できる', case when exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000003','v1')) then 'PASS' else 'FAIL' end;
+  perform public.claim_translation('profile_field','emi','dream','en','x','v1');
+  perform public.store_translation('profile_field','emi','dream','en', md5('宇宙飛行士'),'done','An astronaut', null, 1, 1, 0, 'v1');
+  perform public.claim_translation('answer','emi','44444444-0000-4000-8000-000000000003','en','x','v1');
+  perform public.store_translation('answer','emi','44444444-0000-4000-8000-000000000003','en', md5('おにぎり'),'done','Rice balls', null, 1, 1, 0, 'v1');
+end $$;
+reset role;
+update public.profile_book set book = jsonb_set(book, '{__visibility,dream}', '"followers"') where id = 'ffffffff-0000-4000-8000-000000000006';
+set role service_role; set request.jwt.claims = '{"role":"service_role"}';
+do $$ declare n int; begin
+  select count(*) into n from public.content_translations where owner_id = 'ffffffff-0000-4000-8000-000000000006' and source_type = 'profile_field';
+  raise notice '% 公開以外にしたら、その翻訳は消え、翻訳もしない', case when n = 0 and not exists (select 1 from public.translatable_source('profile_field','emi','dream','v1')) then 'PASS' else 'FAIL' end;
+end $$;
+reset role;
+update public.profile_book set book = jsonb_set(book, '{__visibility,dream}', '"public"') where id = 'ffffffff-0000-4000-8000-000000000006';
+set role service_role; set request.jwt.claims = '{"role":"service_role"}';
+do $$ declare r record; n int; ev public.translation_consent_events%rowtype; D uuid := 'ffffffff-0000-4000-8000-000000000006'; begin
+  raise notice '% 「すべて」では、公開に戻した項目はまた翻訳できる（選び直しは不要）', case when exists (select 1 from public.translatable_source('profile_field','emi','dream','v1')) then 'PASS' else 'FAIL' end;
+  -- 「選んだものだけ」に変える：公開の回答 1 件だけ
+  select * into r from public.set_translation_items(D,'v1','[{"kind":"answer","id":"44444444-0000-4000-8000-000000000001"}]'::jsonb,'items');
+  select * into ev from public.translation_consent_events where user_id = D order by id desc limit 1;
+  raise notice '% 「選んだものだけ」に変えられる（記録は scope_update・items）', case when r.ok and ev.action = 'scope_update' and ev.scope_mode = 'items' then 'PASS' else 'FAIL' end;
+  select count(*) into n from public.content_translations where owner_id = D and source_path = '44444444-0000-4000-8000-000000000003';
+  raise notice '% 選ばなかった回答の翻訳は消える（「すべて」から変えたとき）', case when n = 0 then 'PASS' else 'FAIL' end;
+  raise notice '% 選ばなかった項目・回答は翻訳しない', case when not exists (select 1 from public.translatable_source('profile_field','emi','dream','v1'))
+    and not exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000003','v1'))
+    and exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000001','v1')) then 'PASS' else 'FAIL' end;
+  select * into r from public.set_translation_items(D,'v1',null,'all');
+  raise notice '% 「すべて」に戻せる（項目なし）', case when r.ok and (select scope_mode from public.translation_consents where user_id = D) = 'all'
+    and (select count(*) from public.translation_item_permissions where owner_id = D) = 0 then 'PASS' else 'FAIL' end;
+  perform public.revoke_translation_consent(D);
+  raise notice '% 取り消すと止まり、範囲は items に戻る', case when not public.owner_allows_translation('emi','v1')
+    and (select scope_mode from public.translation_consents where user_id = D) = 'items'
+    and not exists (select 1 from public.translatable_source('answer','emi','44444444-0000-4000-8000-000000000001','v1')) then 'PASS' else 'FAIL' end;
+end $$;
+reset role;

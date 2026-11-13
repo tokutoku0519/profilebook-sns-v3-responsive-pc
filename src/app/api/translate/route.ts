@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Lang } from '@/lib/i18n';
-import { parseConsentItem, parseTranslateItem, TRANSLATION_LANGS, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
+import { parseConsentItem, parseScopeMode, parseTranslateItem, TRANSLATION_LANGS, type ConsentItem, type TranslateItem } from '@/lib/translation/shared';
 import { CONSENT_VERSION } from '@/lib/translation/consentText';
 import { getRuntime, translateMany, userIdFromToken } from '@/lib/translation/server/service';
 import { screenPersonalInfo } from '@/lib/translation/server/pii';
@@ -79,21 +79,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ candidates });
   }
   if (body.action === 'grant_consent') {
-    const items = parseItems(body.items);
+    // scope：items（選んだ項目だけ）／all（公開中のすべて・今後のものを含む。項目は送らなくてよい）
+    const scope = parseScopeMode(body.scope);
+    const items = scope === 'all' ? [] : parseItems(body.items);
     const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
     const birthYear = int(body.birthYear), birthMonth = int(body.birthMonth);
-    if (!items || (body.locale !== 'ja' && body.locale !== 'en') || typeof body.version !== 'string') {
+    if (!scope || !items || (body.locale !== 'ja' && body.locale !== 'en') || typeof body.version !== 'string') {
       return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
     }
     // 年齢が分からない（入力なし・形がおかしい）ときは許可しない
     if (birthYear == null || birthMonth == null) return NextResponse.json({ ok: false, reason: 'age_invalid' }, { status: 400 });
-    const r = await rt.store.grantConsent(userId, { version: body.version, locale: body.locale, birthYear, birthMonth, items });
+    const r = await rt.store.grantConsent(userId, { version: body.version, locale: body.locale, birthYear, birthMonth, scope, items });
     return NextResponse.json(r, { status: r.ok ? 200 : r.reason === 'age_invalid' ? 400 : 409 });
   }
   if (body.action === 'set_items') {
-    const items = parseItems(body.items);
-    if (!items) return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
-    const r = await rt.store.setConsentItems(userId, items);
+    const scope = parseScopeMode(body.scope);
+    const items = scope === 'all' ? [] : parseItems(body.items);
+    if (!scope || !items) return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
+    const r = await rt.store.setConsentItems(userId, scope, items);
     return NextResponse.json(r, { status: r.ok ? 200 : 409 });
   }
   if (body.action === 'revoke_consent') {
