@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
   const rt = getRuntime();
   const owner = (req.nextUrl.searchParams.get('owner') ?? '').replace(/^@/, '');
   const body: Record<string, unknown> = { enabled: rt.cfg.enabled, mock: rt.cfg.enabled && rt.engine.id === 'mock' };
+  // 止まっている理由は本番以外でだけ返す（検証環境の設定の確認用。環境変数の名前だけで、値は含まない）
+  if (!rt.cfg.enabled && !rt.cfg.isProduction) body.reason = rt.cfg.reason;
   if (rt.cfg.enabled && rt.store && /^[A-Za-z0-9_.-]{1,40}$/.test(owner)) body.ownerAllows = await rt.store.ownerAllows(owner);
   // 使用状況は本番以外でだけ返す（本番は SQL Editor の translation_budget で見る）
   if (rt.cfg.enabled && rt.store && !rt.cfg.isProduction && req.nextUrl.searchParams.get('usage') === '1') {

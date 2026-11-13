@@ -440,6 +440,9 @@ try {
     const p = await api('bob', { action: 'translate', target: 'en', items: [pf('dream')] });
     const gc = await grant('alice', items(['dream']));
     check(label, st.enabled === false && p.status === 503 && gc.status === 503 && st.ownerAllows === undefined);
+    // 止まっている理由：本番では返さない。プレビュー・手元では返す（設定の確認用）
+    const isProd = env.VERCEL_ENV === 'production';
+    check(`${label}（理由は${isProd ? '返さない' : '返す'}）`, isProd ? st.reason === undefined : typeof st.reason === 'string' && st.reason.length > 0, JSON.stringify(st));
     await stopApp(app);
   }
 
