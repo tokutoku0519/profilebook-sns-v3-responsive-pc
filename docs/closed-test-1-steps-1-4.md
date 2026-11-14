@@ -18,6 +18,12 @@
 | 5 | 同じ画面 | Preview の変数のうち、ブランチを指定していないもの | いまは `NEXT_PUBLIC_SITE_URL` だけのはず。Supabase の値がブランチ指定なしで Preview に入っていると、どのブランチのプレビューも同じ DB を使う |
 | 6 | GitHub → リポジトリ → **Settings → Branches** | `main` の保護（直接 push の禁止など）の有無 | ― |
 
+**わかったこと（2026-11-14）**：GitHub の `main` が、翻訳のブランチ（`claude/miri-delta-login-fix-tbw4wc`）の最新の commit に、**少し遅れて自動的に追いついている**（11-13 の push の直後は前の commit のまま → 11-14 には最新の 1ae91f7 になっていた）。リポジトリには自動化の設定がないので、GitHub の外（GitHub のアプリ、Vercel、ほかの連携、または手作業）で行われている可能性がある。`claude/closed-test-1`（c5453b7）は、いまのところ `main` に入っていない。
+
+- Vercel の本番が `main` から作られる設定なら、**翻訳のブランチへの push が、そのまま本番に出ている**ことになる。
+- 確認のお願い：GitHub → リポジトリ → **Settings → Integrations（GitHub Apps）・Webhooks**、**Actions**（リポジトリ外のワークフロー）、Vercel の **Settings → Git**（Production Branch）。心当たりのある自動化・手作業があれば教えてください。
+- それが分かるまで、私は翻訳のブランチへの push を控え、テスト準備の作業は `claude/closed-test-1` だけに push する。
+
 **ブランチ構成の提案**
 
 | ブランチ | 役割 | Vercel | DB |
