@@ -49,18 +49,20 @@ returns boolean language sql stable security definer set search_path = public as
       join public.circle_members m on m.circle_id = p.circle_id
      where p.id = p_post and m.user_id = auth.uid() and coalesce(m.status, 'member') = 'member');
 $$;
--- 投票の相手が、その投稿のサークルのメンバーか
+-- 投票の相手が、その投稿のサークルのメンバーか（たずねられるのは、そのサークルのメンバーだけ。
+-- API から直接呼んで、見えないサークルのメンバーを調べることはできない）
 create or replace function public.circle_post_target_is_member(p_post uuid, p_target uuid)
 returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
+  select public.circle_post_viewer_is_member(p_post) and exists (
     select 1 from public.circle_posts p
       join public.circle_members m on m.circle_id = p.circle_id
      where p.id = p_post and m.user_id = p_target and coalesce(m.status, 'member') = 'member');
 $$;
 -- 参加するときの状態：承認制は「申請中」だけ（作成者は除く）。公開参加は「メンバー」でも「申請中」でもよい
+-- （見えないサークルについては常に false。API から直接呼んで、見えないサークルの参加方式を調べることはできない）
 create or replace function public.circle_join_status_ok(p_circle uuid, p_status text)
 returns boolean language sql stable security definer set search_path = public as $$
-  select case
+  select public.circle_viewer_can_see(p_circle) and case
     when p_status = 'pending' then true
     when coalesce(p_status, 'member') = 'member' then exists (
       select 1 from public.circles c
@@ -85,7 +87,11 @@ end $$;
 drop policy if exists "circles readable"   on public.circles;
 drop policy if exists "circles insert own" on public.circles;
 drop policy if exists "circles update own" on public.circles;
-create policy "circles readable"   on public.circles for select using (public.circle_viewer_can_see(id));
+-- 公開・自分が作成者は、行そのものの値で判定する（作成と同時に読み返す insert ... returning では、
+-- 関数からはまだ新しい行が見えないため。アプリのサークル作成がこれを使う）。フォロワー・参加者は関数で判定
+create policy "circles readable"   on public.circles for select using (
+  auth.uid() is not null
+  and (coalesce(visibility, 'public') = 'public' or created_by = auth.uid() or public.circle_viewer_can_see(id)));
 create policy "circles insert own" on public.circles for insert
   with check (auth.uid() = created_by and (not coalesce(is_official, false) or public.viewer_is_official()));
 create policy "circles update own" on public.circles for update using (auth.uid() = created_by)

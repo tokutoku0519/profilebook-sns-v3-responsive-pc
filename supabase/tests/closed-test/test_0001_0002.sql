@@ -79,6 +79,8 @@ select pg_temp.ok((select count(*) from public.circle_members where status = 'pe
 select pg_temp.ok((select count(*) from public.circle_members where circle_id = '11110000-0000-4000-8000-000000000003') = 2, '見えるサークル（Q）のメンバー（承認済みの 2 人）は読める');
 select pg_temp.ok((select count(*) from public.circle_posts) = 0, 'メンバーでなければ投稿を読めない（API で直接読んでも 0 件）');
 select pg_temp.ok((select count(*) from public.circle_replies) = 0 and (select count(*) from public.circle_votes) = 0, 'メンバーでなければ返信・投票を読めない');
+select pg_temp.ok(not public.circle_post_target_is_member('22220000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-00000000000a'), '判定の関数を API から直接呼んでも、メンバーでないサークルのメンバーは調べられない');
+select pg_temp.ok(not public.circle_join_status_ok('11110000-0000-4000-8000-000000000002', 'member'), '判定の関数を API から直接呼んでも、見えないサークルの参加方式は調べられない');
 reset role;
 select pg_temp.as_user('b0000000-0000-4000-8000-00000000000b'); set role authenticated;
 select pg_temp.ok((select count(*) from public.circles where name = 'F') = 1, '作成者のフォロワー（B）はフォロワー限定の F を見つけられる');
@@ -124,6 +126,10 @@ select pg_temp.ok(true, '承認制のサークルには「申請中」で申し�
 insert into public.circle_members (circle_id, user_id, status) values ('11110000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-00000000000c','member');
 insert into public.circle_posts (circle_id, user_id, body) values ('11110000-0000-4000-8000-000000000001','c0000000-0000-4000-8000-00000000000c','P に参加して投稿');
 select pg_temp.ok(true, '自由参加のサークル（P）には参加でき、参加すれば投稿できる');
+do $$ declare x uuid; begin
+  insert into public.circles (name, created_by, join_policy, visibility) values ('C の限定サークル', 'c0000000-0000-4000-8000-00000000000c', 'open', 'followers') returning id into x;
+  perform pg_temp.ok(x is not null, 'サークルを作って、すぐ読み返せる（アプリの作成は insert ... returning を使う。フォロワー限定でも）');
+exception when insufficient_privilege then perform pg_temp.ok(false, 'サークルを作って、すぐ読み返せる（アプリの作成は insert ... returning を使う。フォロワー限定でも）'); end $$;
 insert into public.circles (name, created_by, join_policy) values ('C のサークル', 'c0000000-0000-4000-8000-00000000000c', 'approval');
 insert into public.circle_members (circle_id, user_id, status) select id, 'c0000000-0000-4000-8000-00000000000c', 'member' from public.circles where name = 'C のサークル';
 select pg_temp.ok(true, '作成者は、自分の承認制サークルに「メンバー」として入れる（作成の流れ）');

@@ -3,6 +3,12 @@
 - ブランチ：`claude/closed-test-1`（翻訳の `claude/miri-delta-login-fix-tbw4wc` から分けた。作成時点の中身は同じ）
 - **本番の DB・本番のデプロイには何もしていない。** SQL は手元の PostgreSQL（本番の形に合わせたもの）でだけ流した。
 
+> **2026-11-19 の更新（この文書の古い記述より優先）**
+> - **`main` が追いついていた原因**：リポジトリの `.claude/settings.json` にあった Stop フック（2026-06-21 の commit c1f88ea「featureブランチをmainへ自動同期しVercelへ即時反映」）。Claude の作業の 1 回ごとの終わりに `git push origin "<作業ブランチ>:main"` を実行していた。`claude/closed-test-1` からはフックを削除（2b846e3）し、この作業環境では `main`・`production` への push を拒む仕組みも入れた。**ほかのブランチ（翻訳のブランチなど）には、まだこのフックのファイルが残っている。**
+> - プレビューが本番 DB につながらない安全装置：`src/lib/dbGuard.ts`（プレビューでは `NEXT_PUBLIC_DB_LABEL=staging` のときだけ Supabase につなぐ）
+> - 手順 2（アクセス制御 SQL）のレビュー資料・検証用での確認手順：`docs/closed-test-1-access-control-sql.md`（前回の案から 2 点修正）
+> - 手順 3（ログイン・案内）・手順 4（プロフ帳の保存）は実装済み・テスト済み（`scripts/closed-test/auth_onboarding.mjs` 16 項目、`save_integrity.mjs` 18 項目）。3 章・4 章の「変更の内容」は計画時のもので、実装は commit 81985be・de2411f のとおり
+
 ---
 
 ## 1. Vercel の本番設定とブランチ構成の確認
