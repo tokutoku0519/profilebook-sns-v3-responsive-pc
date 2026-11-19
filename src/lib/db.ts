@@ -56,33 +56,6 @@ async function readMyBook(uid: string): Promise<Record<string, any>> {
   return (p?.book && typeof p.book === 'object') ? (p.book as Record<string, any>) : {};
 }
 
-/** 自分の book を保存する（保存先は本人専用の profile_book のみ）。
- *  通常経路は UPDATE（profiles の update と同じ auth.uid()=id 条件＝実績あり）。
- *  移行後は各ユーザーに profile_book 行が必ずあるので UPDATE で確実に当たる。
- *  行が無い（0件）ときだけ INSERT する。
- *  ※ 旧 profiles.book へのフォールバックはしない：失敗を隠して世界公開テーブルへ
- *    書いてしまう漏えいリスクを避けるため、書けなければ false（＝画面にエラー表示）。
- *  ※ upsert（INSERT ... ON CONFLICT）は insert ポリシー依存で RLS に弾かれ得たため使わない。 */
-async function writeMyBook(uid: string, book: Record<string, any>): Promise<boolean> {
-  if (!supabase) return false;
-  const now = new Date().toISOString();
-  // ① 通常：既存行を UPDATE
-  const { data: upd, error: updErr } = await supabase
-    .from('profile_book')
-    .update({ book, updated_at: now })
-    .eq('id', uid)
-    .select('id');
-  if (updErr) return false;
-  if (Array.isArray(upd) && upd.length > 0) return true;
-
-  // ② エラー無しで0件＝行が無いだけ → INSERT を試す（移行漏れ・新規ユーザー）
-  const { data: ins, error: insErr } = await supabase
-    .from('profile_book')
-    .insert({ id: uid, book, updated_at: now })
-    .select('id');
-  return !insErr && Array.isArray(ins) && ins.length > 0;
-}
-
 /** 他人（username）の「公開してよい book」を取得（サーバー関数 get_visible_book 経由）。 */
 async function readVisibleBook(username: string): Promise<Record<string, any>> {
   if (!supabase) return {};
@@ -254,9 +227,7 @@ export async function saveMyChoices(choices: Record<string, string>): Promise<bo
   if (!supabase) return false;
   const uid = await getCurrentUserId();
   if (!uid) return false;
-  const book = await readMyBook(uid);
-  book.__choices = choices;
-  return writeMyBook(uid, book);
+  return (await patchMyBook({ __choices: choices })).ok;
 }
 /** 自分の二択回答を取得。 */
 export async function getMyChoices(): Promise<Record<string, string>> {
@@ -415,23 +386,74 @@ export async function getProfileByUsername(username: string): Promise<ProfileRow
   return row;
 }
 
-/** プロフィール帳（book）を保存（self-only の profile_book へ） */
-// 画面側（localStorage から組み立てる book）が持っていない、別経路で書かれるキー。
-// プロフ保存で book を丸ごと書き換えるときに、サーバーにある値を引き継いで消さない。
-//   __choices   … 一致率しんだんの答え（saveMyChoices）
-//   __purchases … 購入の二重付与防止の記録（サーバー側の serverCoins）
-const SERVER_KEPT_KEYS = ['__choices', '__purchases'] as const;
+// ============================================================
+// プロフィール帳（book）の保存：変更した項目だけを、サーバーの最新の内容に差しこむ
+//
+// ・book 全体を端末の内容で上書きしない。サーバーの最新を読み、変更した項目（トップレベルのキー）だけを
+//   差しかえて書く。端末が持っていない項目・ほかの端末が書いた項目は、そのまま残る。
+// ・同時の書きこみの検出：book に保存のたびに新しい印（__rev。ランダムな文字列）を入れ、
+//   「読んだときの印と同じなら書く」という条件付きの UPDATE を 1 文で行う（データベースが原子的に判定する）。
+//   ほかの端末が先に書いていたら 0 件になるので、読み直してやり直す（最大 4 回）。
+//   更新日時（updated_at）の比較は使わない：端末の時計で付けた日時は重なることがあり、
+//   日時を更新しない書きこみ（サーバー側の処理）を見落とすため。
+// ・同じ項目を、前回読んだあとにほかの端末も変えていた場合は、この端末の内容で保存し、conflicts で知らせる。
+// ============================================================
+export const BOOK_REV_KEY = '__rev';
+const newRev = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
-export async function saveProfileBook(book: Record<string, any>): Promise<boolean> {
-  if (!supabase) return false;
+export type BookPatchResult =
+  | { ok: true; book: Record<string, any>; conflicts: string[] }
+  | { ok: false; reason: 'no_client' | 'no_session' | 'read_failed' | 'write_failed' | 'busy' | 'guarded' };
+
+/**
+ * 自分のプロフ帳に、変更した項目だけを書く。
+ * @param set    書く項目（キー → 値）
+ * @param unset  消す項目
+ * @param base   前回サーバーから読んだ（または保存した）book。同じ項目をほかの端末が変えていたかの判定に使う（任意）
+ * @param guard  サーバーの最新を見て、書いてよいかを決める（false なら書かない）
+ */
+export async function patchMyBook(
+  set: Record<string, any>,
+  unset: string[] = [],
+  base?: Record<string, any> | null,
+  guard?: (server: Record<string, any>) => boolean,
+): Promise<BookPatchResult> {
+  if (!supabase) return { ok: false, reason: 'no_client' };
   const uid = await getCurrentUserId();
-  if (!uid) return false;
-  const current = await readMyBook(uid);
-  const merged: Record<string, any> = { ...book };
-  for (const k of SERVER_KEPT_KEYS) {
-    if (merged[k] === undefined && current[k] !== undefined) merged[k] = current[k];
+  if (!uid) return { ok: false, reason: 'no_session' };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data, error } = await supabase.from('profile_book').select('book').eq('id', uid).maybeSingle();
+    if (error) return { ok: false, reason: 'read_failed' };
+    const exists = !!data;
+    // 行が無いとき（移行前の古いアカウント）は、旧 profiles.book を元にする
+    const server: Record<string, any> = exists
+      ? ((data as any).book && typeof (data as any).book === 'object' ? (data as any).book : {})
+      : await readMyBook(uid);
+    if (guard && !guard(server)) return { ok: false, reason: 'guarded' };
+    const rev = typeof server[BOOK_REV_KEY] === 'string' ? (server[BOOK_REV_KEY] as string) : null;
+    const next: Record<string, any> = { ...server };
+    for (const k of unset) delete next[k];
+    for (const [k, v] of Object.entries(set)) next[k] = v;
+    next[BOOK_REV_KEY] = newRev();
+    const conflicts = base
+      ? Object.keys(set).filter((k) => !sameJson(server[k], base[k]) && !sameJson(server[k], set[k]))
+      : [];
+    const now = new Date().toISOString();
+    if (!exists) {
+      const { data: ins, error: insErr } = await supabase.from('profile_book').insert({ id: uid, book: next, updated_at: now }).select('id');
+      if (!insErr && Array.isArray(ins) && ins.length > 0) return { ok: true, book: next, conflicts };
+      if (insErr && (insErr as any).code === '23505') continue;   // ほかの端末が先に行を作った → 読み直し
+      return { ok: false, reason: 'write_failed' };
+    }
+    let q = supabase.from('profile_book').update({ book: next, updated_at: now }).eq('id', uid);
+    q = rev == null ? q.is(`book->>${BOOK_REV_KEY}`, null) : q.eq(`book->>${BOOK_REV_KEY}`, rev);
+    const { data: upd, error: updErr } = await q.select('id');
+    if (updErr) return { ok: false, reason: 'write_failed' };
+    if (Array.isArray(upd) && upd.length > 0) return { ok: true, book: next, conflicts };
+    // 0 件：読んだあとに、ほかの端末（またはタブ）が書いた → 読み直してやり直す
   }
-  return writeMyBook(uid, merged);
+  return { ok: false, reason: 'busy' };
 }
 
 /** ユーザー（'@username'）の「わたしのペン」の生データ（book.__pen）。検証は lib/pen の normalizePen で行う。 */
@@ -459,14 +481,10 @@ function isEmptyGame(g: any): boolean {
 }
 
 export async function saveGameData(game: Record<string, any>): Promise<boolean> {
-  if (!supabase) return false;
-  const uid = await getCurrentUserId();
-  if (!uid) return false;
-  const book = await readMyBook(uid);
+  // __game だけを差しかえる（プロフ帳の本文には触れない）。
   // 安全網：ローカルが「空」なのにサーバーに中身がある場合は上書きしない。
-  if (isEmptyGame(game) && !isEmptyGame(book.__game)) return false;
-  book.__game = game;
-  return writeMyBook(uid, book);
+  const r = await patchMyBook({ __game: game }, [], null, (server) => !(isEmptyGame(game) && !isEmptyGame(server.__game)));
+  return r.ok;
 }
 
 /** ID・表示名・アバターなどの基本情報を保存（/setup で使用） */

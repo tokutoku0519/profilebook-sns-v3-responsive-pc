@@ -51,7 +51,7 @@ import { getShareTargets, shareT, buildShareText, type SharePlatform } from '@/l
 import { getTodaysPRQuestion, hasAnsweredPRToday, markPRAnswered, type PRQuestion } from '@/lib/prQuestions';
 import { BG_THEMES, BG_GACHA_COST, SHARD_EXCHANGE_COST, COLOR_THEMES, drawBgGacha, getBgTheme, type BgTheme } from '@/lib/bgThemes';
 import { ThemeArt, CoinIcon, ShardIcon } from '@/components/ThemeArt';
-import { dbReady, getMyProfile, getProfileByUsername, saveProfileBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, submitReport, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
+import { dbReady, getMyProfile, getProfileByUsername, patchMyBook, saveGameData, signOut, getFeed, upsertAnswer, getMyAnswer, searchProfiles, hasValidSession, ensureProfile, getCurrentUserId, toggleReaction, getComments, addComment as dbAddComment, follow as dbFollow, unfollow as dbUnfollow, getFollowingIds, getFollowers, getFollowing, getFriendIds, isFollowedBy, getFollowCounts, getFriendStatus, requestFriend, acceptFriend, removeFriend, getIncomingFriendRequests, createNotification, getNotifications, getUnreadNotificationCount, markNotificationsRead, subscribeNotifications, submitReport, getCirclesShared, createCircleShared, joinCircle as dbJoinCircle, leaveCircle as dbLeaveCircle, approveCircleMember, rejectCircleMember, getCirclePostsShared, createCirclePostShared, addCircleReplyShared, voteCircleShared, getBlogFeedShared, getBlogPostsByUserShared, createBlogPostShared, toggleBlogLikeShared, addBlogCommentShared, deleteBlogPostShared, getDiaryPagesShared, createDiaryPageShared, addDiaryEntryShared, updateDiaryEntryShared, deleteDiaryEntryShared, type FriendStatus, type NotificationRow, type AnswerRow, type ProfileRow, type CommentRow } from '@/lib/db';
 
 type Screen = 'home' | 'search' | 'create' | 'profile' | 'detail' | 'mypage' | 'notifications' | 'followers' | 'settings' | 'official-question-create' | 'diary-list' | 'diary-detail' | 'diary-create' | 'blog-list' | 'blog-detail' | 'blog-create' | 'circles' | 'circle-detail' | 'circle-create' | 'shop' | 'onboarding' | 'bookmarks' | 'daily-question' | 'wallet' | 'collab' | 'diagnosis';
 type Question = (typeof questions)[number];
@@ -3541,6 +3541,7 @@ function ProfileEditScreen({
   onLogout,
   pen = null,
   onPenChange = () => {},
+  dataVersion = 0,
 }: {
   go: (s: Screen) => void;
   profileBookInfo: typeof defaultProfileBookInfo;
@@ -3575,6 +3576,8 @@ function ProfileEditScreen({
   /** わたしのペン（保存ボタンで保存） */
   pen?: Pen | null;
   onPenChange?: (pen: Pen) => void;
+  /** サーバーからプロフ帳を読みこみ終えるたびに増える（編集画面を開いたあとに届いた内容を、触っていない項目へ反映するため） */
+  dataVersion?: number;
 }) {
   const [form, setForm] = useState(profileBookInfo);
   const [penForm, setPenForm] = useState<Pen>(pen ?? DEFAULT_PEN);
@@ -3588,6 +3591,35 @@ function ProfileEditScreen({
   const [localPhotos, setLocalPhotos] = useState<string[]>(favoritePhotos);
   const [localCustomFields, setLocalCustomFields] = useState<Record<string, string>>(customFields);
   const [visForm, setVisForm] = useState<Record<string, FieldVisibility>>(fieldVisibility);
+  // 編集画面を開いたとき（またはサーバーの内容を反映したとき）の値。保存では、ここから変えた項目だけを送る
+  // （開いたあとにサーバーから届いた内容を、開いたときの古い値で消さないため）
+  const initial = useRef({ form: profileBookInfo, best3, monthlyItems: monthlyBest3.items, monthlyEpisode: monthlyBest3.episode ?? '', questions: profileQuestions, vis: fieldVisibility });
+  const differs = (a: unknown, b: unknown) => JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
+  useEffect(() => {
+    if (!dataVersion) return;
+    // 編集画面を開いたあとにサーバーの内容が届いた：まだ触っていない項目は、新しい内容にする
+    const init = initial.current;
+    setForm((prev) => {
+      const out: any = { ...profileBookInfo };
+      for (const k of Object.keys(prev)) if (differs((prev as any)[k], (init.form as any)[k])) out[k] = (prev as any)[k];
+      return out;
+    });
+    const nextInit = { ...init, form: profileBookInfo };
+    if (!differs(best3Form, init.best3)) { setBest3Form(best3); nextInit.best3 = best3; }
+    if (!differs(monthlyForm, init.monthlyItems) && !differs(monthlyEpisodeForm, init.monthlyEpisode)) {
+      setMonthlyForm(monthlyBest3.items); setMonthlyEpisodeForm(monthlyBest3.episode ?? '');
+      nextInit.monthlyItems = monthlyBest3.items; nextInit.monthlyEpisode = monthlyBest3.episode ?? '';
+    }
+    if (!differs(questionsForm, init.questions)) { setQuestionsForm(profileQuestions); nextInit.questions = profileQuestions; }
+    setVisForm((prev) => {
+      const out: Record<string, FieldVisibility> = { ...fieldVisibility };
+      for (const k of Object.keys(prev)) if (differs(prev[k], init.vis[k])) out[k] = prev[k];
+      return out;
+    });
+    nextInit.vis = fieldVisibility;
+    initial.current = nextInit;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataVersion]);
   // 各項目にインラインの公開範囲チップを付けるためのprops。
   const vprops = (key: string) => ({
     vis: visForm[key] ?? ('public' as FieldVisibility),
@@ -3671,14 +3703,26 @@ function ProfileEditScreen({
 
   // 保存（下のボタンと、上のインデックスの「保存」で共通）
   function saveAll() {
-    onSave(form);
-    onSaveBest3(best3Form);
-    onSaveMonthlyBest3(monthlyForm, monthlyEpisodeForm);
-    onSaveQuestions(questionsForm);
+    // 編集画面を開いてから変えた項目だけを保存する。変えていない項目は、いまの最新の内容（props）のまま
+    const init = initial.current;
+    const changedInfo = Object.keys(form).filter((k) => differs((form as any)[k], (init.form as any)[k]));
+    if (changedInfo.length > 0) {
+      const next: any = { ...profileBookInfo };
+      for (const k of changedInfo) next[k] = (form as any)[k];
+      onSave(next);
+    }
+    if (differs(best3Form, init.best3)) onSaveBest3(best3Form);
+    if (differs(monthlyForm, init.monthlyItems) || differs(monthlyEpisodeForm, init.monthlyEpisode)) onSaveMonthlyBest3(monthlyForm, monthlyEpisodeForm);
+    if (differs(questionsForm, init.questions)) onSaveQuestions(questionsForm);
     onSaveAvatar(localAvatarUrl);
     onSaveFavoritePhotos(localPhotos);
     onSaveCustomFields(localCustomFields);
-    onSaveVisibility(visForm);
+    const changedVis = [...new Set([...Object.keys(visForm), ...Object.keys(init.vis)])].filter((k) => differs(visForm[k], init.vis[k]));
+    if (changedVis.length > 0) {
+      const nextVis: Record<string, FieldVisibility> = { ...fieldVisibility };
+      for (const k of changedVis) { if (visForm[k] === undefined) delete nextVis[k]; else nextVis[k] = visForm[k]; }
+      onSaveVisibility(nextVis);
+    }
     if (me.isOfficial) onSavePremiumContent(premiumForm);
     if (penTouched.current) onPenChange(penForm);
     go('profile');
@@ -9513,6 +9557,41 @@ function BookmarksScreen({ go, answers, bookmarks, onToggleBookmark }: {
 // 複数の保存呼び出しを順番に流し、古い内容の保存が新しい内容を上書きするのを防ぐ。
 let __persistChain: Promise<void> = Promise.resolve();
 
+// ── プロフ帳の保存の状態（db.ts の patchMyBook で「変更した項目だけ」をサーバーの最新に差しこむ）──
+// ・編集した項目（トップレベルのキー）を記録し、保存のときはそれだけを送る。端末にない項目・ほかの端末の変更は消さない
+// ・最初の読みこみが終わるまでは保存しない（終わったら、編集した項目だけを保存する）
+// ・最初の読みこみに失敗したら、その画面では保存しない（端末の内容でサーバーを上書きしないため）
+const BOOK_DIRTY_LS = 'miri_book_dirty';
+const __bookDirty = new Set<string>();
+let __bookLoad: 'pending' | 'ready' | 'failed' = 'pending';
+let __bookBase: Record<string, any> | null = null;   // 最後にサーバーから読んだ（保存した）book
+const __bookWaiters: Array<() => void> = [];
+function saveBookDirty() {
+  try { if (__bookDirty.size) localStorage.setItem(BOOK_DIRTY_LS, JSON.stringify([...__bookDirty])); else localStorage.removeItem(BOOK_DIRTY_LS); } catch {}
+}
+function restoreBookDirty() {
+  try { for (const k of JSON.parse(localStorage.getItem(BOOK_DIRTY_LS) || '[]')) if (typeof k === 'string') __bookDirty.add(k); } catch {}
+}
+function markBookDirty(keys: string[]) { for (const k of keys) __bookDirty.add(k); saveBookDirty(); }
+const isBookDirty = (k: string) => __bookDirty.has(k);
+function setBookLoad(state: 'ready' | 'failed', base?: Record<string, any> | null) {
+  __bookLoad = state;
+  if (base !== undefined) __bookBase = base;
+  __bookWaiters.splice(0).forEach((ok) => ok());
+}
+const waitBookLoaded = (): Promise<void> => (__bookLoad !== 'pending' ? Promise.resolve() : new Promise((ok) => __bookWaiters.push(ok)));
+/** 端末にある自分のプロフ帳（ゲームのデータ __game は含めない。ゲームは saveGameData だけが書く） */
+function composeLocalBook(): Record<string, any> {
+  const read = (k: string) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
+  const book: Record<string, any> = { ...(read('profileBookInfo') ?? {}) };
+  const b3 = read('best3'); if (b3 !== undefined) book.__best3 = b3;
+  const mo = read('miri_monthly_best3'); if (mo !== undefined) book.__monthly = mo;
+  const qs = read('profileQuestions'); if (qs !== undefined) book.__questions = qs;
+  const vis = read('profileFieldVisibility'); if (vis && typeof vis === 'object' && Object.keys(vis).length > 0) book.__visibility = vis;
+  const pen = normalizePen(read('miri_pen') ?? null); if (pen) book.__pen = pen;
+  return book;
+}
+
 export default function Page() {
   // 初回描画は常にスプラッシュ（サーバーと一致させる）。AppContent は localStorage 等を
   // 初期値に使うため、マウント後にだけ描画する（dev で true から始めると #418 になる）。
@@ -9651,6 +9730,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   });
   function updateFieldVisibility(next: Record<string, FieldVisibility>) {
     profileDirtyRef.current = true;
+    markBookDirty(['__visibility']);
     setFieldVisibility(next);
     try { localStorage.setItem('profileFieldVisibility', JSON.stringify(next)); } catch {}
     persistBook(); // book.__visibility に保存
@@ -9666,6 +9746,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   const penSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function updateMyPen(next: Pen) {
     profileDirtyRef.current = true;
+    markBookDirty(['__pen']);
     setMyPen(next);
     try { localStorage.setItem('miri_pen', JSON.stringify(next)); } catch {}
     // 連続で選び直しても保存は最後の1回だけ（book.__pen）
@@ -9680,6 +9761,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
   // 遅れて届いたサーバーの“古いプロフィール”がローカルの編集を上書きしてしまう。
   // ユーザーが編集したら true にして、初回読込の上書きをスキップする（編集を守る）。
   const profileDirtyRef = useRef(false);
+  const [bookDataVersion, setBookDataVersion] = useState(0);   // サーバーからプロフ帳を読みこみ終えた回数（編集画面へ知らせる）
   useEffect(() => {
     // ① まずローカル（/setup で保存したID・表示名）から me を即時更新（確実・同期）
     try {
@@ -9694,7 +9776,7 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
     // ※ 初期設定ボーナスは「ゲームデータ復元後」に別effectで付与する（再ログインでの再取得防止）
 
     // ② Supabase から正式なプロフィールを読み込んで上書き（あれば）
-    if (!dbReady()) return;
+    if (!dbReady()) { setBookLoad('ready', null); return; }
     let cancelled = false;
     (async () => {
       // セッション切れ検知：miri_auth クッキーで「ログイン中」に見えても Supabase セッションが
@@ -9710,32 +9792,81 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
             await ensureProfile();
             // 前回サーバー保存に失敗した編集（写真・プロフ帳）があれば、
             // セッションが復帰したこのタイミングで自動的に再送する。
+            // プロフ帳は、下の読みこみが終わったあとに「編集した項目だけ」を再送する
             if (localStorage.getItem('miri_pending_profile_sync') === '1') {
-              await persistBook();               // book（プロフ帳・BEST3・ゲーム）を再送
               syncIdentityToProfiles();          // 名前・写真アイコンを再送
-              if (localStorage.getItem('miri_pending_profile_sync') !== '1') {
-                showToast(`✅ ${t('toast_saved_pending', lang)}`);
-              }
             }
           }
         }
       } catch {}
 
-      const p = await getMyProfile();
-      if (cancelled || !p) return;
+      restoreBookDirty();   // 前回送れなかった編集（同じ利用者のもの）
+      let p = await getMyProfile();
+      for (let n = 0; !p && !cancelled && n < 3; n++) { await new Promise((ok) => setTimeout(ok, 800)); p = await getMyProfile(); }
+      if (cancelled) return;
+      if (!p) {
+        // 読みこめないまま保存すると、サーバーのプロフ帳を端末の内容で上書きしてしまう → この画面では保存しない
+        setBookLoad('failed');
+        if (__bookDirty.size > 0) showToast(`⚠️ ${t('toast_book_load_failed', lang)}`, 'error');
+        return;
+      }
       me.id = '@' + p.username;
       me.isOfficial = !!p.is_official;
-      // ユーザーがこのセッションで編集済みなら、遅れて届いたサーバー値で上書きしない
-      // （＝編集を守る。写真・名前・プロフ帳すべてに適用）。
+      // 名前・写真（profiles）：このセッションで編集済みなら、遅れて届いたサーバー値で上書きしない
       const overwriteFromServer = !profileDirtyRef.current;
-      // プロフィール帳を Supabase から復元（端末を変えても引き継ぐ）
       const book: any = (p.book && typeof p.book === 'object') ? p.book : {};
-      const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, __pen, ...info } = book;
-      // 項目ごとの公開設定を復元（他端末でも引き継ぐ）。
-      if (overwriteFromServer && __visibility && typeof __visibility === 'object') {
-        setFieldVisibility(__visibility);
-        try { localStorage.setItem('profileFieldVisibility', JSON.stringify(__visibility)); } catch {}
+      const { __best3, __monthly, __questions, __visibility, __pen } = book;
+      // 基本情報など（トップレベルのふつうの項目）。__ で始まる内部の項目（__game・__rev など）は含めない
+      const info: Record<string, any> = Object.fromEntries(Object.entries(book).filter(([k]) => !k.startsWith('__')));
+
+      // ── 旧バージョンで端末だけに保存されたプロフ帳を、サーバーへ移す（サーバーが空で、端末に中身があるときだけ）──
+      try {
+        const serverHasData = !!__best3 || !!__monthly || !!__questions || Object.values(info).some((v: any) => typeof v === 'string' && v.trim());
+        if (!serverHasData) {
+          const local = composeLocalBook();
+          const localKeys = Object.keys(local).filter((k) => {
+            const v = local[k];
+            if (typeof v === 'string') return !!v.trim();
+            if (k === '__best3') return Object.values(v ?? {}).some((arr: any) => Array.isArray(arr) && arr.some((x: string) => x && x.trim()));
+            if (k === '__monthly') return Array.isArray(v?.items) && v.items.some((x: string) => x && x.trim());
+            return false;
+          });
+          if (localKeys.length > 0) markBookDirty(localKeys);
+        }
+      } catch {}
+
+      // ── サーバーの内容を画面と端末の写しにそろえる。まだ保存していない編集（__bookDirty）の項目だけは端末の内容を残す ──
+      if (!isBookDirty('__visibility')) {
+        const v = (__visibility && typeof __visibility === 'object') ? __visibility : {};
+        setFieldVisibility(v);
+        try { localStorage.setItem('profileFieldVisibility', JSON.stringify(v)); } catch {}
       }
+      if (!isBookDirty('__best3')) {
+        const v = __best3 ?? defaultBest3;
+        setBest3(v); try { localStorage.setItem('best3', JSON.stringify(v)); } catch {}
+      }
+      if (!isBookDirty('__pen')) {
+        const pen = normalizePen(__pen);
+        setMyPen(pen);
+        try { if (pen) localStorage.setItem('miri_pen', JSON.stringify(pen)); else localStorage.removeItem('miri_pen'); } catch {}
+      }
+      if (!isBookDirty('__monthly')) {
+        // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
+        const cur = currentMonthInfo().monthKey;
+        const v: MonthlyBest3 = (__monthly && __monthly.monthKey === cur) ? __monthly : { monthKey: cur, items: ['', '', ''] };
+        setMonthlyBest3(v); try { localStorage.setItem('miri_monthly_best3', JSON.stringify(v)); } catch {}
+      }
+      if (!isBookDirty('__questions')) {
+        const v = __questions ?? defaultProfileQuestions;
+        setProfileQuestions(v); try { localStorage.setItem('profileQuestions', JSON.stringify(v)); } catch {}
+      }
+      setProfileBookInfo((prev: typeof defaultProfileBookInfo) => {
+        const out: any = { ...defaultProfileBookInfo, ...info };
+        for (const k of Object.keys(prev)) if (isBookDirty(k)) out[k] = (prev as any)[k];
+        try { localStorage.setItem('profileBookInfo', JSON.stringify(out)); } catch {}
+        return out;
+      });
+
       // 公開表示名はニックネーム優先。DBの display_name が本名など古い値でも、
       // 読み込み時にニックネームへ揃える（サイドバー・新規回答へ即反映）。
       const preferredName =
@@ -9754,37 +9885,16 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
         setAvatarUrl(p.avatar_url);
         try { localStorage.setItem('avatarUrl', p.avatar_url); } catch {}
       }
-      if (overwriteFromServer && Object.keys(book).length > 0) {
-        // BEST3 / 今月のBEST3 / ひとことしつもん は名前空間キーで格納しているので分離して復元。
-        if (__best3) { setBest3(__best3); try { localStorage.setItem('best3', JSON.stringify(__best3)); } catch {} }
-        { const pen = normalizePen(__pen); if (pen) { setMyPen(pen); try { localStorage.setItem('miri_pen', JSON.stringify(pen)); } catch {} } }
-        // 今月のぶんだけ復元（過去の月のものは無視して新しい枠にする）
-        if (__monthly && __monthly.monthKey === currentMonthInfo().monthKey) {
-          setMonthlyBest3(__monthly);
-          try { localStorage.setItem('miri_monthly_best3', JSON.stringify(__monthly)); } catch {}
-        }
-        if (__questions) { setProfileQuestions(__questions); try { localStorage.setItem('profileQuestions', JSON.stringify(__questions)); } catch {} }
-        if (Object.keys(info).length > 0) {
-          setProfileBookInfo((prev: typeof defaultProfileBookInfo) => ({ ...prev, ...info }));
-        }
-      }
 
-      // ── 旧バージョンで端末だけに保存されたプロフ帳を Supabase へ自動移行 ──
-      // サーバーの book が実質空で、端末に入力済みデータがあるときのみ一度アップロードする。
-      try {
-        const serverHasData =
-          !!__best3 || !!__monthly || !!__questions ||
-          Object.values(info).some((v: any) => typeof v === 'string' && v.trim());
-        const localInfo = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
-        const localHasInfo = Object.values(localInfo).some((v: any) => typeof v === 'string' && v.trim());
-        const localB3 = JSON.parse(localStorage.getItem('best3') || 'null');
-        const localHasB3 = localB3 && Object.values(localB3).some((arr: any) => Array.isArray(arr) && arr.some((v: string) => v && v.trim()));
-        const localMo = JSON.parse(localStorage.getItem('miri_monthly_best3') || 'null');
-        const localHasMo = localMo && Array.isArray(localMo.items) && localMo.items.some((v: string) => v && v.trim());
-        if (!cancelled && !serverHasData && (localHasInfo || localHasB3 || localHasMo)) {
-          persistBook(); // 端末のデータをサーバーへ移行
-        }
-      } catch {}
+      // 読みこみ完了：ここから保存できる。読みこみ前に編集した項目・前回送れなかった項目を、ここで保存する
+      setBookLoad('ready', book);
+      setBookDataVersion((v) => v + 1);
+      if (__bookDirty.size > 0) {
+        const hadPending = localStorage.getItem('miri_pending_profile_sync') === '1';
+        void persistBook().then(() => {
+          if (hadPending && localStorage.getItem('miri_pending_profile_sync') !== '1') showToast(`✅ ${t('toast_saved_pending', lang)}`);
+        });
+      }
 
       setMeVersion((v) => v + 1);
     })();
@@ -10493,29 +10603,28 @@ function persistGame() {
   try { void saveGameData(composeGameData()); } catch {}
 }
 
-// localStorage の最新内容から book を組んで1回保存する実体。
+// 編集した項目だけを、サーバーの最新の内容に差しこんで保存する実体（db.ts の patchMyBook）。
 async function persistBookNow() {
   if (!dbReady()) return;
+  // 最初の読みこみが終わるまで待つ（読みこみ前の保存は、サーバーのほかの項目を消しうるため）
+  if (__bookLoad === 'pending') await waitBookLoaded();
+  if (__bookLoad === 'failed') { onProfileSyncFailed(); return; }
+  const keys = [...__bookDirty];
+  if (keys.length === 0) return;
+  const local = composeLocalBook();
+  const set: Record<string, any> = {};
+  const unset: string[] = [];
+  for (const k of keys) { if (local[k] === undefined) unset.push(k); else set[k] = local[k]; }
   try {
-    const info = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
-    const book: Record<string, any> = { ...info };
-    const b3 = localStorage.getItem('best3');
-    const mo = localStorage.getItem('miri_monthly_best3');
-    const qs = localStorage.getItem('profileQuestions');
-    if (b3) book.__best3 = JSON.parse(b3);
-    if (mo) book.__monthly = JSON.parse(mo);
-    if (qs) book.__questions = JSON.parse(qs);
-    try {
-      const vis = JSON.parse(localStorage.getItem('profileFieldVisibility') || '{}');
-      if (vis && Object.keys(vis).length > 0) book.__visibility = vis;
-    } catch {}
-    // わたしのペン（書体・インク・大きさ）
-    try { const pen = normalizePen(JSON.parse(localStorage.getItem('miri_pen') || 'null')); if (pen) book.__pen = pen; } catch {}
-    // ゲーム系（コイン/所持スタンプ/背景/かけら/テーマ）も book に保存＝端末間で引き継ぎ
-    book.__game = composeGameData();
-    const ok = await saveProfileBook(book);
-    if (ok) { try { localStorage.removeItem('miri_pending_profile_sync'); } catch {} }
-    else onProfileSyncFailed();
+    const r = await patchMyBook(set, unset, __bookBase);
+    if (!r.ok) { onProfileSyncFailed(); return; }
+    __bookBase = r.book;
+    // 保存のあいだにさらに編集された項目は、印を残して次の保存で送る
+    const now = composeLocalBook();
+    for (const k of keys) if (JSON.stringify(now[k] ?? null) === JSON.stringify(local[k] ?? null)) __bookDirty.delete(k);
+    saveBookDirty();
+    if (__bookDirty.size === 0) { try { localStorage.removeItem('miri_pending_profile_sync'); } catch {} }
+    if (r.conflicts.length > 0) showToast(`ℹ️ ${t('toast_book_merged', lang)}`);
   } catch { onProfileSyncFailed(); }
 }
 
@@ -10543,6 +10652,12 @@ function onProfileSyncFailed() {
 
 function updateProfileBookInfo(next: typeof defaultProfileBookInfo) {
   profileDirtyRef.current = true;  // 初回サーバー読込による上書きから編集を守る
+  // 変わった項目だけを「編集した」と記録する（保存のときに、その項目だけを送る）
+  try {
+    const prevInfo = JSON.parse(localStorage.getItem('profileBookInfo') || '{}');
+    const keys = new Set([...Object.keys(next), ...Object.keys(prevInfo)]);
+    markBookDirty([...keys].filter((k) => !k.startsWith('__') && JSON.stringify((next as any)[k] ?? '') !== JSON.stringify(prevInfo[k] ?? '')));
+  } catch {}
   rewardNewlyFilledFields(next);   // 新しく埋めた項目にコイン付与
   checkProfileMilestones(next);    // 完成度の節目(25/50/75/100%)でジャックポット
   setProfileBookInfo(next);
@@ -10626,6 +10741,7 @@ const [best3, setBest3] = useState(() => {
 });
 
 function updateBest3(next: typeof defaultBest3) {
+  markBookDirty(['__best3']);
   setBest3(next);
   localStorage.setItem('best3', JSON.stringify(next));
   persistBook();
@@ -10649,6 +10765,7 @@ function updateMonthlyBest3(items: string[], episode?: string) {
   const prevEpisode =
     monthlyBest3 && monthlyBest3.monthKey === monthKey ? (monthlyBest3.episode ?? '') : '';
   const rec: MonthlyBest3 = { monthKey, items, episode: episode !== undefined ? episode : prevEpisode };
+  markBookDirty(['__monthly']);
   setMonthlyBest3(rec);
   localStorage.setItem('miri_monthly_best3', JSON.stringify(rec));
   persistBook();
@@ -10660,6 +10777,7 @@ const [profileQuestions, setProfileQuestions] = useState(() => {
 });
 
 function updateProfileQuestions(next: typeof defaultProfileQuestions) {
+  markBookDirty(['__questions']);
   setProfileQuestions(next);
   localStorage.setItem('profileQuestions', JSON.stringify(next));
   persistBook();
@@ -10881,7 +10999,8 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
           // book(jsonb) を info / BEST3 / 今月 / しつもん に分解して保持
           const b: any = row.book;
           if (b && typeof b === 'object') {
-            const { __best3, __monthly, __questions, __visibility, __game, __choices, __perception, __pen, ...info } = b;
+            const { __best3, __monthly, __questions, __visibility, __pen } = b;
+            const info = Object.fromEntries(Object.entries(b).filter(([k]) => !k.startsWith('__')));   // __game・__rev などの内部の項目は除く
             setViewedProfileBook({ info, best3: __best3, monthly: __monthly, questions: __questions, visibility: __visibility, pen: normalizePen(__pen) });
           }
         }).catch(() => {});
@@ -11293,6 +11412,7 @@ function updateProfileQuestions(next: typeof defaultProfileQuestions) {
       onSaveCustomFields={updateProfileCustomFields}
       fieldVisibility={fieldVisibility}
       onSaveVisibility={updateFieldVisibility}
+      dataVersion={bookDataVersion}
       premiumContent={premiumContent}
       onSavePremiumContent={updatePremiumContent}
       lang={lang}

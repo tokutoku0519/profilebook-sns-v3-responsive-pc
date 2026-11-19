@@ -42,6 +42,8 @@ export async function creditCoins(
   game.coins = current + amount;
   book.__game = game;
   book.__purchases = [...purchases, purchaseKey].slice(-200); // 直近200件だけ保持
+  // 保存の印を新しくする（アプリ側の条件付き保存が、この書きこみを見落とさないように。db.ts の patchMyBook）
+  book.__rev = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 
   // profile_book へ upsert（行が無くても作成される）
   const { error: upErr } = await supabaseAdmin
