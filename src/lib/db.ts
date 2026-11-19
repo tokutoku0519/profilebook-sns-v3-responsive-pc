@@ -485,7 +485,12 @@ function isEmptyGame(g: any): boolean {
 export async function saveGameData(game: Record<string, any>): Promise<boolean> {
   // __game だけを差しかえる（プロフ帳の本文には触れない）。
   // 安全網：ローカルが「空」なのにサーバーに中身がある場合は上書きしない。
-  const r = await patchMyBook({ __game: game }, [], null, (server) => !(isEmptyGame(game) && !isEmptyGame(server.__game)));
+  // 案内（オンボーディング）の完了の記録は、サーバーにあれば必ず残す
+  // （案内を終える前から開いていた別のタブ・端末のゲームの保存で、記録を消さない）。
+  const r = await patchMyBook((server) => {
+    const prev = server.__game && typeof server.__game === 'object' ? server.__game : {};
+    return { __game: !game.onboardedAt && prev.onboardedAt ? { ...game, onboardedAt: prev.onboardedAt } : game };
+  }, [], null, (server) => !(isEmptyGame(game) && !isEmptyGame(server.__game)));
   return r.ok;
 }
 

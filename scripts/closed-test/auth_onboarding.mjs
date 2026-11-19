@@ -14,11 +14,14 @@ const U = {
   b: { id: 'bbbbbbbb-1111-4111-8111-111111111111', email: 'b@example.com', username: 'user_b', created_at: NEW },
   c: { id: 'cccccccc-1111-4111-8111-111111111111', email: 'c@example.com', username: 'user_c', created_at: NEW },
   old: { id: 'dddddddd-1111-4111-8111-111111111111', email: 'old@example.com', username: 'user_old', created_at: OLD },
+  e: { id: 'eeeeeeee-1111-4111-8111-111111111111', email: 'e@example.com', username: 'user_e', created_at: OLD },
 };
 const byEmail = (e) => Object.values(U).find((u) => u.email === e);
 const byId = (id) => Object.values(U).find((u) => u.id === id);
 const BOOKS = {};   // id → book
 for (const u of Object.values(U)) BOOKS[u.id] = { nickname: `${u.username} のにっくねーむ`, __game: { coins: 10, setupBonus: '1', dailyLogin: new Date().toDateString(), loginStreak: 1 }, __rev: 'r0' };
+// 競合の再現：この人の最初の書きこみの直前に、別のタブが案内の完了を記録した（__rev が変わる）ことにする
+const RACE = {};
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const exp = Math.floor(Date.now() / 1000) + 86400;
 const userObj = (u) => ({ id: u.id, aud: 'authenticated', role: 'authenticated', email: u.email, app_metadata: {}, user_metadata: {}, created_at: u.created_at });
@@ -64,6 +67,7 @@ async function newCtx() {
       if (m === 'PATCH') {
         if (!me || id !== me.id) return json(200, []);                                       // 本人の行だけ（RLS）
         const mm = q.match(/book->>__rev=(?:eq\.([^&]+)|is\.null)/); if (!mm) return json(400, {});
+        if (RACE[id]) { delete RACE[id]; BOOKS[id] = { ...BOOKS[id], __game: { ...BOOKS[id].__game, onboardedAt: 'other-tab' }, __rev: 'r-other' }; return json(200, []); }
         if ((mm[1] ?? null) !== (BOOKS[id].__rev ?? null)) return json(200, []);
         BOOKS[id] = JSON.parse(req.postData() || '{}').book; return json(200, [{ id }]);
       }
@@ -168,6 +172,22 @@ async function logout(page) {
   // 9. 記録のあと、ゲームのデータの保存（コインなど）でも記録は消えない
   await page.waitForTimeout(3000);
   check('9 その後のゲームのデータの保存でも、完了の記録は消えない', !!BOOKS[U.c.id].__game?.onboardedAt, JSON.stringify(BOOKS[U.c.id].__game));
+  await ctx.close();
+}
+
+// 10. 別のタブが案内の完了を記録した直後に、このタブがゲームのデータ（ログインボーナスのコイン）を保存しても、記録・回答・コインが消えない
+{
+  BOOKS[U.e.id] = { nickname: 'user_e のにっくねーむ', hometown: 'さいたま', __best3: { food: ['いちご'] },
+    __game: { coins: 50, setupBonus: '1', dailyLogin: 'Mon Jan 01 2001', loginStreak: 1, gacha: ['g1'] }, __rev: 'r0' };
+  RACE[U.e.id] = true;
+  const { ctx, page } = await newCtx();
+  await login(page, U.e);
+  await page.waitForTimeout(5000);
+  const g = BOOKS[U.e.id].__game;
+  check('10-a 競合が起きた（別のタブの書きこみのあとに、このタブが保存した）', !RACE[U.e.id] && g.dailyLogin !== 'Mon Jan 01 2001', JSON.stringify({ dailyLogin: g.dailyLogin }));
+  check('10-b 別のタブが記録した案内の完了が残る', g.onboardedAt === 'other-tab', String(g.onboardedAt));
+  check('10-c プロフ帳の項目・BEST3・ガチャの持ち物は消えず、コインはボーナスの分だけ増える', BOOKS[U.e.id].nickname === 'user_e のにっくねーむ' && BOOKS[U.e.id].hometown === 'さいたま'
+    && JSON.stringify(BOOKS[U.e.id].__best3) === '{"food":["いちご"]}' && (g.gacha || []).includes('g1') && g.coins > 50, JSON.stringify({ coins: g.coins, gacha: g.gacha }));
   await ctx.close();
 }
 
