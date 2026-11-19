@@ -6,6 +6,7 @@
 //   → 検証・伏せ字を戻す → 保存 → もう一度確認して返す
 // どこで止まっても、画面は原文を表示する（status: 'original'）。
 // ============================================================
+import { supabaseUrlOrNull } from '@/lib/dbGuard';
 import { createClient } from '@supabase/supabase-js';
 import type { Lang } from '@/lib/i18n';
 import { differsFromViewer, glossaryHits, itemKey, keepWithoutEngine, sourceLangOf, type KeptReason, type TranslateItem, type TranslateResult } from '../shared';
@@ -21,7 +22,7 @@ let runtime: Runtime | null = null;
 export function getRuntime(): Runtime {
   if (runtime) return runtime;
   const cfg = translationConfig();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const url = supabaseUrlOrNull() ?? '';
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
   let store: TranslationStore | null = null;
   if (cfg.enabled) {
@@ -36,7 +37,7 @@ export function getRuntime(): Runtime {
 /** アクセストークンからログイン中のユーザーを確かめる（Supabase に問い合わせる） */
 export async function userIdFromToken(token: string): Promise<string | null> {
   if (!token) return null;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = supabaseUrlOrNull(), anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) return null;
   const client = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await client.auth.getUser(token);

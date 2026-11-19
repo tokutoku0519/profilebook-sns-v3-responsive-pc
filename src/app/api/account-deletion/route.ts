@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { supabaseUrlOrNull } from '@/lib/dbGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ function rateLimited(key: string, limit = 5, windowMs = 60_000): boolean {
 }
 
 async function asUser(req: NextRequest): Promise<{ client: SupabaseClient; userId: string } | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = supabaseUrlOrNull(), anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const auth = req.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!url || !anon || !token) return null;
