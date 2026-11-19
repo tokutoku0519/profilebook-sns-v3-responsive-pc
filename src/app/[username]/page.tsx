@@ -37,6 +37,8 @@ import { STICKER_PACKS, draw10Gacha, drawGacha, RARITY_COLOR, type StickerItem, 
 import { t, tf, tv, LANG_LIST, type Lang } from '@/lib/i18n';
 import { LangContext, useLang } from '@/lib/langContext';
 import { TranslateBar, TranslationConsentCard, useContentTranslation, type TranslateCandidate } from '@/components/ContentTranslate';
+import { clearOnLogout, clearUserLocalData, LAST_UID_KEY } from '@/lib/localData';
+import { ONBOARDED_LS } from '@/lib/onboarding';
 import { AccountDeletionRequest } from '@/components/AccountDeletionRequest';
 import { TRANSLATABLE_PROFILE_FIELDS } from '@/lib/translation/shared';
 import { COIN_PACKAGES } from '@/lib/coinPackages';
@@ -6070,6 +6072,12 @@ function MyPageScreen({ go, answers, avatarUrl, onGoBookmarks, ownedStickerCount
         {/* 退会・データ削除の申請（運営者が確認して削除する） */}
         <AccountDeletionRequest lang={lang} />
 
+        {/* はじめての案内をもう一度見る（記録は変えない） */}
+        <button type="button" onClick={() => { window.location.href = '/welcome?replay=1'; }}
+          className="flex min-h-[44px] w-full items-center justify-center rounded-3xl bg-white px-4 text-[13px] font-black text-ink shadow-card active:scale-[0.98]" data-replay-intro>
+          📖 {t('mypage_replay_intro', lang)}
+        </button>
+
       </div>
     </>
   );
@@ -9651,7 +9659,8 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
 
   const [screen, setScreen] = useState<Screen>(() => {
     if (typeof window === 'undefined') return 'home';
-    return localStorage.getItem('miri_onboarded') ? 'home' : 'onboarding';
+    // はじめての案内は /welcome で、新しいアカウントの最初の 1 回だけ出す（src/lib/onboarding.ts）
+    return 'home';
   });
   const [selectedAnswerId, setSelectedAnswerId] = useState(initialAnswers[0]?.id ?? '');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -9800,6 +9809,13 @@ const [selectedQuestion, setSelectedQuestion] = useState<any>(null);
         }
       } catch {}
 
+      // 端末の持ち主の確認：ほかの人の端末データが残っていたら（ログアウトせずに別の人がログインした場合など）消して読み直す
+      try {
+        const uid = await getCurrentUserId();
+        const last = localStorage.getItem(LAST_UID_KEY);
+        if (uid && last && last !== uid) { clearUserLocalData(); localStorage.setItem(LAST_UID_KEY, uid); window.location.reload(); return; }
+        if (uid && !last) localStorage.setItem(LAST_UID_KEY, uid);
+      } catch {}
       restoreBookDirty();   // 前回送れなかった編集（同じ利用者のもの）
       let p = await getMyProfile();
       for (let n = 0; !p && !cancelled && n < 3; n++) { await new Promise((ok) => setTimeout(ok, 800)); p = await getMyProfile(); }
@@ -10189,6 +10205,7 @@ const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
         mergeArr('miri_rewarded_qids', g.rewardedQids);   // お題回答報酬
         if (g.setupBonus) localStorage.setItem('miri_setup_bonus', g.setupBonus); // 初期設定ボーナス（1回のみ）
         if (g.prAnswered) localStorage.setItem('miri_pr_answered', g.prAnswered); // PR案件（日次）
+        if (g.onboardedAt) localStorage.setItem(ONBOARDED_LS, g.onboardedAt); // はじめての案内を終えた日時
         if (g.dailyLogin) localStorage.setItem('miri_daily_login', g.dailyLogin); // デイリーログイン（日次）
         if (typeof g.loginStreak === 'number' && g.loginStreak > 0) {
           const localStreak = parseInt(localStorage.getItem('miri_streak') || '0');
@@ -10594,6 +10611,8 @@ function composeGameData(): Record<string, any> {
     dailyLogin: localStorage.getItem('miri_daily_login') || null,
     loginStreak: num('miri_streak'),
     prAnswered: localStorage.getItem('miri_pr_answered') || null,
+    // はじめての案内を終えた日時（アカウント単位の記録。src/lib/onboarding.ts）
+    onboardedAt: localStorage.getItem(ONBOARDED_LS) || null,
   };
 }
 
@@ -10715,9 +10734,9 @@ async function logout() {
     document.cookie = 'miri_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
   } catch {}
   try {
-    // コイン・スタンプ・購入アイテム・通知・回答なども含め、前ユーザーの端末データを一掃。
+    // コイン・スタンプ・購入アイテム・通知・回答なども含め、この人の端末データを消す（表示言語だけ残す）。
     // （Supabaseに永続化したデータは残り、再ログインで復元される）
-    localStorage.clear();
+    clearOnLogout();
   } catch {}
   window.location.href = '/';
 }

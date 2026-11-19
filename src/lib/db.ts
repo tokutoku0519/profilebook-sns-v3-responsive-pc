@@ -408,13 +408,13 @@ export type BookPatchResult =
 
 /**
  * 自分のプロフ帳に、変更した項目だけを書く。
- * @param set    書く項目（キー → 値）
+ * @param set    書く項目（キー → 値）。サーバーの最新を見て決めるときは関数（null を返せば書かない）
  * @param unset  消す項目
  * @param base   前回サーバーから読んだ（または保存した）book。同じ項目をほかの端末が変えていたかの判定に使う（任意）
  * @param guard  サーバーの最新を見て、書いてよいかを決める（false なら書かない）
  */
 export async function patchMyBook(
-  set: Record<string, any>,
+  set: Record<string, any> | ((server: Record<string, any>) => Record<string, any> | null),
   unset: string[] = [],
   base?: Record<string, any> | null,
   guard?: (server: Record<string, any>) => boolean,
@@ -431,13 +431,15 @@ export async function patchMyBook(
       ? ((data as any).book && typeof (data as any).book === 'object' ? (data as any).book : {})
       : await readMyBook(uid);
     if (guard && !guard(server)) return { ok: false, reason: 'guarded' };
+    const values = typeof set === 'function' ? set(server) : set;
+    if (values == null) return { ok: false, reason: 'guarded' };
     const rev = typeof server[BOOK_REV_KEY] === 'string' ? (server[BOOK_REV_KEY] as string) : null;
     const next: Record<string, any> = { ...server };
     for (const k of unset) delete next[k];
-    for (const [k, v] of Object.entries(set)) next[k] = v;
+    for (const [k, v] of Object.entries(values)) next[k] = v;
     next[BOOK_REV_KEY] = newRev();
     const conflicts = base
-      ? Object.keys(set).filter((k) => !sameJson(server[k], base[k]) && !sameJson(server[k], set[k]))
+      ? Object.keys(values).filter((k) => !sameJson(server[k], base[k]) && !sameJson(server[k], values[k]))
       : [];
     const now = new Date().toISOString();
     if (!exists) {

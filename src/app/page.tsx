@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { isDev } from '@/lib/env';
 import { TERMS_VERSION } from '@/lib/terms';
 import { getMyProfile } from '@/lib/db';
+import { prepareLocalForUser } from '@/lib/localData';
 import { Turnstile, TURNSTILE_ENABLED, resetTurnstile } from '@/components/Turnstile';
 
 function setAuthCookie() {
@@ -15,16 +16,6 @@ function setAuthCookie() {
 
 function getStoredUsername(): string {
   try { return localStorage.getItem('miri_username') || 'me'; } catch { return 'me'; }
-}
-
-// ログイン/新規登録時に、前ユーザー・デモの端末データを一掃する。
-// Supabase セッション（sb-* キー）は保持するので、これで認証は切れない。
-function clearLocalExceptSession() {
-  try {
-    for (const k of Object.keys(localStorage)) {
-      if (!k.startsWith('sb-')) localStorage.removeItem(k);
-    }
-  } catch {}
 }
 
 export default function Page() {
@@ -114,7 +105,7 @@ export default function Page() {
         // 初回は /setup でID・名前を設定してもらう
         const fallbackId = data.user?.id?.split('-')[0] || 'me';
         try {
-          clearLocalExceptSession();
+          prepareLocalForUser(data.user?.id);   // 前にこの端末を使っていた人のデータを消す（同じ人なら残す）
           localStorage.setItem('miri_username', fallbackId);
         } catch {}
         setAuthCookie();
@@ -128,9 +119,9 @@ export default function Page() {
       // ログインユーザーのプロフィール（ID・表示名）を Supabase から取得。
       const prof = await getMyProfile();
       try {
-        // 前ユーザー/デモの端末データ（コイン・スタンプ・通知・プロフ等）を一掃。
-        // Supabaseセッション(sb-*)は保持。プロフィールは Supabase から復元される。
-        clearLocalExceptSession();
+        // 前にこの端末を使っていた人と違えば、その人の端末データ（コイン・プロフの写し・ブックマーク等）を消す。
+        // 同じ人なら消さない（表示言語・未送信の編集などを残す）。サーバーの内容は、アプリを開いたときに読み直す。
+        prepareLocalForUser(data.user?.id);
         if (prof?.username) localStorage.setItem('miri_username', prof.username);
         else localStorage.setItem('miri_username', data.user?.id?.split('-')[0] || 'me');
         if (prof?.display_name) localStorage.setItem('miri_displayname', prof.display_name);

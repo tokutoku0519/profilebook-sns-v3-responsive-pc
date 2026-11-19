@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/terms';
+import { prepareLocalForUser } from '@/lib/localData';
 
 function setAuthCookie() {
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toUTCString();
@@ -43,14 +44,16 @@ export default function LoginPage() {
       });
       if (err) { setError(err.message); setLoading(false); return; }
       if (data.session) {
+        prepareLocalForUser(data.user?.id);   // 前にこの端末を使っていた人のデータを消す（同じ人なら残す）
         setAuthCookie();
         router.push('/welcome');
       } else {
         setEmailSent(true);
       }
     } else {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: signed, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) { setError('メールアドレスかパスワードが違います'); setLoading(false); return; }
+      prepareLocalForUser(signed.user?.id);   // 前にこの端末を使っていた人のデータを消す（同じ人なら残す）
       setAuthCookie();
       router.push('/welcome');
     }
